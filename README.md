@@ -4,18 +4,19 @@ FT turns an Android phone into the phone side of Baidu CarLife over WiFi, so a C
 
 ## How it connects
 
-Three steps, all automatic:
+Four steps, all automatic:
 
-1. **USB wakes the car.** Plugging the phone in presents the CarLife accessory identity; the head unit opens an accessory session with FT and, on units like the Toyota/Desay one, raises its WiFi Direct group only after that. The cable session is a full CarLife link in its own right.
-2. **WiFi Direct.** FT finds the group, joins it (push button, or a PIN if the unit asks for one), and brings up the CarLife listener on that link.
-3. **Discovery beacon.** The vehicle side learns the phone's address from a UDP datagram on port 7999 and only then connects to the phone's ports. FT sends that beacon to the group owner and to every interface broadcast every 1.5 s until the head unit connects.
+1. **Bluetooth wakes the car.** When the phone's Bluetooth connects to the head unit, the unit raises its WiFi Direct group. FT starts itself on that Bluetooth connection.
+2. **WiFi Direct.** FT finds the group, joins it (or lets the unit's own invitation complete), and brings up the CarLife listener on that link.
+3. **Discovery beacon.** The vehicle side learns the phone's address from a UDP datagram on port 7999 and only then connects to the phone's six ports. FT sends that beacon to the group owner and to every interface broadcast every 1.5 s until the head unit connects.
+4. **Handshake.** After the protocol match FT keeps the unit's video-channel watchdog fed with heartbeats, asks for the feature list, and if the unit wants content encryption it negotiates it: the unit's RSA public key wraps a fresh AES session key, and from then on commands, touch and video are AES-encrypted exactly as the vehicle library expects. Units that never announce encryption but withhold the video setup are probed for it after 2.5 s.
 
 Nothing is shown on the phone beyond the ongoing notification.
 
 - **Auto-connect** (the switch on Home) keeps a small foreground service that searches in short bursts, joins the car when it appears, and also starts at boot and when the phone's Bluetooth connects to the car.
 - The first time, **Nearby** lists the WiFi Direct devices FT sees. Tap **Use** on the car once; it is remembered. Leaving the name blank matches anything with "CarLife" in its name.
 - **Listen only** keeps the listener and the beacon up on the network the phone is already on, for head units that reach the phone over a normal WiFi or hotspot connection.
-- **USB now** re-opens the accessory if the system prompt was dismissed.
+- **Forget** clears the remembered car and searches again.
 
 ## On the car screen
 
@@ -31,7 +32,7 @@ Every protocol message is logged with hex on the Log tab, so a real head unit's 
 
 ## Test harness
 
-`tools/sim/` has a CarLife head-unit simulator and an Android Auto phone simulator that speak the real wire protocols (the AA simulator is a TLS server that requires the head-unit certificate). `tools/sim/e2e.sh [apk] [outdir]` installs the app on a connected emulator, drives consent, runs both simulators through a touch sequence, checks the phone UI navigation, decodes the projected H.264 to PNGs, and prints PASS/FAIL per check.
+`tools/sim/` has a CarLife head-unit simulator and an Android Auto phone simulator that speak the real wire protocols (the AA simulator is a TLS server that requires the head-unit certificate; the CarLife simulator can demand content encryption and does the RSA/AES exchange with the system `openssl`, holds the video setup back to require heartbeats first, and validates the Bluetooth pair reply). `tools/sim/e2e.sh [apk] [outdir]` installs the app on a connected emulator, drives consent, runs a plain and an encrypted head unit plus the AA phone through a touch sequence, checks the phone UI navigation, decodes the projected H.264 to PNGs, and prints PASS/FAIL per check.
 
 ## Building
 
