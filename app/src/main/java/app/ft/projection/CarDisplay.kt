@@ -19,11 +19,12 @@ class CarDisplay(private val context: Context) {
     private var virtualDisplay: VirtualDisplay? = null
     private var presentation: CarPresentation? = null
     private var downTime = 0L
+    @Volatile private var frameIntervalMs = 33L
     private val ticker = object : Runnable {
         override fun run() {
             val p = presentation ?: return
             p.window?.decorView?.invalidate()
-            main.postDelayed(this, 100)
+            main.postDelayed(this, frameIntervalMs)
         }
     }
     private val _active = MutableStateFlow(false)
@@ -42,6 +43,7 @@ class CarDisplay(private val context: Context) {
         stop()
         this.width = width
         this.height = height
+        frameIntervalMs = (1000L / fps.coerceIn(1, 120)).coerceAtLeast(8L)
         val enc = SurfaceEncoder(width, height, fps, onConfig, onFrame)
         enc.start()
         encoder = enc
@@ -58,8 +60,8 @@ class CarDisplay(private val context: Context) {
                 p.show()
                 presentation = p
                 _active.value = true
-                main.postDelayed(ticker, 100)
-                DiagLog.i(tag, "presentation shown")
+                main.postDelayed(ticker, frameIntervalMs)
+                DiagLog.i(tag, "presentation shown, redraw every ${frameIntervalMs}ms")
             } catch (t: Throwable) {
                 DiagLog.e(tag, "presentation failed", t)
             }

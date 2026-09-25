@@ -29,10 +29,13 @@ class Prefs(context: Context) {
     var forceWidth: Int get() = int("forceWidth", 0); set(v) = set("forceWidth", v)
     var forceHeight: Int get() = int("forceHeight", 0); set(v) = set("forceHeight", v)
     var forceFps: Int get() = int("forceFps", 0); set(v) = set("forceFps", v)
+    var minFps: Int get() = int("minFps", 30); set(v) = set("minFps", v)
 
     var autoStartWifi: Boolean get() = bool("autoStartWifi", false); set(v) = set("autoStartWifi", v)
     var autoStartAa: Boolean get() = bool("autoStartAa", false); set(v) = set("autoStartAa", v)
     var aaBluetooth: Boolean get() = bool("aaBluetooth", false); set(v) = set("aaBluetooth", v)
+    var aaPackage: String get() = str("aaPackage", "com.google.android.projection.gearhead"); set(v) = set("aaPackage", v)
+    var aaAutoStart: Boolean get() = bool("aaAutoStart", false); set(v) = set("aaAutoStart", v)
 
     var carName: String get() = str("carName", "FT"); set(v) = set("carName", v)
     var autoConnect: Boolean get() = bool("autoConnect", false); set(v) = set("autoConnect", v)

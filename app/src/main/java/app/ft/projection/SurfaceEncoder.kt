@@ -37,7 +37,7 @@ class SurfaceEncoder(
         handler = h
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, (width * height * fps / 5).coerceIn(2_500_000, 12_000_000))
+            setInteger(MediaFormat.KEY_BIT_RATE, (width.toLong() * height * fps / 4).coerceIn(4_000_000, 16_000_000).toInt())
             setInteger(MediaFormat.KEY_FRAME_RATE, fps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)

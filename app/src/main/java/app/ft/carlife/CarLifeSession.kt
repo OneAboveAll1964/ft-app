@@ -187,13 +187,14 @@ class CarLifeSession(
                 val r = ProtoReader(c.payload)
                 var w = r.int(1, width)
                 var h = r.int(2, height)
-                var f = r.int(3, fps)
+                val asked = r.int(3, fps)
+                var f = asked
                 if (prefs.forceWidth > 0 && prefs.forceHeight > 0) { w = prefs.forceWidth; h = prefs.forceHeight }
-                if (prefs.forceFps > 0) f = prefs.forceFps
+                f = if (prefs.forceFps > 0) prefs.forceFps else maxOf(asked, prefs.minFps)
                 width = w.coerceIn(320, 4096)
                 height = h.coerceIn(240, 2160)
                 fps = f.coerceIn(10, 60)
-                DiagLog.i(tag, "video encoder init ${width}x${height}@$fps")
+                DiagLog.i(tag, "video encoder init ${width}x${height}@$fps" + if (asked != fps) " (head unit asked $asked)" else "")
                 cmd(CarLifeProtocol.CMD_VIDEO_ENCODER_INIT_DONE, c.payload)
                 cmd(CarLifeProtocol.CMD_FOREGROUND)
                 cmd(CarLifeProtocol.CMD_MODULE_STATUS, moduleStatus())
