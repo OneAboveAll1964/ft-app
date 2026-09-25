@@ -20,26 +20,33 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import app.ft.aa.AaHeadUnitService
 import app.ft.carlife.CarLifeService
 import app.ft.core.DiagLog
@@ -61,6 +68,7 @@ class MainActivity : ComponentActivity() {
         if (r.resultCode == Activity.RESULT_OK && r.data != null) {
             app.mirrorResultCode = r.resultCode
             app.mirrorData = r.data
+            app.mirrorGranted.value = true
             DiagLog.i("App", "screen mirror permitted")
         } else DiagLog.w("App", "screen mirror declined")
     }
@@ -122,12 +130,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
+    val barState = rememberTopAppBarState()
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior(barState)
+    LaunchedEffect(screen) { barState.contentOffset = 0f }
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        modifier = Modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
+        topBar = {
+            TopAppBar(
+                title = {
+                    AnimatedContent(targetState = screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { s ->
+                        if (s == Screen.HOME) Text("FT", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
+                        else Text(s.label, style = MaterialTheme.typography.titleLarge)
+                    }
+                },
+                navigationIcon = {
+                    if (screen != Screen.HOME) IconButton(onClick = { screen = Screen.HOME }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                },
+                actions = {
+                    if (screen == Screen.LOG) IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = "Clear") }
+                },
+                scrollBehavior = scroll
+            )
+        },
         bottomBar = {
             NavigationBar {
                 Screen.entries.forEach { s ->
@@ -141,18 +170,17 @@ fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOve
             }
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize()) {
-            AnimatedContent(targetState = screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { s ->
-                when (s) {
-                    Screen.HOME -> HomeScreen(
-                        onOpenLog = { screen = Screen.LOG },
-                        onAllowMirror = onAllowMirror,
-                        onOpenAccessibility = onOpenAccessibility,
-                        onOpenOverlay = onOpenOverlay
-                    )
-                    Screen.LOG -> DiagnosticsScreen(onBack = { screen = Screen.HOME })
-                    Screen.SETTINGS -> SettingsScreen(onBack = { screen = Screen.HOME })
-                }
+        AnimatedContent(targetState = screen, modifier = Modifier.fillMaxSize(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { s ->
+            when (s) {
+                Screen.HOME -> HomeScreen(
+                    pad = pad,
+                    onOpenLog = { screen = Screen.LOG },
+                    onAllowMirror = onAllowMirror,
+                    onOpenAccessibility = onOpenAccessibility,
+                    onOpenOverlay = onOpenOverlay
+                )
+                Screen.LOG -> DiagnosticsScreen(pad)
+                Screen.SETTINGS -> SettingsScreen(pad)
             }
         }
     }

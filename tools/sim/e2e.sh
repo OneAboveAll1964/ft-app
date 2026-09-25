@@ -60,6 +60,8 @@ for round in 1 2 3 4; do
 done
 sleep 1
 check "mirror consent granted" "grep -q 'screen mirror permitted' '$OUT/logcat.txt'"
+sleep 1; dump; cp "$OUT/consent_ui.xml" "$OUT/home_after_consent.xml"
+check "consent reflected on Home (no Allow button left)" "grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect + AA head unit) =="
 $ADB shell am start -n $PKG/.MainActivity --ez auto true --ez aa true --es pkgMaps com.android.settings >/dev/null 2>&1
@@ -104,6 +106,25 @@ echo "== phone ui =="
 $ADB shell am start -n $PKG/.MainActivity >/dev/null 2>&1; sleep 2
 $ADB exec-out screencap -p > "$OUT/frames/phone_home.png" 2>/dev/null
 $ADB shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; $ADB pull /sdcard/ui.xml "$OUT/home_ui.xml" >/dev/null 2>&1
+layout(){ python3 - "$OUT/home_ui.xml" <<'PY'
+import sys, xml.etree.ElementTree as ET
+root=ET.parse(sys.argv[1]).getroot()
+parent={c:p for p in root.iter() for c in p}
+def b(n):
+    s=n.get('bounds','')
+    return tuple(int(v) for v in s.replace('][',',').strip('[]').split(',')) if s else None
+scroll=[b(n) for n in root.iter() if n.get('scrollable')=='true' and b(n)]
+if not scroll: sys.exit(1)
+content=max(scroll,key=lambda r:(r[3]-r[1])*(r[2]-r[0]))
+label=next((n for n in root.iter() if n.get('text')=='Home'),None)
+if label is None: sys.exit(1)
+item=parent.get(label,label)
+navtop=b(item)[1]
+print('   content bottom',content[3],'nav item top',navtop)
+sys.exit(0 if abs(content[3]-navtop)<=12 else 1)
+PY
+}
+check "content reaches the navigation bar (no dead strip)" "layout"
 tapnav(){ python3 - "$OUT/home_ui.xml" "$1" <<'PY'
 import re,sys
 xml=open(sys.argv[1],encoding="utf-8",errors="replace").read()
