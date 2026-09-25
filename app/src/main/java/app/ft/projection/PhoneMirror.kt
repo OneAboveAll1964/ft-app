@@ -3,8 +3,6 @@ package app.ft.projection
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.projection.MediaProjection
-import android.os.Handler
-import android.os.Looper
 import android.view.Surface
 import app.ft.core.DiagLog
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,17 +30,9 @@ class PhoneMirror {
     val active: Boolean get() = shown && display != null
     val displayId: Int get() = display?.display?.displayId ?: -1
 
-    fun open(projection: MediaProjection, width: Int, height: Int, dpi: Int, ownDisplay: Boolean, onStopped: () -> Unit): Boolean {
-        close()
+    fun open(projection: MediaProjection, width: Int, height: Int, dpi: Int, ownDisplay: Boolean): Boolean {
+        releaseDisplay()
         this.projection = projection
-        projection.registerCallback(object : MediaProjection.Callback() {
-            override fun onStop() {
-                DiagLog.i(tag, "projection stopped")
-                releaseDisplay()
-                this@PhoneMirror.projection = null
-                onStopped()
-            }
-        }, Handler(Looper.getMainLooper()))
         return createDisplay(width, height, dpi, ownDisplay)
     }
 
@@ -106,7 +96,6 @@ class PhoneMirror {
         hide()
         pending = null
         releaseDisplay()
-        runCatching { projection?.stop() }
         projection = null
     }
 }

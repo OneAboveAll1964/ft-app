@@ -1,4 +1,5 @@
 package app.ft.carlife
+import android.annotation.SuppressLint
 
 import android.app.ActivityOptions
 import android.app.Notification
@@ -10,8 +11,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.view.WindowManager
 import app.ft.FTApp
@@ -83,6 +87,7 @@ class CarLifeService : Service() {
         fun forgetCar() = instance?.forget()
         fun searchAgain() = instance?.restartFinder()
         fun startAa() = instance?.startAndroidAuto()
+        fun startAaWireless() = instance?.triggerAaWireless()
         fun launchApp(pkg: String) = instance?.launch(pkg)
         fun stopMirror() = instance?.mirrorStop()
         fun goHome() = instance?.home()
@@ -101,6 +106,7 @@ class CarLifeService : Service() {
     private var aaWatch: Job? = null
     private var listenOnly = false
     private var wakeLock: PowerManager.WakeLock? = null
+    private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
     @Volatile private var aaAutoLaunched = false
     private val app get() = application as FTApp
@@ -300,6 +306,7 @@ class CarLifeService : Service() {
             CarTheme { CarScreen() }
         }
         updateNotification("Projecting ${w}×$h to the car")
+        startAudioToCar()
     }
 
     private fun onStopVideo() {
@@ -323,6 +330,34 @@ class CarLifeService : Service() {
     private fun echoBluetooth(on: Boolean) {
         bt.onFrame = if (on) { frame -> bt.send(frame) } else null
         DiagLog.i(tag, "bluetooth echo ${if (on) "on" else "off"}")
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun triggerAaWireless() {
+        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
+        val bonded = runCatching { adapter?.bondedDevices?.toList() }.getOrNull().orEmpty()
+        val want = app.prefs.carBtName.trim()
+        val device = bonded.firstOrNull { d ->
+            want.isNotEmpty() && runCatching { d.name }.getOrNull()?.contains(want, true) == true
+        } ?: bonded.firstOrNull { d -> runCatching { d.name }.getOrNull()?.contains("corolla", true) == true }
+        ?: bonded.firstOrNull()
+        if (device == null) {
+            DiagLog.w(tag, "no bonded bluetooth device to hand Android Auto")
+            return
+        }
+        val name = runCatching { device.name }.getOrNull() ?: device.address
+        for (action in listOf(
+            "com.google.android.projection.gearhead.START_WIRELESS_PROJECTION",
+            "com.google.android.apps.auto.wireless.setup.receiver.wirelessstartup.START"
+        )) {
+            val i = Intent(action)
+                .setPackage("com.google.android.projection.gearhead")
+                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, device)
+                .putExtra("com.google.android.apps.auto.wireless.setup.service.EXTRA_BLUETOOTH_DEVICE", device)
+            runCatching { sendBroadcast(i) }
+                .onSuccess { DiagLog.i(tag, "asked Android Auto to start wireless projection with '$name' via $action") }
+                .onFailure { DiagLog.w(tag, "wireless projection request failed: ${it.message}") }
+        }
     }
 
     private fun startAndroidAuto() {
@@ -451,15 +486,16 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun mirrorOpen(pkg: String, ownDisplay: Boolean): Boolean {
+    private fun ensureProjection(reason: String): MediaProjection? {
+        projection?.let { return it }
         val code = app.mirrorResultCode
         val data = app.mirrorData
         if (code == 0 || data == null) {
-            DiagLog.w(tag, "screen mirror not permitted yet, open FT on the phone and tap Allow")
-            return false
+            DiagLog.w(tag, "screen sharing not permitted yet, open FT on the phone and tap Allow")
+            return null
         }
         return try {
-            foreground("Mirroring $pkg to the car", projection = true, microphone = canRecord())
+            foreground(reason, projection = true, microphone = canRecord())
             val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val mp = mpm.getMediaProjection(code, data)
             app.mirrorResultCode = 0
@@ -467,28 +503,55 @@ class CarLifeService : Service() {
             if (mp == null) {
                 DiagLog.w(tag, "media projection unavailable")
                 app.mirrorGranted.value = false
-                return false
+                return null
             }
+            mp.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() {
+                    DiagLog.i(tag, "screen sharing ended")
+                    projection = null
+                    app.mirrorGranted.value = false
+                    audio.stop()
+                    mirrorJob?.cancel()
+                    mirrorJob = null
+                    mirror.close()
+                    _state.update { it.copy(mirroring = false, mirrorPackage = "") }
+                    carDisplay.requestKeyFrame()
+                }
+            }, Handler(Looper.getMainLooper()))
+            projection = mp
+            mp
+        } catch (t: Throwable) {
+            DiagLog.e(tag, "could not start screen sharing", t)
+            app.mirrorResultCode = 0
+            app.mirrorData = null
+            app.mirrorGranted.value = false
+            null
+        }
+    }
+
+    private fun startAudioToCar() {
+        if (audio.active) return
+        if (!canRecord()) {
+            DiagLog.w(tag, "no microphone permission, the car will get picture without sound")
+            return
+        }
+        val mp = ensureProjection("Sending sound to the car") ?: return
+        audio.start(mp)
+    }
+
+    private fun mirrorOpen(pkg: String, ownDisplay: Boolean): Boolean {
+        val mp = ensureProjection("Showing $pkg on the car") ?: return false
+        return try {
             val useCar = ownDisplay && app.prefs.carSizedApps && carDisplay.width > 0 && carDisplay.height > 0
             val metrics = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).maximumWindowMetrics.bounds
             val w = if (useCar) carDisplay.width else metrics.width()
             val h = if (useCar) carDisplay.height else metrics.height()
             val d = if (useCar) app.prefs.carDensity else resources.displayMetrics.densityDpi
-            mirror.open(mp, w, h, d, useCar) {
-                app.mirrorGranted.value = false
-                audio.stop()
-                mirrorJob?.cancel()
-                mirrorJob = null
-                _state.update { it.copy(mirroring = false, mirrorPackage = "") }
-                carDisplay.requestKeyFrame()
-            }
-            if (canRecord()) audio.start(mp) else DiagLog.w(tag, "no microphone permission, the car will get picture without sound")
-            true
+            val ok = mirror.open(mp, w, h, d, useCar)
+            if (ok && !audio.active) startAudioToCar()
+            ok
         } catch (t: Throwable) {
             DiagLog.e(tag, "mirror start failed", t)
-            app.mirrorResultCode = 0
-            app.mirrorData = null
-            app.mirrorGranted.value = false
             false
         }
     }
@@ -506,10 +569,12 @@ class CarLifeService : Service() {
     private fun mirrorClose() {
         mirrorStop()
         audio.stop()
-        if (mirror.ready) {
-            mirror.close()
+        mirror.close()
+        if (projection != null) {
+            runCatching { projection?.stop() }
+            projection = null
             app.mirrorGranted.value = false
-            DiagLog.i(tag, "mirror released, allow it again on the phone for the next drive")
+            DiagLog.i(tag, "screen sharing released, allow it again on the phone for the next drive")
         }
     }
 
