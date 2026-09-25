@@ -4,11 +4,18 @@ FT turns an Android phone into the phone side of Baidu CarLife over WiFi, so a C
 
 ## How it connects
 
-The head unit advertises a WiFi Direct group. FT finds it, joins it (push button, or a PIN if the unit asks for one), and brings up the CarLife listener on that link; the head unit then connects to the phone and the session starts. Nothing is shown on the phone beyond the ongoing notification.
+Three steps, all automatic:
+
+1. **USB wakes the car.** Plugging the phone in presents the CarLife accessory identity; the head unit opens an accessory session with FT and, on units like the Toyota/Desay one, raises its WiFi Direct group only after that. The cable session is a full CarLife link in its own right.
+2. **WiFi Direct.** FT finds the group, joins it (push button, or a PIN if the unit asks for one), and brings up the CarLife listener on that link.
+3. **Discovery beacon.** The vehicle side learns the phone's address from a UDP datagram on port 7999 and only then connects to the phone's ports. FT sends that beacon to the group owner and to every interface broadcast every 1.5 s until the head unit connects.
+
+Nothing is shown on the phone beyond the ongoing notification.
 
 - **Auto-connect** (the switch on Home) keeps a small foreground service that searches in short bursts, joins the car when it appears, and also starts at boot and when the phone's Bluetooth connects to the car.
 - The first time, **Nearby** lists the WiFi Direct devices FT sees. Tap **Use** on the car once; it is remembered. Leaving the name blank matches anything with "CarLife" in its name.
-- **Listen only** keeps the listener up on the network the phone is already on, for head units that reach the phone over a normal WiFi or hotspot connection.
+- **Listen only** keeps the listener and the beacon up on the network the phone is already on, for head units that reach the phone over a normal WiFi or hotspot connection.
+- **USB now** re-opens the accessory if the system prompt was dismissed.
 
 ## On the car screen
 

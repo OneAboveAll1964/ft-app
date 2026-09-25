@@ -7,11 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -166,10 +164,9 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                     }
                 }
                 Actions {
-                    FilledTonalButton(onClick = { if (car.running) CarLifeService.searchAgain() else CarLifeService.startAuto(context) }) { Text("Search again") }
-                    OutlinedButton(onClick = onConnectUsb) { Text("USB now") }
-                    OutlinedButton(onClick = { CarLifeService.startWifi(context) }) { Text("Listen only") }
-                    OutlinedButton(onClick = { CarLifeService.stop(context) }) { Text("Stop") }
+                    FilledTonalButton(onClick = { if (car.running) CarLifeService.searchAgain() else CarLifeService.startAuto(context) }, modifier = Modifier.weight(1f)) { Text("Search", maxLines = 1) }
+                    OutlinedButton(onClick = onConnectUsb, modifier = Modifier.weight(1f)) { Text("USB", maxLines = 1) }
+                    OutlinedButton(onClick = { CarLifeService.startWifi(context) }, modifier = Modifier.weight(1f)) { Text("Listen", maxLines = 1) }
                 }
             }
         }
@@ -193,8 +190,8 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                     app.prefs.aaBluetooth = it
                 }
                 Actions {
-                    FilledTonalButton(onClick = { AaHeadUnitService.start(context, bluetooth) }) { Text("Start now") }
-                    OutlinedButton(onClick = { AaHeadUnitService.stop(context) }) { Text("Stop") }
+                    FilledTonalButton(onClick = { AaHeadUnitService.start(context, bluetooth) }, modifier = Modifier.weight(1f)) { Text("Start now", maxLines = 1) }
+                    OutlinedButton(onClick = { AaHeadUnitService.stop(context) }, modifier = Modifier.weight(1f)) { Text("Stop", maxLines = 1) }
                 }
             }
         }
@@ -274,13 +271,12 @@ private fun Permission(title: String, detail: String, granted: Boolean, onGrant:
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Actions(content: @Composable FlowRowScope.() -> Unit) {
-    FlowRow(
+private fun Actions(content: @Composable RowScope.() -> Unit) {
+    Row(
         Modifier.fillMaxWidth().padding(top = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
         content = content
     )
 }

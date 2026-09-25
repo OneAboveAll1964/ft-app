@@ -22,7 +22,12 @@ class CarBeacon(private val scope: CoroutineScope, private val name: () -> Strin
     fun start() {
         if (running) return
         sent = 0
-        job = scope.launch(Dispatchers.IO) { loop() }
+        job = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                tick()
+                delay(1500)
+            }
+        }
     }
 
     fun stop() {
@@ -30,8 +35,8 @@ class CarBeacon(private val scope: CoroutineScope, private val name: () -> Strin
         job = null
     }
 
-    private suspend fun loop() {
-        while (scope.isActive && job?.isActive == true) {
+    private fun tick() {
+        run {
             val targets = LinkedHashSet<InetAddress>()
             target?.let { t -> runCatching { InetAddress.getByName(t) }.getOrNull()?.let(targets::add) }
             targets += NetUtil.broadcastAddresses()
@@ -52,7 +57,6 @@ class CarBeacon(private val scope: CoroutineScope, private val name: () -> Strin
             if (sent == 1 || sent % 40 == 0) {
                 DiagLog.i(tag, "discovery beacon #$sent to ${targets.joinToString { it.hostAddress ?: "?" }.ifBlank { "no network" }} udp ${CarLifeProtocol.DISCOVERY_PORT} ($ok sent)")
             }
-            delay(1500)
         }
     }
 }
