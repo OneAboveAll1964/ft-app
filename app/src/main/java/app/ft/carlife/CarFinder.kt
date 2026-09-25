@@ -115,15 +115,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                 val info: WifiP2pInfo? = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_INFO, WifiP2pInfo::class.java) else @Suppress("DEPRECATION") i.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_INFO)
                 if (info != null && info.groupFormed) {
-                    val ip = info.groupOwnerAddress?.hostAddress ?: return
-                    m.requestGroupInfo(ch) { g ->
-                        val l = Link(ip, g?.`interface`, info.isGroupOwner, g?.networkName ?: connecting ?: "")
-                        connecting = null
-                        _link.value = l
-                        _state.value = "joined ${l.name.ifBlank { ip }}"
-                        DiagLog.i(tag, "joined group owner=$ip iface=${l.iface} weAreOwner=${l.weAreOwner} network=${g?.networkName}")
-                        onJoined?.invoke(l)
-                    }
+                    onGroup(info)
                 } else if (_link.value != null) {
                     _link.value = null
                     connecting = null
@@ -137,13 +129,50 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
     }
 
+    private fun onGroup(info: WifiP2pInfo) {
+        val m = manager ?: return
+        val ch = channel ?: return
+        val ip = info.groupOwnerAddress?.hostAddress
+        if (ip == null) {
+            DiagLog.d(tag, "group formed without an owner address yet, asking again")
+            scope.launch(Dispatchers.Main) {
+                delay(1000)
+                if (_link.value == null) m.requestConnectionInfo(ch) { again -> if (again != null && again.groupFormed) onGroup(again) }
+            }
+            return
+        }
+        if (_link.value?.groupOwnerIp == ip) return
+        m.requestGroupInfo(ch) { g ->
+            val l = Link(ip, g?.`interface`, info.isGroupOwner, g?.networkName ?: connecting ?: "")
+            connecting = null
+            _link.value = l
+            _state.value = "joined ${l.name.ifBlank { ip }}"
+            DiagLog.i(tag, "joined group owner=$ip iface=${l.iface} weAreOwner=${l.weAreOwner} network=${g?.networkName}")
+            onJoined?.invoke(l)
+        }
+    }
+
     private fun autoMatch(ps: List<Peer>) {
         if (_link.value != null || connecting != null) return
         val want = prefs.carP2pName.trim()
         val target = ps.firstOrNull { p ->
             if (want.isNotEmpty()) p.name.equals(want, true) || p.name.contains(want, true) else p.name.contains("carlife", true)
         } ?: return
-        connect(target)
+        val m = manager ?: return
+        val ch = channel ?: return
+        when (target.status) {
+            WifiP2pDevice.INVITED -> {
+                connecting = target.name
+                _state.value = "invited by ${target.name}"
+                DiagLog.i(tag, "${target.name} already invited us, letting the invitation finish")
+                scope.launch(Dispatchers.Main) {
+                    delay(15_000)
+                    if (connecting == target.name && _link.value == null) connecting = null
+                }
+            }
+            WifiP2pDevice.CONNECTED -> m.requestConnectionInfo(ch) { info -> if (info != null && info.groupFormed) onGroup(info) }
+            else -> connect(target)
+        }
     }
 
     fun connectByName(name: String) {
