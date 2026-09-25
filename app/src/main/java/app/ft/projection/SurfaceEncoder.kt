@@ -17,11 +17,14 @@ class SurfaceEncoder(
     private val width: Int,
     private val height: Int,
     fps: Int,
+    private val maxBitrate: Int,
     private val onConfig: (ByteArray) -> Unit,
     private val onFrame: (frame: ByteArray, keyFrame: Boolean) -> Unit
 ) {
     private val tag = "Encoder"
-    private val fps = fps.coerceIn(10, 60)
+    private val fps = fps.coerceIn(1, 60)
+    private val startBitrate = (width.toLong() * height * this.fps / 12)
+        .coerceIn(600_000L, maxBitrate.toLong().coerceAtLeast(600_000L)).toInt()
     private val running = AtomicBoolean(false)
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
@@ -38,11 +41,12 @@ class SurfaceEncoder(
         handler = h
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, (width.toLong() * height * fps / 4).coerceIn(4_000_000, 16_000_000).toInt())
+            setInteger(MediaFormat.KEY_BIT_RATE, startBitrate)
             setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
             setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-            setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1_000_000L / fps)
+            setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1_000_000L)
+            setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, this@SurfaceEncoder.fps.toFloat())
             setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
             setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel4)
             runCatching {
@@ -109,12 +113,21 @@ class SurfaceEncoder(
         surface = c.createInputSurface()
         c.start()
         codec = c
-        DiagLog.i(tag, "encoder started ${width}x${height}@$fps")
+        DiagLog.i(tag, "encoder started ${width}x${height}@$fps at ${startBitrate / 1000} kbps (cap ${maxBitrate / 1000})")
     }
 
     fun requestKeyFrame() {
         val c = codec ?: return
         runCatching { c.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0) }) }
+    }
+
+    fun setBitrate(bps: Int) {
+        val c = codec ?: return
+        val target = bps.coerceIn(400_000, maxBitrate.coerceAtLeast(400_000))
+        runCatching {
+            c.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, target) })
+            DiagLog.i(tag, "bitrate now ${target / 1000} kbps")
+        }
     }
 
     fun currentConfig(): ByteArray = config

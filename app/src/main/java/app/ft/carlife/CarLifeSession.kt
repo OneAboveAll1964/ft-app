@@ -38,6 +38,7 @@ class CarLifeSession(
     var onStartVideo: (() -> Unit)? = null
     var onStopVideo: (() -> Unit)? = null
     var onKeyFrameRequest: (() -> Unit)? = null
+    var onFrameRate: ((fps: Int) -> Unit)? = null
     var onTouch: ((action: Int, x: Int, y: Int) -> Unit)? = null
     var onHardKey: ((keyCode: Int) -> Unit)? = null
     var onLaunchMode: ((mode: String) -> Unit)? = null
@@ -187,13 +188,13 @@ class CarLifeSession(
                 val r = ProtoReader(c.payload)
                 var w = r.int(1, width)
                 var h = r.int(2, height)
-                val asked = r.int(3, fps)
-                var f = asked
+                val asked = r.int(3, 0)
+                var f = if (asked > 0) asked else 30
                 if (prefs.forceWidth > 0 && prefs.forceHeight > 0) { w = prefs.forceWidth; h = prefs.forceHeight }
-                f = if (prefs.forceFps > 0) prefs.forceFps else maxOf(asked, prefs.minFps)
+                if (prefs.forceFps > 0) f = prefs.forceFps else if (prefs.minFps > 0) f = maxOf(f, prefs.minFps)
                 width = w.coerceIn(320, 4096)
                 height = h.coerceIn(240, 2160)
-                fps = f.coerceIn(10, 60)
+                fps = f.coerceIn(1, 60)
                 DiagLog.i(tag, "video encoder init ${width}x${height}@$fps" + if (asked != fps) " (head unit asked $asked)" else "")
                 cmd(CarLifeProtocol.CMD_VIDEO_ENCODER_INIT_DONE, c.payload)
                 cmd(CarLifeProtocol.CMD_FOREGROUND)
@@ -220,8 +221,11 @@ class CarLifeSession(
                 onKeyFrameRequest?.invoke()
             }
             CarLifeProtocol.CMD_VIDEO_ENCODER_FRAME_RATE_CHANGE -> {
-                val f = ProtoReader(c.payload).int(1, fps)
-                fps = f.coerceIn(10, 60)
+                val f = ProtoReader(c.payload).int(1, fps).coerceIn(1, 60)
+                if (f != fps) {
+                    fps = f
+                    onFrameRate?.invoke(f)
+                }
                 cmd(CarLifeProtocol.CMD_VIDEO_ENCODER_FRAME_RATE_CHANGE_DONE, c.payload)
             }
             CarLifeProtocol.CMD_STATISTIC_INFO -> {

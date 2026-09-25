@@ -75,6 +75,8 @@ class CarLifeService : Service() {
             context.startService(Intent(context, CarLifeService::class.java).setAction(ACTION_STOP))
         }
 
+        fun btSend(hex: String) = instance?.sendBluetooth(hex)
+        fun btEcho(on: Boolean) = instance?.echoBluetooth(on)
         fun pickCar(name: String) = instance?.finder?.connectByName(name)
         fun forgetCar() = instance?.forget()
         fun searchAgain() = instance?.restartFinder()
@@ -215,7 +217,7 @@ class CarLifeService : Service() {
 
     private fun updateBeacon() {
         val busy = wifiLink?.connected == true
-        val want = wifiLink != null && !busy && (listenOnly || beacon.target != null)
+        val want = wifiLink != null && !busy
         if (want) beacon.start() else beacon.stop()
         _state.update { it.copy(beacon = want) }
     }
@@ -226,6 +228,10 @@ class CarLifeService : Service() {
         session = s
         s.onVideoConfig = { w, h, fps -> onVideoConfig(w, h, fps) }
         s.onStartVideo = { carDisplay.requestKeyFrame() }
+        s.onFrameRate = { fps ->
+            carDisplay.setFrameRate(fps)
+            carDisplay.setBitrate((carDisplay.width * carDisplay.height * fps / 12).coerceAtLeast(400_000))
+        }
         s.onStopVideo = { onStopVideo() }
         s.onKeyFrameRequest = { carDisplay.requestKeyFrame() }
         s.onTouch = { a, x, y -> routeTouch(a, x, y) }
@@ -252,7 +258,7 @@ class CarLifeService : Service() {
     private fun onVideoConfig(w: Int, h: Int, fps: Int) {
         val s = session ?: return
         carDisplay.start(
-            w, h, fps,
+            w, h, fps, app.prefs.maxBitrate,
             onConfig = { cfg -> s.sendVideo(cfg) },
             onFrame = { frame, _ -> s.sendVideo(frame) }
         ) {
@@ -269,32 +275,29 @@ class CarLifeService : Service() {
         updateNotification(if (finder != null) "Looking for the car" else "Waiting for the head unit")
     }
 
-    private fun startAndroidAuto() {
-        val pkg = app.prefs.aaPackage
-        val installed = runCatching { packageManager.getPackageInfo(pkg, 0) }.isSuccess
-        if (!installed) {
-            DiagLog.w(tag, "Android Auto ($pkg) is not installed; set the right package in Settings")
+    private fun sendBluetooth(hex: String) {
+        val clean = hex.replace(Regex("[^0-9A-Fa-f]"), "")
+        if (clean.length < 2 || clean.length % 2 != 0) {
+            DiagLog.w(tag, "bluetooth send: bad hex '$hex'")
             return
         }
-        val intent = androidAutoIntent(pkg)
-        if (intent == null) {
-            DiagLog.w(tag, "Android Auto is installed but exposes no entry point this phone lets FT open")
-            return
-        }
-        DiagLog.i(tag, "starting Android Auto on the car via ${intent.action}${intent.categories?.joinToString(prefix = " ") ?: ""}")
-        launchIntent(intent, pkg)
+        val bytes = ByteArray(clean.length / 2) { i -> clean.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+        bt.send(bytes)
     }
 
-    private fun androidAutoIntent(pkg: String): Intent? {
-        val pm = packageManager
-        pm.getLaunchIntentForPackage(pkg)?.let { return it }
-        val carDock = Intent(Intent.ACTION_MAIN).addCategory("android.intent.category.CAR_DOCK").setPackage(pkg)
-        if (pm.resolveActivity(carDock, 0) != null) return carDock
-        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_DEFAULT).setPackage(pkg)
-        if (pm.resolveActivity(main, 0) != null) return main
-        val anyCarDock = Intent(Intent.ACTION_MAIN).addCategory("android.intent.category.CAR_DOCK")
-        if (pm.resolveActivity(anyCarDock, 0) != null) return anyCarDock
-        return null
+    private fun echoBluetooth(on: Boolean) {
+        bt.onFrame = if (on) { frame -> bt.send(frame) } else null
+        DiagLog.i(tag, "bluetooth echo ${if (on) "on" else "off"}")
+    }
+
+    private fun startAndroidAuto() {
+        val pkg = app.prefs.aaPackage
+        if (runCatching { packageManager.getPackageInfo(pkg, 0) }.isFailure) {
+            DiagLog.w(tag, "Android Auto ($pkg) is not installed on this phone")
+            return
+        }
+        DiagLog.i(tag, "bridging this phone's Android Auto onto the car")
+        aaOverlay(true)
     }
 
     private fun routeTouch(action: Int, x: Int, y: Int) {

@@ -17,11 +17,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 
@@ -87,7 +89,7 @@ class AaHeadUnitService : Service() {
     }
 
     private fun listen(bluetooth: Boolean) {
-        if (server != null) return
+        if (acceptJob?.isActive == true) return
         val app = application as FTApp
         val port = app.prefs.aaPort
         val dec = AaVideoDecoder(app.prefs.aaWidth, app.prefs.aaHeight)
@@ -95,33 +97,39 @@ class AaHeadUnitService : Service() {
         surfaceJob = scope.launch {
             AaVideoSink.surface.collect { s -> dec.setSurface(s) }
         }
-        if (bluetooth) {
-            bt = AaBluetoothAdvertiser(this, port).also { it.start(scope) }
-            scope.launch { bt?.status?.collect { s -> _state.update { it.copy(bluetooth = s) } } }
-            scope.launch { bt?.info?.collect { i -> _state.update { it.copy(hotspot = i) } } }
-        }
         acceptJob = scope.launch {
-            try {
-                val ss = ServerSocket(port).also { it.reuseAddress = true }
-                server = ss
-                _state.update { it.copy(listening = true, port = port) }
-                DiagLog.i(tag, "head unit listening on tcp:$port")
-                while (isActive) {
-                    val s = ss.accept()
-                    s.tcpNoDelay = true
-                    s.keepAlive = true
-                    onPhone(s, dec)
+            _state.update { it.copy(listening = true, port = port) }
+            DiagLog.i(tag, "looking for Android Auto on this phone at 127.0.0.1:$port")
+            var announced = false
+            while (isActive) {
+                if (current != null) {
+                    delay(1000)
+                    continue
                 }
-            } catch (t: Throwable) {
-                if (server != null) DiagLog.w(tag, "listen ended: ${t.message}")
-                _state.update { it.copy(listening = false) }
+                val s = runCatching {
+                    Socket().apply {
+                        tcpNoDelay = true
+                        keepAlive = true
+                        connect(InetSocketAddress("127.0.0.1", port), 1500)
+                    }
+                }.getOrNull()
+                if (s == null) {
+                    if (!announced) {
+                        DiagLog.w(tag, "Android Auto is not serving yet; enable its developer mode and tap 'Start head unit server'")
+                        announced = true
+                    }
+                    delay(2000)
+                    continue
+                }
+                announced = false
+                DiagLog.i(tag, "connected to Android Auto on this phone")
+                onPhone(s, dec)
             }
         }
     }
 
     private fun onPhone(s: Socket, dec: AaVideoDecoder) {
         current?.close("replaced")
-        DiagLog.i(tag, "phone connected from ${s.inetAddress.hostAddress}")
         val session = AaSession(this, s.getInputStream(), s.getOutputStream(), (application as FTApp).prefs, scope, dec) { reason ->
             DiagLog.i(tag, "phone session over: $reason")
             runCatching { s.close() }

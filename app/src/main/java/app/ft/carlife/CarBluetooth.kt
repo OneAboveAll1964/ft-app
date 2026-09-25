@@ -23,8 +23,22 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private var job: Job? = null
     @Volatile private var socket: BluetoothSocket? = null
     @Volatile private var target: String? = null
+    var onFrame: ((ByteArray) -> Unit)? = null
 
     val open: Boolean get() = socket?.isConnected == true
+
+    fun send(bytes: ByteArray): Boolean {
+        val s = socket ?: return false
+        return runCatching {
+            s.outputStream.write(bytes)
+            s.outputStream.flush()
+            DiagLog.tx(tag, "bluetooth reply", bytes)
+            true
+        }.getOrElse {
+            DiagLog.w(tag, "bluetooth write failed: ${it.message}")
+            false
+        }
+    }
 
     fun start(deviceAddress: String? = null) {
         if (job?.isActive == true) return
@@ -108,10 +122,16 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         val s = socket ?: return
         val input = runCatching { s.inputStream }.getOrNull()
         val buf = ByteArray(256)
+        var seen = 0
         while (scope.isActive && job?.isActive == true && s.isConnected) {
             val n = runCatching { input?.read(buf) ?: -1 }.getOrElse { -1 }
             if (n < 0) break
-            if (n > 0) DiagLog.d(tag, "head unit sent $n bytes on the bluetooth link")
+            if (n > 0) {
+                seen++
+                val frame = buf.copyOf(n)
+                if (seen <= 20 || seen % 30 == 0) DiagLog.rx(tag, "bluetooth frame #$seen", frame)
+                onFrame?.invoke(frame)
+            }
         }
         runCatching { s.close() }
         if (socket === s) socket = null

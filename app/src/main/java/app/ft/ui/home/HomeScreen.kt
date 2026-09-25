@@ -165,8 +165,8 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
         item {
             Section("Android Auto", Icons.Filled.PlayArrow) {
                 InfoRow(
-                    if (car.mirroring && car.mirrorPackage == app.prefs.aaPackage) "Showing on the car" else "Your phone's Android Auto, on the car",
-                    "Runs Android Auto on this phone and projects it onto the car screen"
+                    if (car.aaOverlay) "Showing on the car" else "Your phone's Android Auto, on the car",
+                    "FT acts as the Android Auto head unit and bridges the picture to the car"
                 )
                 SwitchRow("Start automatically after connection", "Launches Android Auto as soon as the car connects", aaAuto) {
                     aaAuto = it

@@ -36,6 +36,7 @@ class CarDisplay(private val context: Context) {
         width: Int,
         height: Int,
         fps: Int,
+        maxBitrate: Int,
         onConfig: (ByteArray) -> Unit,
         onFrame: (ByteArray, Boolean) -> Unit,
         content: @Composable () -> Unit
@@ -44,7 +45,7 @@ class CarDisplay(private val context: Context) {
         this.width = width
         this.height = height
         frameIntervalMs = (1000L / fps.coerceIn(1, 120)).coerceAtLeast(8L)
-        val enc = SurfaceEncoder(width, height, fps, onConfig, onFrame)
+        val enc = SurfaceEncoder(width, height, fps, maxBitrate, onConfig, onFrame)
         enc.start()
         encoder = enc
         val surface = enc.surface ?: throw IllegalStateException("no encoder surface")
@@ -69,6 +70,16 @@ class CarDisplay(private val context: Context) {
     }
 
     fun requestKeyFrame() = encoder?.requestKeyFrame()
+
+    fun setFrameRate(fps: Int) {
+        val f = fps.coerceIn(1, 120)
+        val interval = (1000L / f).coerceAtLeast(8L)
+        if (interval == frameIntervalMs) return
+        frameIntervalMs = interval
+        DiagLog.i(tag, "head unit asked for $f fps, redrawing every ${interval}ms")
+    }
+
+    fun setBitrate(bps: Int) = encoder?.setBitrate(bps)
 
     fun currentConfig(): ByteArray = encoder?.currentConfig() ?: ByteArray(0)
 

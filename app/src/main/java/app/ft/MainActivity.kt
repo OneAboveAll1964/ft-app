@@ -108,6 +108,8 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }
         if (intent.hasExtra("aaAuto")) app.prefs.aaAutoStart = intent.getBooleanExtra("aaAuto", false)
         if (intent.getBooleanExtra("startAa", false)) CarLifeService.startAa()
+        intent.getStringExtra("btSend")?.let { CarLifeService.btSend(it) }
+        if (intent.hasExtra("btEcho")) CarLifeService.btEcho(intent.getBooleanExtra("btEcho", false))
         intent.getStringExtra("pkgMaps")?.let { app.prefs.mapsPackage = it }
         intent.getStringExtra("pkgVideo")?.let { app.prefs.videoPackage = it }
         intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }
