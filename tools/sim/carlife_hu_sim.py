@@ -71,6 +71,7 @@ class WifiLink:
         self.q = queue.Queue()
         for ch, port in ports.items():
             s = socket.create_connection((host, port), timeout=10)
+            s.settimeout(None)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.socks[ch] = s
             threading.Thread(target=self._reader, args=(ch, s), daemon=True).start()
