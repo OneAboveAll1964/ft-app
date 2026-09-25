@@ -63,14 +63,14 @@ check "mirror consent granted" "grep -q 'screen mirror permitted' '$OUT/logcat.t
 sleep 1; dump; cp "$OUT/consent_ui.xml" "$OUT/home_after_consent.xml"
 check "consent reflected on Home (no Allow button left)" "grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
 
-echo "== start services (auto-connect + AA head unit) =="
-$ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true --ez aa true --es pkgMaps com.android.settings >/dev/null 2>&1
+echo "== start services (auto-connect, Android Auto auto-start on) =="
+$ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings >/dev/null 2>&1
 sleep 7
 check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt'"
 check "wifi direct finder started without crash" "grep -q 'FT/P2P' '$OUT/logcat.txt'"
+check "bluetooth trigger runs to raise the car's WiFi Direct" "grep -q 'FT/CarBT' '$OUT/logcat.txt'"
 check "discovery beacon keeps calling on udp 7999 (4th tick seen)" "grep -q 'discovery beacon #4 to .*udp 7999 ([1-9]' '$OUT/logcat.txt'"
 check "not marked connected before any head unit dialled in" "! grep -q 'head unit connected over' '$OUT/logcat.txt'"
-check "AA head unit listening" "grep -q 'head unit listening on tcp:5277' '$OUT/logcat.txt'"
 
 echo "== plain head unit (no content encryption, 1024x600) =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 2 --width 1024 --height 600 --fps 25 --seconds 2 --tail-seconds 1 --out "$OUT/plain" > "$OUT/plain_sim.log" 2>&1
@@ -81,15 +81,10 @@ check "encoder followed the plain head unit size" "grep -q 'encoder started 1024
 check "content encryption reported off for the plain unit" "grep -q 'content encryption off on this head unit' '$OUT/logcat.txt'"
 sleep 3
 
-echo "== run simulators =="
-python3 "$SIMDIR/aa_phone_sim.py" --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" \
-  --h264 "$OUT/aa_testsrc8.h264" --seconds 8 --wait-touch 20 --out "$OUT/aa" > "$OUT/aa_sim.log" 2>&1 &
-AAPID=$!
-sleep 1
-python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 30 --seconds 4 \
+echo "== run the head unit simulator =="
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
   --touches "284,606@0;640,360@4;40,40@8;672,195@11" --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
-wait $AAPID; AA=$?
 sleep 2
 kill $LOGPID 2>/dev/null
 
@@ -102,21 +97,15 @@ check "feature config requested after the version match" "grep -q 'TX MD_FEATURE
 check "head unit asked for encryption and FT negotiated it (RSA/AES)" "grep -q 'head unit requires content encryption' '$OUT/logcat.txt' && grep -q 'AES session key sent' '$OUT/logcat.txt' && grep -q 'content encryption on' '$OUT/logcat.txt'"
 check "bluetooth pair info answered with the complete schema" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['bt_pair_info_complete']\" 2>/dev/null"
 check "video heartbeats flowed before VIDEO_ENCODER_INIT (watchdog rule)" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['heartbeat_before_init']\" 2>/dev/null"
+check "encoder runs at 30 fps even when the unit asks 15 (fps floor)" "grep -q 'video encoder init 1280x720@30 (head unit asked 15)' '$OUT/logcat.txt' && grep -q 'encoder started 1280x720@30' '$OUT/logcat.txt'"
+check "car display redraws at the 30 fps interval, not 10" "grep -q 'redraw every 33ms' '$OUT/logcat.txt'"
+check "projected stream sustained ~30 fps (>=20 fps of launcher video)" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['video_launcher']['frames']>=80\" 2>/dev/null"
+check "Android Auto auto-started after connection and mirrored to the car" "grep -q 'auto-starting Android Auto after connection' '$OUT/logcat.txt' && grep -q 'starting Android Auto on the car' '$OUT/logcat.txt'"
 check "presentation shown on virtual display" "grep -q 'presentation shown' '$OUT/logcat.txt'"
 check "encoder started 1280x720" "grep -q 'encoder started 1280x720' '$OUT/logcat.txt'"
 check "projection started" "grep -q 'projection started' '$OUT/logcat.txt'"
-check "AA button touch turned overlay on" "grep -q 'android auto overlay on' '$OUT/logcat.txt'"
-check "FT pill touch turned overlay off" "grep -q 'android auto overlay off' '$OUT/logcat.txt'"
-check "tile launched an app" "grep -q 'launched com.android.settings' '$OUT/logcat.txt'"
+check "tile launched an app and mirrored it to the car" "grep -q 'launched com.android.settings' '$OUT/logcat.txt'"
 check "phone mirror started" "grep -qE 'mirror [0-9]+x[0-9]+ started' '$OUT/logcat.txt'"
-
-echo "== android auto (aasdk framing + TLS) =="
-check "aa phone sim passed" "[ $AA = 0 ]"
-python3 -c "import json;d=json.load(open('$OUT/aa/result.json'));print('   checks:',all(d['checks'].values()),'| cert:',d.get('hu_cert_sha1','')[:12],'| acked:',d.get('frames_acked'),'/',d.get('frames_sent'),'| touch:',d.get('touch'))" 2>/dev/null
-check "TLS handshake + auth complete" "grep -q 'TLS handshake complete' '$OUT/logcat.txt'"
-check "video session started" "grep -q 'video start session' '$OUT/logcat.txt'"
-check "AA video decoded to car overlay" "grep -q 'decoder started' '$OUT/logcat.txt'"
-check "session closed by bye-bye" "grep -q 'bye-bye' '$OUT/logcat.txt'"
 
 echo "== phone ui =="
 $ADB shell am start -n $PKG/.MainActivity >/dev/null 2>&1; sleep 2

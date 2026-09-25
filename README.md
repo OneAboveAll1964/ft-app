@@ -24,7 +24,7 @@ Tiles, an app drawer, and the **Android Auto** button. The FT pill in the top-le
 
 ## Android Auto
 
-FT is a full head-unit receiver (aasdk-compatible wire format, TLS with the Google-issued head-unit certificate, service discovery, sensors, video, input, ping). A phone running Android Auto connects over TCP 5277; the Bluetooth handoff advertises this head unit to a second phone.
+The head unit speaks CarLife, not Android Auto, so FT puts **your own phone's** Android Auto on the car by launching it and projecting it through the CarLife video channel with the car touchscreen driving it. Home has a single control: **Start Android Auto**, plus a switch to **start it automatically after connection**. It needs the same three grants as the app tiles.
 
 ## Diagnostics
 
