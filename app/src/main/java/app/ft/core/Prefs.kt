@@ -19,6 +19,7 @@ class Prefs(context: Context) {
     var ttsPort: Int get() = int("ttsPort", 9241); set(v) = set("ttsPort", v)
     var vrPort: Int get() = int("vrPort", 9242); set(v) = set("vrPort", v)
     var touchPort: Int get() = int("touchPort", 9340); set(v) = set("touchPort", v)
+    var debugMuxPort: Int get() = int("debugMuxPort", 7250); set(v) = set("debugMuxPort", v)
 
     var aaPort: Int get() = int("aaPort", 5277); set(v) = set("aaPort", v)
     var aaWidth: Int get() = int("aaWidth", 1280); set(v) = set("aaWidth", v)
