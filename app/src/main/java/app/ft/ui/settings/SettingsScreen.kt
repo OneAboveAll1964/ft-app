@@ -2,15 +2,17 @@ package app.ft.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,49 +45,67 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
     ) { pad ->
-        Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+        LazyColumn(
+            Modifier.padding(pad).fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Section("Head unit")
-            TextSetting("Car name", p.carName) { p.carName = it }
-            IntSetting("Force width (0 = as requested)", p.forceWidth) { p.forceWidth = it }
-            IntSetting("Force height (0 = as requested)", p.forceHeight) { p.forceHeight = it }
-            IntSetting("Force fps (0 = as requested)", p.forceFps) { p.forceFps = it }
-
-            Section("CarLife over WiFi (phone listens)")
-            IntSetting("Command port", p.cmdPort) { p.cmdPort = it }
-            IntSetting("Video port", p.videoPort) { p.videoPort = it }
-            IntSetting("Media port", p.mediaPort) { p.mediaPort = it }
-            IntSetting("TTS port", p.ttsPort) { p.ttsPort = it }
-            IntSetting("VR port", p.vrPort) { p.vrPort = it }
-            IntSetting("Touch port", p.touchPort) { p.touchPort = it }
-            BoolSetting("Listen on WiFi at launch", p.autoStartWifi) { p.autoStartWifi = it }
-
-            Section("Android Auto head unit")
-            IntSetting("TCP port", p.aaPort) { p.aaPort = it }
-            IntSetting("Video width", p.aaWidth) { p.aaWidth = it }
-            IntSetting("Video height", p.aaHeight) { p.aaHeight = it }
-            IntSetting("Frame rate", p.aaFps) { p.aaFps = it }
-            IntSetting("Density", p.aaDensity) { p.aaDensity = it }
-            BoolSetting("Start head unit at launch", p.autoStartAa) { p.autoStartAa = it }
-
-            Section("Launcher tiles")
-            TextSetting("Maps package", p.mapsPackage) { p.mapsPackage = it }
-            TextSetting("Music package", p.musicPackage) { p.musicPackage = it }
-            TextSetting("Video package", p.videoPackage) { p.videoPackage = it }
-            TextSetting("Phone package", p.phonePackage) { p.phonePackage = it }
-
-            Section("Developer")
-            BoolSetting("USB simulator link (tcp ${p.debugMuxPort})", p.debugMuxEnabled) { p.debugMuxEnabled = it }
-            IntSetting("USB simulator port", p.debugMuxPort) { p.debugMuxPort = it }
+            item {
+                Group("Car") {
+                    TextSetting("Car name shown to the head unit", p.carName) { p.carName = it }
+                    TextSetting("Car WiFi Direct name (blank matches CarLife)", p.carP2pName) { p.carP2pName = it }
+                    TextSetting("Car Bluetooth name for auto-start (blank = any)", p.carBtName) { p.carBtName = it }
+                    TextSetting("WiFi Direct PIN (blank = push button)", p.carWpsPin) { p.carWpsPin = it }
+                    BoolSetting("Auto-connect at boot and on Bluetooth", p.autoConnect) { p.autoConnect = it }
+                }
+            }
+            item {
+                Group("Projection") {
+                    IntSetting("Force width (0 = as the head unit asks)", p.forceWidth) { p.forceWidth = it }
+                    IntSetting("Force height (0 = as the head unit asks)", p.forceHeight) { p.forceHeight = it }
+                    IntSetting("Force frame rate (0 = as the head unit asks)", p.forceFps) { p.forceFps = it }
+                }
+            }
+            item {
+                Group("CarLife ports the head unit connects to") {
+                    IntSetting("Command", p.cmdPort) { p.cmdPort = it }
+                    IntSetting("Video", p.videoPort) { p.videoPort = it }
+                    IntSetting("Media", p.mediaPort) { p.mediaPort = it }
+                    IntSetting("TTS", p.ttsPort) { p.ttsPort = it }
+                    IntSetting("Voice", p.vrPort) { p.vrPort = it }
+                    IntSetting("Touch", p.touchPort) { p.touchPort = it }
+                }
+            }
+            item {
+                Group("Android Auto head unit") {
+                    IntSetting("TCP port", p.aaPort) { p.aaPort = it }
+                    IntSetting("Video width", p.aaWidth) { p.aaWidth = it }
+                    IntSetting("Video height", p.aaHeight) { p.aaHeight = it }
+                    IntSetting("Frame rate", p.aaFps) { p.aaFps = it }
+                    IntSetting("Density", p.aaDensity) { p.aaDensity = it }
+                    BoolSetting("Start the head unit at launch", p.autoStartAa) { p.autoStartAa = it }
+                }
+            }
+            item {
+                Group("Launcher tiles") {
+                    TextSetting("Maps package", p.mapsPackage) { p.mapsPackage = it }
+                    TextSetting("Music package", p.musicPackage) { p.musicPackage = it }
+                    TextSetting("Video package", p.videoPackage) { p.videoPackage = it }
+                    TextSetting("Phone package", p.phonePackage) { p.phonePackage = it }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun Section(title: String) {
-    Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+private fun Group(title: String, content: @Composable () -> Unit) {
+    Card(shape = RoundedCornerShape(24.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            content()
+        }
+    }
 }
 
 @Composable
