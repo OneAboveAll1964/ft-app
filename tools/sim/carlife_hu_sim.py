@@ -1,21 +1,25 @@
 import argparse
+import base64
 import json
 import os
 import queue
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from proto import decode, f_str, f_varint, first, nal_types
+from proto import decode, f_bytes, f_str, f_varint, first, nal_types
 
 CH_CMD, CH_VIDEO, CH_MEDIA, CH_TTS, CH_VR, CH_CTRL = 1, 2, 3, 4, 5, 6
 HU_PROTOCOL_VERSION = 0x00018001
 PROTOCOL_VERSION_MATCH_STATUS = 0x00010002
 HU_INFO = 0x00018003
 MD_INFO = 0x00010004
+HU_BT_PAIR_INFO = 0x00018005
+MD_BT_PAIR_INFO = 0x00010006
 VIDEO_ENCODER_INIT = 0x00018007
 VIDEO_ENCODER_INIT_DONE = 0x00010008
 VIDEO_ENCODER_START = 0x00018009
@@ -28,6 +32,13 @@ STATISTIC_INFO = 0x00018027
 HU_AUTHEN_REQUEST = 0x00018048
 MD_AUTHEN_RESPONSE = 0x00010049
 MD_AUTHEN_RESULT = 0x0001004B
+MD_FEATURE_CONFIG_REQUEST = 0x00010051
+HU_FEATURE_CONFIG_RESPONSE = 0x00018052
+MD_RSA_PUBLIC_KEY_REQUEST = 0x0001006A
+HU_RSA_PUBLIC_KEY_RESPONSE = 0x0001806B
+MD_AES_KEY_SEND_REQUEST = 0x0001006C
+HU_AES_REC_RESPONSE = 0x0001806D
+MD_ENCRYPT_READY = 0x0001006E
 VIDEO_DATA = 0x00020001
 VIDEO_HEARTBEAT = 0x00020002
 MEDIA_INIT = 0x00030001
@@ -65,16 +76,49 @@ def parse_inner(ch, head, body):
     return struct.unpack(">I", head[8:12])[0], body
 
 
+def aes_ecb(key, data, decrypt=False):
+    args = ["openssl", "enc", "-aes-128-ecb", "-K", key.encode("utf-8").hex(), "-nosalt"]
+    if decrypt:
+        args.append("-d")
+    return subprocess.run(args, input=data, capture_output=True, check=True).stdout
+
+
+class Rsa:
+    def __init__(self, outdir):
+        self.priv = os.path.join(outdir, "hu_rsa.pem")
+        with open(self.priv, "wb") as f:
+            f.write(subprocess.run(["openssl", "genrsa", "2048"], capture_output=True, check=True).stdout)
+        self.pub_der = subprocess.run(["openssl", "rsa", "-in", self.priv, "-pubout", "-outform", "DER"], capture_output=True, check=True).stdout
+
+    def public_b64(self):
+        return base64.b64encode(self.pub_der).decode()
+
+    def decrypt_b64(self, b64):
+        raw = base64.b64decode(b64)
+        return subprocess.run(["openssl", "pkeyutl", "-decrypt", "-inkey", self.priv, "-pkeyopt", "rsa_padding_mode:pkcs1"], input=raw, capture_output=True, check=True).stdout
+
+
 class WifiLink:
     def __init__(self, host, ports):
         self.socks = {}
         self.q = queue.Queue()
+        self.aes = None
+        self.plain_after_key = 0
         for ch, port in ports.items():
             s = socket.create_connection((host, port), timeout=10)
             s.settimeout(None)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.socks[ch] = s
             threading.Thread(target=self._reader, args=(ch, s), daemon=True).start()
+
+    def _unwrap(self, ch, payload):
+        if self.aes is None or not payload or ch not in (CH_CMD, CH_VIDEO):
+            return payload
+        try:
+            return aes_ecb(self.aes, payload, decrypt=True)
+        except subprocess.CalledProcessError:
+            self.plain_after_key += 1
+            return payload
 
     def _reader(self, ch, s):
         hl = head_len(ch)
@@ -84,12 +128,14 @@ class WifiLink:
                 ln = struct.unpack(">H", head[:2])[0] if hl == 8 else struct.unpack(">I", head[:4])[0]
                 body = read_exact(s, ln) if ln else b""
                 sid, payload = parse_inner(ch, head, body)
-                self.q.put((ch, sid, payload))
+                self.q.put((ch, sid, self._unwrap(ch, payload)))
         except Exception as e:
             self.q.put((ch, -1, str(e).encode()))
 
-    def send(self, ch, inner):
-        self.socks[ch].sendall(inner)
+    def send(self, ch, sid, payload=b""):
+        if self.aes is not None and payload and ch in (CH_CMD, CH_CTRL):
+            payload = aes_ecb(self.aes, payload)
+        self.socks[ch].sendall(cmd_msg(sid, payload))
 
     def close(self):
         for s in self.socks.values():
@@ -99,36 +145,6 @@ class WifiLink:
                 pass
 
 
-class MuxLink:
-    def __init__(self, host, port):
-        self.s = socket.create_connection((host, port), timeout=10)
-        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.q = queue.Queue()
-        self.lock = threading.Lock()
-        threading.Thread(target=self._reader, daemon=True).start()
-
-    def _reader(self):
-        try:
-            while True:
-                outer = read_exact(self.s, 8)
-                ch = outer[3]
-                ln = struct.unpack(">I", outer[4:8])[0]
-                inner = read_exact(self.s, ln)
-                hl = head_len(ch)
-                sid, payload = parse_inner(ch, inner[:hl], inner[hl:])
-                self.q.put((ch, sid, payload))
-        except Exception as e:
-            self.q.put((0, -1, str(e).encode()))
-
-    def send(self, ch, inner):
-        pkt = bytes([0, 0, 0, ch]) + struct.pack(">I", len(inner)) + inner
-        with self.lock:
-            self.s.sendall(pkt)
-
-    def close(self):
-        self.s.close()
-
-
 class Sim:
     def __init__(self, link, log):
         self.link = link
@@ -136,13 +152,14 @@ class Sim:
         self.video = []
         self.heartbeats = 0
         self.pending = []
+        self.seen = []
 
     def send_cmd(self, sid, payload=b""):
-        self.log("HU -> %s %d bytes" % (name(sid), len(payload)))
-        self.link.send(CH_CMD, cmd_msg(sid, payload))
+        self.log("HU -> %s %d bytes%s" % (name(sid), len(payload), " (encrypted)" if self.link.aes and payload else ""))
+        self.link.send(CH_CMD, sid, payload)
 
     def send_ctrl(self, sid, payload=b""):
-        self.link.send(CH_CTRL, cmd_msg(sid, payload))
+        self.link.send(CH_CTRL, sid, payload)
 
     def _next(self, timeout):
         try:
@@ -160,6 +177,7 @@ class Sim:
         if ch == CH_VIDEO and s == VIDEO_HEARTBEAT:
             self.heartbeats += 1
             return None
+        self.seen.append(s)
         self.log("MD -> %s on ch%d %d bytes" % (name(s), ch, len(p)))
         return item
 
@@ -211,11 +229,17 @@ def write_h264(path, frames):
             f.write(fr)
 
 
+def feature_list(encrypt):
+    items = [("CONTENT_ENCRYPTION", 1 if encrypt else 0), ("BLUETOOTH_AUTO_PAIR", 1), ("FOCUS_UI", 0)]
+    out = f_varint(1, len(items))
+    for k, v in items:
+        out += f_bytes(2, f_str(1, k) + f_varint(2, v))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["usb", "wifi"], default="usb")
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--mux-port", type=int, default=7250)
     ap.add_argument("--ports", default="7240,8240,9240,9241,9242,9340")
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720)
@@ -224,6 +248,8 @@ def main():
     ap.add_argument("--touches", default="")
     ap.add_argument("--tail-seconds", type=float, default=4.0)
     ap.add_argument("--hardkey", type=int, default=-1)
+    ap.add_argument("--encrypt", type=int, default=1)
+    ap.add_argument("--hold-init", type=float, default=3.0)
     ap.add_argument("--out", default="/tmp/ft_carlife")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
@@ -231,44 +257,73 @@ def main():
     def log(m):
         print("[carlife-sim] " + m, flush=True)
 
-    if a.mode == "usb":
-        link = MuxLink(a.host, a.mux_port)
-    else:
-        p = [int(x) for x in a.ports.split(",")]
-        link = WifiLink(a.host, {CH_CMD: p[0], CH_VIDEO: p[1], CH_MEDIA: p[2], CH_TTS: p[3], CH_VR: p[4], CH_CTRL: p[5]})
+    p = [int(x) for x in a.ports.split(",")]
+    link = WifiLink(a.host, {CH_CMD: p[0], CH_VIDEO: p[1], CH_MEDIA: p[2], CH_TTS: p[3], CH_VR: p[4], CH_CTRL: p[5]})
     sim = Sim(link, log)
-    result = {"mode": a.mode, "ok": False, "checks": {}, "segments": []}
+    result = {"encrypt": bool(a.encrypt), "ok": False, "checks": {}, "segments": []}
     try:
         sim.send_cmd(HU_PROTOCOL_VERSION, f_varint(1, 1) + f_varint(2, 0))
-        _, _, p = sim.wait_for(PROTOCOL_VERSION_MATCH_STATUS)
-        result["checks"]["version_match"] = first(decode(p), 1) == 1
+        _, _, pl = sim.wait_for(PROTOCOL_VERSION_MATCH_STATUS)
+        result["checks"]["version_match"] = first(decode(pl), 1) == 1
+        t_match = time.time()
 
+        sim.send_cmd(STATISTIC_INFO, f_str(1, "cuid") + f_str(2, "1.0") + f_varint(3, 1) + f_str(4, "sim") + f_varint(5, 1) + f_varint(6, 1) + f_varint(7, 1))
         sim.send_cmd(HU_INFO, f_str(1, "FT-HU-SIM") + f_str(2, "desay") + f_str(14, "G6SA"))
-        _, _, p = sim.wait_for(MD_INFO)
-        d = decode(p)
+
+        sim.wait_for(MD_FEATURE_CONFIG_REQUEST, timeout=3.0)
+        result["checks"]["feature_config_requested"] = True
+        sim.send_cmd(HU_FEATURE_CONFIG_RESPONSE, feature_list(a.encrypt))
+
+        _, _, pl = sim.wait_for(MD_INFO)
+        d = decode(pl)
         result["checks"]["md_info"] = first(d, 1, b"").decode() == "Android" and len(first(d, 14, b"")) > 0
         result["md_model"] = first(d, 14, b"").decode(errors="replace")
+        _, _, pl = sim.wait_for(MD_AUTHEN_RESULT)
+        result["checks"]["authen_result_true"] = first(decode(pl), 1) == 1
+
+        sim.send_cmd(HU_BT_PAIR_INFO, f_str(1, "00:11:22:33:44:55") + f_str(5, "0000110a-0000-1000-8000-00805f9b34fb") + f_str(6, "FT-HU-SIM") + f_varint(7, 0))
+        _, _, pl = sim.wait_for(MD_BT_PAIR_INFO)
+        bt = decode(pl)
+        result["checks"]["bt_pair_info_complete"] = all(k in bt for k in (1, 5, 6, 7)) and first(bt, 7) == 1
+        result["bt_pair_reply"] = {k: (v[0].decode(errors="replace") if isinstance(v[0], bytes) else v[0]) for k, v in bt.items()}
+
+        if a.encrypt:
+            sim.wait_for(MD_RSA_PUBLIC_KEY_REQUEST, timeout=5.0)
+            rsa = Rsa(a.out)
+            sim.send_cmd(HU_RSA_PUBLIC_KEY_RESPONSE, f_str(1, rsa.public_b64()))
+            _, _, pl = sim.wait_for(MD_AES_KEY_SEND_REQUEST)
+            key = rsa.decrypt_b64(first(decode(pl), 1, b"").decode()).decode("utf-8")
+            result["checks"]["aes_key_16_chars"] = len(key) == 16
+            link.aes = key
+            log("AES session key received (%d chars), encryption on" % len(key))
+            sim.send_cmd(HU_AES_REC_RESPONSE)
+            sim.wait_for(MD_ENCRYPT_READY)
+            result["checks"]["encryption_negotiated"] = True
+        else:
+            sim.drain(a.hold_init)
+            result["checks"]["no_rsa_when_plain"] = MD_RSA_PUBLIC_KEY_REQUEST not in sim.seen
+
+        while time.time() - t_match < a.hold_init:
+            sim.drain(0.2)
+        result["heartbeats_before_init"] = sim.heartbeats
+        result["checks"]["heartbeat_before_init"] = sim.heartbeats >= max(1, int(a.hold_init) - 1)
 
         init = f_varint(1, a.width) + f_varint(2, a.height) + f_varint(3, a.fps)
         sim.send_cmd(VIDEO_ENCODER_INIT, init)
-        _, _, p = sim.wait_for(VIDEO_ENCODER_INIT_DONE)
-        result["checks"]["init_done_echo"] = p == init
+        _, _, pl = sim.wait_for(VIDEO_ENCODER_INIT_DONE)
+        result["checks"]["init_done_echo"] = pl == init
         sim.wait_for(FOREGROUND)
-        _, _, p = sim.wait_for(MODULE_STATUS)
-        result["checks"]["module_status"] = first(decode(p), 1) == 6
+        _, _, pl = sim.wait_for(MODULE_STATUS)
+        result["checks"]["module_status"] = first(decode(pl), 1) == 6
 
         sim.send_cmd(VIDEO_ENCODER_START)
-        _, _, p = sim.wait_for(MEDIA_INIT)
-        dm = decode(p)
+        _, _, pl = sim.wait_for(MEDIA_INIT)
+        dm = decode(pl)
         result["checks"]["media_init"] = first(dm, 1) == 48000 and first(dm, 2) == 2 and first(dm, 3) == 16
 
-        sim.send_cmd(STATISTIC_INFO, f_str(1, "cuid") + f_str(2, "1.0") + f_varint(3, 1) + f_str(4, "sim") + f_varint(5, 1) + f_varint(6, 1) + f_varint(7, 1))
-        _, _, p = sim.wait_for(MD_AUTHEN_RESULT)
-        result["checks"]["authen_result_true"] = first(decode(p), 1) == 1
-
         sim.send_cmd(HU_AUTHEN_REQUEST, f_str(1, "r4nd0m"))
-        _, _, p = sim.wait_for(MD_AUTHEN_RESPONSE)
-        result["checks"]["authen_response"] = len(first(decode(p), 1, b"")) > 0
+        _, _, pl = sim.wait_for(MD_AUTHEN_RESPONSE)
+        result["checks"]["authen_response"] = len(first(decode(pl), 1, b"")) > 0
 
         sim.drain(a.seconds)
         st = video_stats(sim.video)
@@ -308,6 +363,9 @@ def main():
         result["checks"]["go_to_foreground"] = True
         result["heartbeats"] = sim.heartbeats
         result["checks"]["heartbeat"] = sim.heartbeats >= 1
+        if a.encrypt:
+            result["plain_after_key"] = link.plain_after_key
+            result["checks"]["everything_encrypted_after_key"] = link.plain_after_key == 0
         result["total_frames"] = len(sim.video)
         result["ok"] = all(result["checks"].values())
     except Exception as e:

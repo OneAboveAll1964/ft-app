@@ -23,7 +23,7 @@ $ADB install -r -g "$APK" >/dev/null 2>&1 && ok "apk installed" || ko "apk insta
 $ADB shell appops set $PKG SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1
 $ADB shell settings put secure enabled_accessibility_services $PKG/$PKG.FTTouchService >/dev/null 2>&1
 $ADB shell settings put secure accessibility_enabled 1 >/dev/null 2>&1
-for p in 5277 7240 7250 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
+for p in 5277 7240 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
 
 $ADB logcat -c
 $ADB logcat -v time > "$OUT/logcat.txt" 2>&1 &
@@ -65,21 +65,20 @@ check "consent reflected on Home (no Allow button left)" "grep -q 'text=\"Screen
 
 echo "== start services (auto-connect + AA head unit) =="
 $ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true --ez aa true --es pkgMaps com.android.settings >/dev/null 2>&1
-sleep 4
+sleep 7
 check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt'"
 check "wifi direct finder started without crash" "grep -q 'FT/P2P' '$OUT/logcat.txt'"
-check "discovery beacon sent on udp 7999" "grep -q 'discovery beacon #1 to .*udp 7999 ([1-9]' '$OUT/logcat.txt'"
+check "discovery beacon keeps calling on udp 7999 (4th tick seen)" "grep -q 'discovery beacon #4 to .*udp 7999 ([1-9]' '$OUT/logcat.txt'"
+check "not marked connected before any head unit dialled in" "! grep -q 'head unit connected over' '$OUT/logcat.txt'"
 check "AA head unit listening" "grep -q 'head unit listening on tcp:5277' '$OUT/logcat.txt'"
 
-echo "== usb accessory framing (8-byte mux over tcp 7250) =="
-$ADB shell am start -n $PKG/.MainActivity --ez mux true >/dev/null 2>&1; sleep 2
-python3 "$SIMDIR/carlife_hu_sim.py" --mode usb --mux-port 7250 --width 1024 --height 600 --fps 25 --seconds 2 --tail-seconds 2 --out "$OUT/usb" > "$OUT/usb_sim.log" 2>&1
-US=$?
-check "usb-framed head unit session passed" "[ $US = 0 ]"
-python3 -c "import json;d=json.load(open('$OUT/usb/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| heartbeats:',d.get('heartbeats'))" 2>/dev/null
-check "usb link opened" "grep -q 'USB-SIM link open' '$OUT/logcat.txt'"
-check "encoder followed the usb head unit size" "grep -q 'encoder started 1024x600' '$OUT/logcat.txt'"
-check "usb session closed cleanly" "grep -q 'USB-SIM link closed' '$OUT/logcat.txt'"
+echo "== plain head unit (no content encryption, 1024x600) =="
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 2 --width 1024 --height 600 --fps 25 --seconds 2 --tail-seconds 1 --out "$OUT/plain" > "$OUT/plain_sim.log" 2>&1
+PL=$?
+check "plain head unit session passed" "[ $PL = 0 ]"
+python3 -c "import json;d=json.load(open('$OUT/plain/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| heartbeats before init:',d.get('heartbeats_before_init'),'| bt reply:',d.get('bt_pair_reply'))" 2>/dev/null
+check "encoder followed the plain head unit size" "grep -q 'encoder started 1024x600' '$OUT/logcat.txt'"
+check "content encryption reported off for the plain unit" "grep -q 'content encryption off on this head unit' '$OUT/logcat.txt'"
 sleep 3
 
 echo "== run simulators =="
@@ -87,17 +86,22 @@ python3 "$SIMDIR/aa_phone_sim.py" --hu-cert "$ROOT/app/src/main/assets/aa_hu_cer
   --h264 "$OUT/aa_testsrc8.h264" --seconds 8 --wait-touch 20 --out "$OUT/aa" > "$OUT/aa_sim.log" 2>&1 &
 AAPID=$!
 sleep 1
-python3 "$SIMDIR/carlife_hu_sim.py" --mode wifi --width 1280 --height 720 --fps 30 --seconds 4 \
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 30 --seconds 4 \
   --touches "284,606@0;640,360@4;40,40@8;672,195@11" --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 wait $AAPID; AA=$?
 sleep 2
 kill $LOGPID 2>/dev/null
 
-echo "== carlife (per-channel TCP, the wireless path) =="
+echo "== carlife (per-channel TCP, content encryption on) =="
 check "carlife sim passed" "[ $CL = 0 ]"
-python3 -c "import json;d=json.load(open('$OUT/carlife/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| launcher:',d.get('video_launcher'),'| heartbeats:',d.get('heartbeats'))" 2>/dev/null
+python3 -c "import json;d=json.load(open('$OUT/carlife/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| launcher:',d.get('video_launcher'),'| heartbeats:',d.get('heartbeats'),'| before init:',d.get('heartbeats_before_init'),'| plaintext leaks after key:',d.get('plain_after_key'))" 2>/dev/null
 check "head unit connected to the cmd channel" "grep -q 'WIFI CMD connected from' '$OUT/logcat.txt'"
+check "Linked only when a head unit really connected (once per simulated unit)" "[ \$(grep -c 'head unit connected over WiFi' '$OUT/logcat.txt') = 2 ]"
+check "feature config requested after the version match" "grep -q 'TX MD_FEATURE_CONFIG_REQUEST' '$OUT/logcat.txt'"
+check "head unit asked for encryption and FT negotiated it (RSA/AES)" "grep -q 'head unit requires content encryption' '$OUT/logcat.txt' && grep -q 'AES session key sent' '$OUT/logcat.txt' && grep -q 'content encryption on' '$OUT/logcat.txt'"
+check "bluetooth pair info answered with the complete schema" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['bt_pair_info_complete']\" 2>/dev/null"
+check "video heartbeats flowed before VIDEO_ENCODER_INIT (watchdog rule)" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['heartbeat_before_init']\" 2>/dev/null"
 check "presentation shown on virtual display" "grep -q 'presentation shown' '$OUT/logcat.txt'"
 check "encoder started 1280x720" "grep -q 'encoder started 1280x720' '$OUT/logcat.txt'"
 check "projection started" "grep -q 'projection started' '$OUT/logcat.txt'"
