@@ -23,7 +23,7 @@ $ADB install -r -g "$APK" >/dev/null 2>&1 && ok "apk installed" || ko "apk insta
 $ADB shell appops set $PKG SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1
 $ADB shell settings put secure enabled_accessibility_services $PKG/$PKG.FTTouchService >/dev/null 2>&1
 $ADB shell settings put secure accessibility_enabled 1 >/dev/null 2>&1
-for p in 5277 7240 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
+for p in 5277 7240 7250 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
 
 $ADB logcat -c
 $ADB logcat -v time > "$OUT/logcat.txt" 2>&1 &
@@ -64,11 +64,23 @@ sleep 1; dump; cp "$OUT/consent_ui.xml" "$OUT/home_after_consent.xml"
 check "consent reflected on Home (no Allow button left)" "grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect + AA head unit) =="
-$ADB shell am start -n $PKG/.MainActivity --ez auto true --ez aa true --es pkgMaps com.android.settings >/dev/null 2>&1
+$ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true --ez aa true --es pkgMaps com.android.settings >/dev/null 2>&1
 sleep 4
 check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt'"
 check "wifi direct finder started without crash" "grep -q 'FT/P2P' '$OUT/logcat.txt'"
+check "discovery beacon sent on udp 7999" "grep -q 'discovery beacon #1 to .*udp 7999 ([1-9]' '$OUT/logcat.txt'"
 check "AA head unit listening" "grep -q 'head unit listening on tcp:5277' '$OUT/logcat.txt'"
+
+echo "== usb accessory framing (8-byte mux over tcp 7250) =="
+$ADB shell am start -n $PKG/.MainActivity --ez mux true >/dev/null 2>&1; sleep 2
+python3 "$SIMDIR/carlife_hu_sim.py" --mode usb --mux-port 7250 --width 1024 --height 600 --fps 25 --seconds 2 --tail-seconds 2 --out "$OUT/usb" > "$OUT/usb_sim.log" 2>&1
+US=$?
+check "usb-framed head unit session passed" "[ $US = 0 ]"
+python3 -c "import json;d=json.load(open('$OUT/usb/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| heartbeats:',d.get('heartbeats'))" 2>/dev/null
+check "usb link opened" "grep -q 'USB-SIM link open' '$OUT/logcat.txt'"
+check "encoder followed the usb head unit size" "grep -q 'encoder started 1024x600' '$OUT/logcat.txt'"
+check "usb session closed cleanly" "grep -q 'USB-SIM link closed' '$OUT/logcat.txt'"
+sleep 3
 
 echo "== run simulators =="
 python3 "$SIMDIR/aa_phone_sim.py" --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" \

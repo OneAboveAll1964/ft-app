@@ -8,7 +8,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.hardware.usb.UsbAccessory
+import android.hardware.usb.UsbManager
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.IBinder
 import android.view.WindowManager
 import app.ft.FTApp
@@ -43,14 +46,19 @@ data class CarState(
     val ip: String? = null,
     val p2p: String = "off",
     val peers: List<String> = emptyList(),
-    val carIp: String? = null
+    val carIp: String? = null,
+    val usb: String = "not attached",
+    val beacon: Boolean = false
 )
 
 class CarLifeService : Service() {
     companion object {
+        const val ACTION_USB = "app.ft.carlife.USB"
         const val ACTION_WIFI = "app.ft.carlife.WIFI"
         const val ACTION_AUTO = "app.ft.carlife.AUTO"
+        const val ACTION_MUX = "app.ft.carlife.MUX"
         const val ACTION_STOP = "app.ft.carlife.STOP"
+        const val EXTRA_ACCESSORY = "accessory"
         const val CORNER = 96
         private const val CHANNEL = "ft_carlife"
         private const val NOTIFICATION_ID = 41
@@ -59,12 +67,20 @@ class CarLifeService : Service() {
         val state: StateFlow<CarState> = _state
         @Volatile private var instance: CarLifeService? = null
 
+        fun startUsb(context: Context, accessory: UsbAccessory) {
+            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_USB).putExtra(EXTRA_ACCESSORY, accessory))
+        }
+
         fun startWifi(context: Context) {
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_WIFI))
         }
 
         fun startAuto(context: Context) {
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO))
+        }
+
+        fun startMux(context: Context) {
+            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_MUX))
         }
 
         fun stop(context: Context) {
@@ -83,12 +99,17 @@ class CarLifeService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var carDisplay: CarDisplay
     private val mirror = PhoneMirror()
-    private var session: CarLifeSession? = null
+    private val sessions = HashMap<String, CarLifeSession>()
+    private val sessionJobs = HashMap<String, Job>()
+    @Volatile private var session: CarLifeSession? = null
     private var wifiLink: WifiChannelLink? = null
+    private var usbLink: UsbAoaLink? = null
+    private var muxLink: DebugMuxTcpLink? = null
     private var finder: CarFinder? = null
-    private var stateJob: Job? = null
     private var mirrorJob: Job? = null
+    private var listenOnly = false
     private val app get() = application as FTApp
+    private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
 
     override fun onCreate() {
         super.onCreate()
@@ -105,14 +126,27 @@ class CarLifeService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_USB -> {
+                foreground("Connected to the car over USB")
+                val acc: UsbAccessory? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(EXTRA_ACCESSORY, UsbAccessory::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_ACCESSORY)
+                if (acc != null) startUsbLink(acc) else DiagLog.w(tag, "no accessory in intent")
+                startWifiLink()
+                startFinder()
+            }
             ACTION_WIFI -> {
                 foreground("Waiting for the head unit")
+                listenOnly = true
                 startWifiLink()
+                updateBeacon()
             }
             ACTION_AUTO -> {
                 foreground("Looking for the car")
                 startWifiLink()
                 startFinder()
+            }
+            ACTION_MUX -> {
+                foreground("USB simulator")
+                startMuxLink()
             }
         }
         return START_STICKY
@@ -122,6 +156,21 @@ class CarLifeService : Service() {
         val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or (if (projection) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
         startForeground(NOTIFICATION_ID, notification(text), type)
         _state.update { it.copy(running = true, ip = NetUtil.localIpv4()) }
+    }
+
+    private fun startUsbLink(acc: UsbAccessory) {
+        usbLink?.stop()
+        val usb = getSystemService(Context.USB_SERVICE) as UsbManager
+        val l = UsbAoaLink(usb, acc)
+        if (!l.open()) {
+            DiagLog.e(tag, "cannot open the USB accessory")
+            _state.update { it.copy(usb = "open failed") }
+            return
+        }
+        usbLink = l
+        _state.update { it.copy(usb = "attached") }
+        DiagLog.i(tag, "USB accessory ${acc.manufacturer}/${acc.model} opened")
+        attachSession(l)
     }
 
     private fun startWifiLink() {
@@ -142,6 +191,13 @@ class CarLifeService : Service() {
         attachSession(l)
     }
 
+    private fun startMuxLink() {
+        muxLink?.stop()
+        val l = DebugMuxTcpLink(app.prefs.debugMuxPort)
+        muxLink = l
+        attachSession(l)
+    }
+
     private fun startFinder() {
         if (finder != null) return
         val f = CarFinder(this, app.prefs, scope)
@@ -151,10 +207,14 @@ class CarLifeService : Service() {
             val p = app.prefs
             f.registerService(mapOf("cmd" to p.cmdPort, "video" to p.videoPort, "media" to p.mediaPort, "touch" to p.touchPort))
             f.probe(l.groupOwnerIp, listOf(p.cmdPort, 7200))
-            updateNotification("On the car network, waiting for the head unit")
+            beacon.target = l.groupOwnerIp
+            updateBeacon()
+            updateNotification("On the car network, calling the head unit")
         }
         f.onLeft = {
             _state.update { it.copy(carIp = null) }
+            beacon.target = null
+            updateBeacon()
             updateNotification("Looking for the car")
         }
         scope.launch { f.state.collect { s -> _state.update { it.copy(p2p = s) } } }
@@ -169,19 +229,46 @@ class CarLifeService : Service() {
         startFinder()
     }
 
+    private fun updateBeacon() {
+        val wifiBusy = sessions["WiFi"]?.state?.value?.let { it !is CarLifeSession.State.Idle } == true
+        val want = wifiLink != null && !wifiBusy && (listenOnly || beacon.target != null)
+        if (want) beacon.start() else beacon.stop()
+        _state.update { it.copy(beacon = want) }
+    }
+
     private fun attachSession(l: CarLifeLink) {
-        session?.stop()
+        sessions.remove(l.name)?.stop()
+        sessionJobs.remove(l.name)?.cancel()
         val s = CarLifeSession(this, l, app.prefs, scope)
-        session = s
-        s.onVideoConfig = { w, h, fps -> onVideoConfig(w, h, fps) }
+        sessions[l.name] = s
+        s.onVideoConfig = { w, h, fps -> session = s; onVideoConfig(w, h, fps) }
         s.onStartVideo = { carDisplay.requestKeyFrame() }
-        s.onStopVideo = { onStopVideo() }
+        s.onStopVideo = { if (session === s) onStopVideo() }
         s.onKeyFrameRequest = { carDisplay.requestKeyFrame() }
         s.onTouch = { a, x, y -> routeTouch(a, x, y) }
         s.onHardKey = { k -> onHardKey(k) }
-        s.onClosed = { reason -> DiagLog.i(tag, "link closed: $reason") }
-        stateJob?.cancel()
-        stateJob = scope.launch { s.state.collect { st -> _state.update { it.copy(link = l.name, session = st) } } }
+        s.onClosed = { reason ->
+            DiagLog.i(tag, "${l.name} link closed: $reason")
+            if (session === s) session = null
+            if (l === usbLink) {
+                usbLink = null
+                _state.update { it.copy(usb = "not attached") }
+            }
+            if (l === muxLink) muxLink = null
+            updateBeacon()
+        }
+        sessionJobs[l.name] = scope.launch {
+            s.state.collect { st ->
+                if (st !is CarLifeSession.State.Idle) {
+                    session = s
+                    _state.update { it.copy(link = l.name, session = st) }
+                } else if (session === s || session == null) {
+                    session = null
+                    _state.update { it.copy(link = "", session = st) }
+                }
+                updateBeacon()
+            }
+        }
         s.start()
     }
 
@@ -349,14 +436,22 @@ class CarLifeService : Service() {
 
     private fun teardown() {
         mirrorClose()
+        beacon.stop()
         finder?.stop()
         finder = null
-        session?.stop()
+        sessions.values.forEach { it.stop() }
+        sessions.clear()
+        sessionJobs.values.forEach { it.cancel() }
+        sessionJobs.clear()
         session = null
+        usbLink?.stop()
+        usbLink = null
+        muxLink?.stop()
+        muxLink = null
         wifiLink?.stop()
         wifiLink = null
+        listenOnly = false
         carDisplay.stop()
-        stateJob?.cancel()
         _state.value = CarState()
     }
 

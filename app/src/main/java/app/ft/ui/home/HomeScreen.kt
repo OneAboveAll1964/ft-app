@@ -83,7 +83,7 @@ private fun hero(car: CarState, aa: AaState, autoConnect: Boolean): Hero {
 }
 
 @Composable
-fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
+fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onConnectUsb: () -> Unit) {
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
@@ -140,8 +140,14 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
 
         item {
             Section("Car link", Icons.Filled.Place) {
+                InfoRow("USB", when {
+                    car.link == "USB" -> "Head unit connected over the cable"
+                    car.usb == "attached" -> "Cable link open, waiting for the head unit"
+                    car.usb == "open failed" -> "Accessory could not be opened, tap USB now"
+                    else -> "Plug the phone into the car to wake its WiFi Direct"
+                })
                 InfoRow("WiFi Direct", car.p2p.replaceFirstChar { it.uppercase() })
-                InfoRow("Phone address", car.ip ?: "Not on a network yet")
+                InfoRow("Phone address", (car.ip ?: "Not on a network yet") + (if (car.beacon) " · calling the head unit" else ""))
                 InfoRow("Head unit ports", "${app.prefs.cmdPort} · ${app.prefs.videoPort} · ${app.prefs.touchPort}")
                 if (car.peers.isNotEmpty()) {
                     Text("Nearby", style = MaterialTheme.typography.labelLarge, color = scheme.primary, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
@@ -161,6 +167,7 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                 }
                 Actions {
                     FilledTonalButton(onClick = { if (car.running) CarLifeService.searchAgain() else CarLifeService.startAuto(context) }) { Text("Search again") }
+                    OutlinedButton(onClick = onConnectUsb) { Text("USB now") }
                     OutlinedButton(onClick = { CarLifeService.startWifi(context) }) { Text("Listen only") }
                     OutlinedButton(onClick = { CarLifeService.stop(context) }) { Text("Stop") }
                 }
