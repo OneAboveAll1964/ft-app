@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FT</string>
+    <string name="touch_service_desc">Lets the car touchscreen control apps mirrored from this phone.</string>
+</resources>

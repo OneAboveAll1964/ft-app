@@ -1,0 +1,175 @@
+package app.ft.aa
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.IBinder
+import app.ft.FTApp
+import app.ft.MainActivity
+import app.ft.core.DiagLog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.net.ServerSocket
+import java.net.Socket
+
+data class AaState(
+    val listening: Boolean = false,
+    val port: Int = 0,
+    val connected: Boolean = false,
+    val phase: AaSession.Phase? = null,
+    val deviceName: String = "",
+    val bluetooth: String = "idle",
+    val hotspot: HotspotInfo? = null
+)
+
+class AaHeadUnitService : Service() {
+    companion object {
+        const val ACTION_START = "app.ft.aa.START"
+        const val ACTION_STOP = "app.ft.aa.STOP"
+        const val EXTRA_BLUETOOTH = "bluetooth"
+        private const val CHANNEL = "ft_aa"
+        private const val NOTIFICATION_ID = 42
+
+        private val _state = MutableStateFlow(AaState())
+        val state: StateFlow<AaState> = _state
+        @Volatile var current: AaSession? = null
+            private set
+
+        fun start(context: Context, bluetooth: Boolean) {
+            context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth))
+        }
+
+        fun stop(context: Context) {
+            context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP))
+        }
+    }
+
+    private val tag = "AA"
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var server: ServerSocket? = null
+    private var acceptJob: Job? = null
+    private var surfaceJob: Job? = null
+    private var bt: AaBluetoothAdvertiser? = null
+    private var decoder: AaVideoDecoder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, "FT Android Auto", NotificationManager.IMPORTANCE_LOW))
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_STOP -> {
+                shutdown()
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_START -> {
+                startForeground(NOTIFICATION_ID, notification("Android Auto head unit ready"), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+                listen(intent.getBooleanExtra(EXTRA_BLUETOOTH, false))
+            }
+        }
+        return START_STICKY
+    }
+
+    private fun listen(bluetooth: Boolean) {
+        if (server != null) return
+        val app = application as FTApp
+        val port = app.prefs.aaPort
+        val dec = AaVideoDecoder(app.prefs.aaWidth, app.prefs.aaHeight)
+        decoder = dec
+        surfaceJob = scope.launch {
+            AaVideoSink.surface.collect { s -> dec.setSurface(s) }
+        }
+        if (bluetooth) {
+            bt = AaBluetoothAdvertiser(this, port).also { it.start(scope) }
+            scope.launch { bt?.status?.collect { s -> _state.value = _state.value.copy(bluetooth = s) } }
+            scope.launch { bt?.info?.collect { i -> _state.value = _state.value.copy(hotspot = i) } }
+        }
+        acceptJob = scope.launch {
+            try {
+                val ss = ServerSocket(port).also { it.reuseAddress = true }
+                server = ss
+                _state.value = _state.value.copy(listening = true, port = port)
+                DiagLog.i(tag, "head unit listening on tcp:$port")
+                while (isActive) {
+                    val s = ss.accept()
+                    s.tcpNoDelay = true
+                    s.keepAlive = true
+                    onPhone(s, dec)
+                }
+            } catch (t: Throwable) {
+                if (server != null) DiagLog.w(tag, "listen ended: ${t.message}")
+                _state.value = _state.value.copy(listening = false)
+            }
+        }
+    }
+
+    private fun onPhone(s: Socket, dec: AaVideoDecoder) {
+        current?.close("replaced")
+        DiagLog.i(tag, "phone connected from ${s.inetAddress.hostAddress}")
+        val session = AaSession(this, s.getInputStream(), s.getOutputStream(), (application as FTApp).prefs, scope, dec) { reason ->
+            DiagLog.i(tag, "phone session over: $reason")
+            runCatching { s.close() }
+            if (current != null) {
+                current = null
+                _state.value = _state.value.copy(connected = false, phase = null, deviceName = "")
+                updateNotification("Android Auto head unit ready")
+            }
+        }
+        current = session
+        _state.value = _state.value.copy(connected = true, phase = AaSession.Phase.CONNECTED)
+        scope.launch { session.phase.collect { p -> _state.value = _state.value.copy(phase = p); if (p == AaSession.Phase.STREAMING) updateNotification("Android Auto streaming") } }
+        scope.launch { session.deviceName.collect { n -> _state.value = _state.value.copy(deviceName = n) } }
+        session.start()
+    }
+
+    private fun shutdown() {
+        current?.close("service stopped")
+        current = null
+        runCatching { server?.close() }
+        server = null
+        acceptJob?.cancel()
+        surfaceJob?.cancel()
+        bt?.stop()
+        bt = null
+        decoder?.stop()
+        decoder = null
+        _state.value = AaState()
+    }
+
+    private fun notification(text: String): Notification {
+        val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Builder(this, CHANNEL)
+            .setContentTitle("FT")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .build()
+    }
+
+    private fun updateNotification(text: String) =
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text))
+
+    override fun onDestroy() {
+        shutdown()
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+}
