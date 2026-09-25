@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -95,6 +96,7 @@ class CarLifeService : Service() {
     private var finder: CarFinder? = null
     private var stateJob: Job? = null
     private var mirrorJob: Job? = null
+    private var finderFallback: Job? = null
     private var listenOnly = false
     private var wakeLock: PowerManager.WakeLock? = null
     private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
@@ -127,8 +129,8 @@ class CarLifeService : Service() {
             ACTION_AUTO -> {
                 foreground("Looking for the car")
                 startWifiLink()
-                startFinder()
                 bt.start(intent.getStringExtra(EXTRA_BT_ADDR))
+                scheduleFinderFallback()
             }
         }
         return START_STICKY
@@ -202,6 +204,29 @@ class CarLifeService : Service() {
         f.start()
     }
 
+    private fun scheduleFinderFallback() {
+        finderFallback?.cancel()
+        _state.update { it.copy(p2p = "not needed while the car is on this network") }
+        finderFallback = scope.launch {
+            delay(25_000)
+            if (wifiLink?.connected != true && finder == null) {
+                DiagLog.i(tag, "no head unit reached us on this network, falling back to WiFi Direct")
+                startFinder()
+            }
+        }
+    }
+
+    private fun stopFinder(reason: String) {
+        finderFallback?.cancel()
+        finderFallback = null
+        if (finder != null) {
+            DiagLog.i(tag, "WiFi Direct search stopped: $reason")
+            finder?.stop()
+            finder = null
+        }
+        _state.update { it.copy(p2p = reason, peers = emptyList()) }
+    }
+
     private fun restartFinder() {
         finder?.stop()
         finder = null
@@ -245,6 +270,8 @@ class CarLifeService : Service() {
             s.state.collect { st ->
                 _state.update { it.copy(link = l.name, session = st) }
                 updateBeacon()
+                if (st !is CarLifeSession.State.Idle) stopFinder("car is on this network, WiFi Direct not needed")
+                else if (finder == null && finderFallback?.isActive != true) scheduleFinderFallback()
                 if (st is CarLifeSession.State.Projecting && app.prefs.aaAutoStart && !aaAutoLaunched) {
                     aaAutoLaunched = true
                     DiagLog.i(tag, "auto-starting Android Auto after connection")
@@ -455,6 +482,8 @@ class CarLifeService : Service() {
         beacon.stop()
         bt.stop()
         aaAutoLaunched = false
+        finderFallback?.cancel()
+        finderFallback = null
         finder?.stop()
         finder = null
         session?.stop()

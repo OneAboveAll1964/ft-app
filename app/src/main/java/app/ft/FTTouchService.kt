@@ -12,9 +12,10 @@ class FTTouchService : AccessibilityService() {
         @Volatile var instance: FTTouchService? = null
             private set
         val enabled: Boolean get() = instance != null
+        private const val SEGMENT_MS = 32L
     }
 
-    private var path: Path? = null
+    private var stroke: GestureDescription.StrokeDescription? = null
     private var downAt = 0L
     private var lastX = 0f
     private var lastY = 0f
@@ -36,25 +37,40 @@ class FTTouchService : AccessibilityService() {
     fun inject(action: Int, x: Float, y: Float) {
         when (action) {
             0 -> {
-                path = Path().apply { moveTo(x, y) }
-                downAt = SystemClock.uptimeMillis()
                 lastX = x
                 lastY = y
+                downAt = SystemClock.uptimeMillis()
+                val p = Path().apply { moveTo(x, y); lineTo(x, y) }
+                stroke = GestureDescription.StrokeDescription(p, 0L, SEGMENT_MS, true).also { dispatch(it) }
             }
             2 -> {
-                path?.lineTo(x, y)
+                val previous = stroke ?: return
+                if (lastX == x && lastY == y) return
+                val p = Path().apply { moveTo(lastX, lastY); lineTo(x, y) }
                 lastX = x
                 lastY = y
+                stroke = runCatching { previous.continueStroke(p, 0L, SEGMENT_MS, true) }
+                    .getOrNull()?.also { dispatch(it) }
             }
             else -> {
-                val p = path ?: Path().apply { moveTo(x, y) }
-                if (lastX != x || lastY != y) p.lineTo(x, y)
-                val duration = (SystemClock.uptimeMillis() - downAt).coerceIn(1L, 4000L)
-                val stroke = GestureDescription.StrokeDescription(p, 0, duration)
-                dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
-                path = null
+                val previous = stroke
+                val p = Path().apply { moveTo(lastX, lastY); lineTo(x, y) }
+                val last = if (previous != null) {
+                    runCatching { previous.continueStroke(p, 0L, SEGMENT_MS, false) }.getOrNull()
+                } else {
+                    GestureDescription.StrokeDescription(Path().apply { moveTo(x, y); lineTo(x, y) }, 0L, SEGMENT_MS, false)
+                }
+                stroke = null
+                lastX = x
+                lastY = y
+                last?.let { dispatch(it) }
             }
         }
+    }
+
+    private fun dispatch(s: GestureDescription.StrokeDescription) {
+        val ok = runCatching { dispatchGesture(GestureDescription.Builder().addStroke(s).build(), null, null) }.getOrDefault(false)
+        if (!ok) stroke = null
     }
 
     fun back() = performGlobalAction(GLOBAL_ACTION_BACK)
