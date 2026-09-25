@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -61,21 +62,24 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
         if (showAddressBar) {
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 104.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+                    Modifier.fillMaxWidth().height(72.dp).padding(start = 104.dp, end = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalIconButton(onClick = { web?.let { if (it.canGoBack()) it.goBack() else onExit() } }) {
+                    FilledTonalIconButton(
+                        onClick = { web?.let { if (it.canGoBack()) it.goBack() else onExit() } },
+                        modifier = Modifier.size(44.dp)
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                    FilledTonalIconButton(onClick = { web?.reload() }) {
+                    FilledTonalIconButton(onClick = { web?.reload() }, modifier = Modifier.size(44.dp)) {
                         Icon(Icons.Filled.Refresh, contentDescription = "Reload")
                     }
                     Surface(
                         onClick = { editing = true; typed = "" },
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                         shape = MaterialTheme.shapes.large,
-                        modifier = Modifier.weight(1f).height(48.dp)
+                        modifier = Modifier.weight(1f).height(44.dp)
                     ) {
                         Box(Modifier.fillMaxSize().padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                             Text(
@@ -86,7 +90,7 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
                             )
                         }
                     }
-                    FilledTonalIconButton(onClick = { onExit() }) {
+                    FilledTonalIconButton(onClick = { onExit() }, modifier = Modifier.size(44.dp)) {
                         Icon(Icons.Filled.Home, contentDescription = "Car home")
                     }
                 }

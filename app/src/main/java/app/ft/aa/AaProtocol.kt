@@ -10,6 +10,8 @@ object AaProtocol {
     const val CH_SYSTEM_AUDIO = 6
     const val CH_AV_INPUT = 7
     const val CH_BLUETOOTH = 8
+    const val CH_MEDIA_STATUS = 9
+    const val CH_NAVIGATION = 10
 
     const val FRAME_MIDDLE = 0
     const val FRAME_FIRST = 1
