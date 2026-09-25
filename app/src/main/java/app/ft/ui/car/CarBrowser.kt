@@ -46,6 +46,16 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
     var editing by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var progress by remember { mutableIntStateOf(100) }
+    var fullscreen by remember { mutableStateOf<android.view.View?>(null) }
+    var fullscreenCallback by remember { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
+
+    val overlay = fullscreen
+    if (overlay != null) {
+        Box(Modifier.fillMaxSize()) {
+            AndroidView(factory = { overlay }, modifier = Modifier.fillMaxSize())
+        }
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         if (showAddressBar) {
@@ -100,6 +110,16 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
                         webChromeClient = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView?, newProgress: Int) { progress = newProgress }
                             override fun onReceivedTitle(view: WebView?, t: String?) { title = t.orEmpty() }
+                            override fun onShowCustomView(view: android.view.View?, callback: CustomViewCallback?) {
+                                fullscreenCallback?.onCustomViewHidden()
+                                fullscreen = view
+                                fullscreenCallback = callback
+                            }
+                            override fun onHideCustomView() {
+                                fullscreen = null
+                                fullscreenCallback?.onCustomViewHidden()
+                                fullscreenCallback = null
+                            }
                         }
                         loadUrl(startUrl)
                         web = this
