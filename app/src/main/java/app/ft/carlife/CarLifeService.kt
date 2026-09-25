@@ -198,7 +198,7 @@ class CarLifeService : Service() {
     }
 
     private fun onStopVideo() {
-        mirrorStop()
+        mirrorClose()
         carDisplay.stop()
         _state.update { it.copy(aaOverlay = false) }
         updateNotification(if (finder != null) "Looking for the car" else "Waiting for the head unit")
@@ -269,10 +269,7 @@ class CarLifeService : Service() {
     }
 
     private fun mirrorStart(pkg: String) {
-        val code = app.mirrorResultCode
-        val data = app.mirrorData
-        if (code == 0 || data == null) {
-            DiagLog.w(tag, "screen mirror not permitted yet, open FT on the phone and tap Allow mirror")
+        if (!mirror.ready && !mirrorOpen(pkg)) {
             _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
             return
         }
@@ -280,23 +277,49 @@ class CarLifeService : Service() {
         mirrorJob?.cancel()
         mirrorJob = scope.launch {
             MirrorSink.surface.collect { surface ->
-                if (surface != null && !mirror.active) {
-                    try {
-                        foreground("Mirroring $pkg to the car", projection = true)
-                        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                        val mp = mpm.getMediaProjection(code, data)
-                        app.mirrorResultCode = 0
-                        app.mirrorData = null
-                        val metrics = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).maximumWindowMetrics.bounds
-                        val dpi = resources.displayMetrics.densityDpi
-                        if (mp != null) mirror.start(mp, metrics.width(), metrics.height(), dpi, surface)
-                        carDisplay.requestKeyFrame()
-                    } catch (t: Throwable) {
-                        DiagLog.e(tag, "mirror start failed", t)
-                        _state.update { it.copy(mirroring = false) }
-                    }
+                try {
+                    if (surface != null) mirror.show(surface) else mirror.hide()
+                    carDisplay.requestKeyFrame()
+                } catch (t: Throwable) {
+                    DiagLog.e(tag, "mirror surface failed", t)
                 }
             }
+        }
+    }
+
+    private fun mirrorOpen(pkg: String): Boolean {
+        val code = app.mirrorResultCode
+        val data = app.mirrorData
+        if (code == 0 || data == null) {
+            DiagLog.w(tag, "screen mirror not permitted yet, open FT on the phone and tap Allow")
+            return false
+        }
+        return try {
+            foreground("Mirroring $pkg to the car", projection = true)
+            val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            val mp = mpm.getMediaProjection(code, data)
+            app.mirrorResultCode = 0
+            app.mirrorData = null
+            if (mp == null) {
+                DiagLog.w(tag, "media projection unavailable")
+                app.mirrorGranted.value = false
+                return false
+            }
+            val metrics = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).maximumWindowMetrics.bounds
+            mirror.open(mp, metrics.width(), metrics.height(), resources.displayMetrics.densityDpi) {
+                app.mirrorGranted.value = false
+                mirrorJob?.cancel()
+                mirrorJob = null
+                _state.update { it.copy(mirroring = false, mirrorPackage = "") }
+                carDisplay.requestKeyFrame()
+            }
+            true
+        } catch (t: Throwable) {
+            DiagLog.e(tag, "mirror start failed", t)
+            app.mirrorResultCode = 0
+            app.mirrorData = null
+            app.mirrorGranted.value = false
+            false
         }
     }
 
@@ -304,10 +327,19 @@ class CarLifeService : Service() {
         mirrorJob?.cancel()
         mirrorJob = null
         val was = mirror.active
-        mirror.stop()
+        mirror.hide()
         if (_state.value.mirroring) _state.update { it.copy(mirroring = false, mirrorPackage = "") }
         if (was) DiagLog.i(tag, "mirror stopped")
         carDisplay.requestKeyFrame()
+    }
+
+    private fun mirrorClose() {
+        mirrorStop()
+        if (mirror.ready) {
+            mirror.close()
+            app.mirrorGranted.value = false
+            DiagLog.i(tag, "mirror released, allow it again on the phone for the next drive")
+        }
     }
 
     private fun home() {
@@ -316,7 +348,7 @@ class CarLifeService : Service() {
     }
 
     private fun teardown() {
-        mirrorStop()
+        mirrorClose()
         finder?.stop()
         finder = null
         session?.stop()

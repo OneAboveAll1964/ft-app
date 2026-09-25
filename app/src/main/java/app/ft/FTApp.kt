@@ -7,6 +7,7 @@ import app.ft.core.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class FTApp : Application() {
     lateinit var prefs: Prefs
@@ -14,6 +15,7 @@ class FTApp : Application() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile var mirrorResultCode: Int = 0
     @Volatile var mirrorData: Intent? = null
+    val mirrorGranted = MutableStateFlow(false)
 
     override fun onCreate() {
         super.onCreate()
