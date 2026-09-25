@@ -52,6 +52,7 @@ class CarLifeService : Service() {
         const val ACTION_WIFI = "app.ft.carlife.WIFI"
         const val ACTION_AUTO = "app.ft.carlife.AUTO"
         const val ACTION_STOP = "app.ft.carlife.STOP"
+        const val EXTRA_BT_ADDR = "btAddr"
         const val CORNER = 96
         private const val CHANNEL = "ft_carlife"
         private const val NOTIFICATION_ID = 41
@@ -64,8 +65,8 @@ class CarLifeService : Service() {
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_WIFI))
         }
 
-        fun startAuto(context: Context) {
-            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO))
+        fun startAuto(context: Context, btAddress: String? = null) {
+            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO).putExtra(EXTRA_BT_ADDR, btAddress))
         }
 
         fun stop(context: Context) {
@@ -75,7 +76,7 @@ class CarLifeService : Service() {
         fun pickCar(name: String) = instance?.finder?.connectByName(name)
         fun forgetCar() = instance?.forget()
         fun searchAgain() = instance?.restartFinder()
-        fun setAaOverlay(on: Boolean) = instance?.aaOverlay(on)
+        fun startAa() = instance?.startAndroidAuto()
         fun launchApp(pkg: String) = instance?.launch(pkg)
         fun stopMirror() = instance?.mirrorStop()
         fun goHome() = instance?.home()
@@ -91,8 +92,10 @@ class CarLifeService : Service() {
     private var stateJob: Job? = null
     private var mirrorJob: Job? = null
     private var listenOnly = false
+    @Volatile private var aaAutoLaunched = false
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
+    private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
 
     override fun onCreate() {
         super.onCreate()
@@ -119,6 +122,7 @@ class CarLifeService : Service() {
                 foreground("Looking for the car")
                 startWifiLink()
                 startFinder()
+                bt.start(intent.getStringExtra(EXTRA_BT_ADDR))
             }
         }
         return START_STICKY
@@ -210,6 +214,11 @@ class CarLifeService : Service() {
             s.state.collect { st ->
                 _state.update { it.copy(link = l.name, session = st) }
                 updateBeacon()
+                if (st is CarLifeSession.State.Projecting && app.prefs.aaAutoStart && !aaAutoLaunched) {
+                    aaAutoLaunched = true
+                    DiagLog.i(tag, "auto-starting Android Auto after connection")
+                    startAndroidAuto()
+                }
             }
         }
         s.start()
@@ -230,8 +239,19 @@ class CarLifeService : Service() {
     private fun onStopVideo() {
         mirrorClose()
         carDisplay.stop()
+        aaAutoLaunched = false
         _state.update { it.copy(aaOverlay = false) }
         updateNotification(if (finder != null) "Looking for the car" else "Waiting for the head unit")
+    }
+
+    private fun startAndroidAuto() {
+        val pkg = app.prefs.aaPackage
+        if (packageManager.getLaunchIntentForPackage(pkg) == null) {
+            DiagLog.w(tag, "Android Auto ($pkg) is not installed on this phone")
+            return
+        }
+        DiagLog.i(tag, "starting Android Auto on the car")
+        launch(pkg)
     }
 
     private fun routeTouch(action: Int, x: Int, y: Int) {
@@ -380,6 +400,8 @@ class CarLifeService : Service() {
     private fun teardown() {
         mirrorClose()
         beacon.stop()
+        bt.stop()
+        aaAutoLaunched = false
         finder?.stop()
         finder = null
         session?.stop()

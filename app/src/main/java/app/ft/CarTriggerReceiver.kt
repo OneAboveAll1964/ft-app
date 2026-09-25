@@ -24,7 +24,7 @@ class CarTriggerReceiver : BroadcastReceiver() {
                 val want = prefs.carBtName.trim()
                 if (want.isEmpty() || name.contains(want, true)) {
                     DiagLog.i("Trigger", "bluetooth connected to '${name.ifBlank { "device" }}', starting")
-                    CarLifeService.startAuto(context)
+                    CarLifeService.startAuto(context, dev?.address)
                 }
             }
         }
