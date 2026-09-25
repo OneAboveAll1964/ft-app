@@ -1,10 +1,6 @@
 package app.ft.carlife
 
 object CarLifeProtocol {
-    const val AOA_MANUFACTURER = "Baidu"
-    const val AOA_MODEL = "CarLife"
-    const val AOA_VERSION = "1.0.0"
-
     const val CH_CMD = 1
     const val CH_VIDEO = 2
     const val CH_MEDIA = 3
@@ -14,7 +10,6 @@ object CarLifeProtocol {
 
     const val HEAD_CMD = 8
     const val HEAD_STREAM = 12
-    const val USB_OUTER = 8
 
     const val MAX_CMD_BODY = 40 * 1024
     const val MAX_STREAM_BODY = 4 * 1024 * 1024

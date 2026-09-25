@@ -8,10 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.hardware.usb.UsbAccessory
-import android.hardware.usb.UsbManager
 import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.IBinder
 import android.view.WindowManager
 import app.ft.FTApp
@@ -39,20 +36,21 @@ data class CarState(
     val running: Boolean = false,
     val link: String = "",
     val session: CarLifeSession.State = CarLifeSession.State.Idle,
-    val listening: List<String> = emptyList(),
+    val listening: Boolean = false,
     val aaOverlay: Boolean = false,
     val mirroring: Boolean = false,
     val mirrorPackage: String = "",
-    val ip: String? = null
+    val ip: String? = null,
+    val p2p: String = "off",
+    val peers: List<String> = emptyList(),
+    val carIp: String? = null
 )
 
 class CarLifeService : Service() {
     companion object {
-        const val ACTION_USB = "app.ft.carlife.USB"
         const val ACTION_WIFI = "app.ft.carlife.WIFI"
-        const val ACTION_MUX = "app.ft.carlife.MUX"
+        const val ACTION_AUTO = "app.ft.carlife.AUTO"
         const val ACTION_STOP = "app.ft.carlife.STOP"
-        const val EXTRA_ACCESSORY = "accessory"
         const val CORNER = 96
         private const val CHANNEL = "ft_carlife"
         private const val NOTIFICATION_ID = 41
@@ -61,22 +59,20 @@ class CarLifeService : Service() {
         val state: StateFlow<CarState> = _state
         @Volatile private var instance: CarLifeService? = null
 
-        fun startUsb(context: Context, accessory: UsbAccessory) {
-            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_USB).putExtra(EXTRA_ACCESSORY, accessory))
-        }
-
         fun startWifi(context: Context) {
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_WIFI))
         }
 
-        fun startMux(context: Context) {
-            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_MUX))
+        fun startAuto(context: Context) {
+            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO))
         }
 
         fun stop(context: Context) {
             context.startService(Intent(context, CarLifeService::class.java).setAction(ACTION_STOP))
         }
 
+        fun pickCar(name: String) = instance?.finder?.connectByName(name)
+        fun searchAgain() = instance?.restartFinder()
         fun setAaOverlay(on: Boolean) = instance?.aaOverlay(on)
         fun launchApp(pkg: String) = instance?.launch(pkg)
         fun stopMirror() = instance?.mirrorStop()
@@ -88,9 +84,8 @@ class CarLifeService : Service() {
     private lateinit var carDisplay: CarDisplay
     private val mirror = PhoneMirror()
     private var session: CarLifeSession? = null
-    private var link: CarLifeLink? = null
     private var wifiLink: WifiChannelLink? = null
-    private var muxLink: DebugMuxTcpLink? = null
+    private var finder: CarFinder? = null
     private var stateJob: Job? = null
     private var mirrorJob: Job? = null
     private val app get() = application as FTApp
@@ -110,18 +105,14 @@ class CarLifeService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_USB -> {
-                foreground("Waiting for the head unit")
-                val acc: UsbAccessory? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(EXTRA_ACCESSORY, UsbAccessory::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_ACCESSORY)
-                if (acc != null) startUsbLink(acc) else DiagLog.w(tag, "no accessory in intent")
-            }
             ACTION_WIFI -> {
-                foreground("Listening for the head unit over WiFi")
+                foreground("Waiting for the head unit")
                 startWifiLink()
             }
-            ACTION_MUX -> {
-                foreground("USB simulator link")
-                startMuxLink()
+            ACTION_AUTO -> {
+                foreground("Looking for the car")
+                startWifiLink()
+                startFinder()
             }
         }
         return START_STICKY
@@ -131,16 +122,6 @@ class CarLifeService : Service() {
         val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or (if (projection) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
         startForeground(NOTIFICATION_ID, notification(text), type)
         _state.update { it.copy(running = true, ip = NetUtil.localIpv4()) }
-    }
-
-    private fun startUsbLink(acc: UsbAccessory) {
-        val usb = getSystemService(Context.USB_SERVICE) as UsbManager
-        val l = UsbAoaLink(usb, acc)
-        if (!l.open()) {
-            DiagLog.e(tag, "cannot open USB accessory (permission?)")
-            return
-        }
-        attachSession(l)
     }
 
     private fun startWifiLink() {
@@ -157,21 +138,39 @@ class CarLifeService : Service() {
             )
         )
         wifiLink = l
-        _state.update { it.copy(listening = it.listening + "WiFi ${p.cmdPort}") }
+        _state.update { it.copy(listening = true) }
         attachSession(l)
     }
 
-    private fun startMuxLink() {
-        if (muxLink != null) return
-        val l = DebugMuxTcpLink(app.prefs.debugMuxPort)
-        muxLink = l
-        _state.update { it.copy(listening = it.listening + "USB-SIM ${app.prefs.debugMuxPort}") }
-        attachSession(l)
+    private fun startFinder() {
+        if (finder != null) return
+        val f = CarFinder(this, app.prefs, scope)
+        finder = f
+        f.onJoined = { l ->
+            _state.update { it.copy(carIp = l.groupOwnerIp, ip = NetUtil.localIpv4()) }
+            val p = app.prefs
+            f.registerService(mapOf("cmd" to p.cmdPort, "video" to p.videoPort, "media" to p.mediaPort, "touch" to p.touchPort))
+            f.probe(l.groupOwnerIp, listOf(p.cmdPort, 7200))
+            updateNotification("On the car network, waiting for the head unit")
+        }
+        f.onLeft = {
+            _state.update { it.copy(carIp = null) }
+            updateNotification("Looking for the car")
+        }
+        scope.launch { f.state.collect { s -> _state.update { it.copy(p2p = s) } } }
+        scope.launch { f.peers.collect { ps -> _state.update { it.copy(peers = ps.map { p -> p.name }) } } }
+        f.start()
+    }
+
+    private fun restartFinder() {
+        finder?.stop()
+        finder = null
+        _state.update { it.copy(peers = emptyList(), carIp = null) }
+        startFinder()
     }
 
     private fun attachSession(l: CarLifeLink) {
         session?.stop()
-        link = l
         val s = CarLifeSession(this, l, app.prefs, scope)
         session = s
         s.onVideoConfig = { w, h, fps -> onVideoConfig(w, h, fps) }
@@ -180,11 +179,10 @@ class CarLifeService : Service() {
         s.onKeyFrameRequest = { carDisplay.requestKeyFrame() }
         s.onTouch = { a, x, y -> routeTouch(a, x, y) }
         s.onHardKey = { k -> onHardKey(k) }
-        s.onClosed = { reason -> DiagLog.i(tag, "link closed: $reason"); if (l === wifiLink) Unit }
+        s.onClosed = { reason -> DiagLog.i(tag, "link closed: $reason") }
         stateJob?.cancel()
         stateJob = scope.launch { s.state.collect { st -> _state.update { it.copy(link = l.name, session = st) } } }
         s.start()
-        updateNotification("CarLife via ${l.name}")
     }
 
     private fun onVideoConfig(w: Int, h: Int, fps: Int) {
@@ -203,6 +201,7 @@ class CarLifeService : Service() {
         mirrorStop()
         carDisplay.stop()
         _state.update { it.copy(aaOverlay = false) }
+        updateNotification(if (finder != null) "Looking for the car" else "Waiting for the head unit")
     }
 
     private fun routeTouch(action: Int, x: Int, y: Int) {
@@ -318,14 +317,12 @@ class CarLifeService : Service() {
 
     private fun teardown() {
         mirrorStop()
+        finder?.stop()
+        finder = null
         session?.stop()
         session = null
-        link?.stop()
-        link = null
         wifiLink?.stop()
         wifiLink = null
-        muxLink?.stop()
-        muxLink = null
         carDisplay.stop()
         stateJob?.cancel()
         _state.value = CarState()
