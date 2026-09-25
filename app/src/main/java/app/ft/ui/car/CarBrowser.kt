@@ -38,6 +38,31 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
+private const val FOCUS_WATCH_JS = """
+(function(){
+  if (window.__ftKb) return; window.__ftKb = 1;
+  function editable(t){ return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); }
+  document.addEventListener('focusin', function(e){ if (editable(e.target)) FTNative.onField(true); }, true);
+  document.addEventListener('focusout', function(){ FTNative.onField(false); }, true);
+  if (editable(document.activeElement)) FTNative.onField(true);
+})();
+"""
+
+private const val ENTER_JS = """
+(function(){
+  var e = document.activeElement; if (!e) return;
+  ['keydown','keypress','keyup'].forEach(function(t){
+    e.dispatchEvent(new KeyboardEvent(t, {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true}));
+  });
+  var f = e.form; if (f) { try { f.requestSubmit ? f.requestSubmit() : f.submit(); } catch (x) {} }
+})();
+"""
+
+private fun insertJs(text: String): String {
+    val esc = text.replace("\\", "\\\\").replace("'", "\\'")
+    return "document.execCommand('insertText', false, '$esc');"
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.com/?q=%s", onExit: () -> Unit) {
@@ -49,6 +74,7 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
     var progress by remember { mutableIntStateOf(100) }
     var fullscreen by remember { mutableStateOf<android.view.View?>(null) }
     var fullscreenCallback by remember { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
+    var webField by remember { mutableStateOf(false) }
 
     val overlay = fullscreen
     if (overlay != null) {
@@ -108,8 +134,17 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
                         settings.builtInZoomControls = false
+                        addJavascriptInterface(object {
+                            @android.webkit.JavascriptInterface
+                            fun onField(focused: Boolean) {
+                                android.os.Handler(android.os.Looper.getMainLooper()).post { webField = focused }
+                            }
+                        }, "FTNative")
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                view?.evaluateJavascript(FOCUS_WATCH_JS, null)
+                            }
                         }
                         webChromeClient = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView?, newProgress: Int) { progress = newProgress }
@@ -135,8 +170,9 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
 
         if (editing) {
             CarKeyboard(
-                value = typed,
-                onValue = { typed = it },
+                onInsert = { typed += it },
+                onBackspace = { if (typed.isNotEmpty()) typed = typed.dropLast(1) },
+                onClose = { editing = false },
                 onGo = {
                     val raw = typed.trim()
                     if (raw.isNotEmpty()) {
@@ -148,6 +184,17 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
                         web?.loadUrl(url)
                     }
                     editing = false
+                }
+            )
+        } else if (webField) {
+            CarKeyboard(
+                goLabel = "Enter",
+                onInsert = { web?.evaluateJavascript(insertJs(it), null) },
+                onBackspace = { web?.evaluateJavascript("document.execCommand('delete',false,null);", null) },
+                onClose = { webField = false; web?.evaluateJavascript("if(document.activeElement)document.activeElement.blur();", null) },
+                onGo = {
+                    web?.evaluateJavascript(ENTER_JS, null)
+                    webField = false
                 }
             )
         }

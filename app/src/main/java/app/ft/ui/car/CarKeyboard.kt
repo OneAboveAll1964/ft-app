@@ -7,10 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,9 +32,11 @@ private val ROWS = listOf(
 
 @Composable
 fun CarKeyboard(
-    value: String,
-    onValue: (String) -> Unit,
+    onInsert: (String) -> Unit,
+    onBackspace: () -> Unit,
     onGo: () -> Unit,
+    onClose: () -> Unit,
+    goLabel: String = "Go",
     modifier: Modifier = Modifier
 ) {
     var shift by remember { mutableStateOf(false) }
@@ -43,22 +46,29 @@ fun CarKeyboard(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.forEach { ch ->
                         val label = if (shift) ch.uppercaseChar() else ch
-                        Key(label.toString(), Modifier.weight(1f)) { onValue(value + label) }
+                        Key(label.toString(), Modifier.weight(1f)) { onInsert(label.toString()) }
                     }
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Key(if (shift) "ABC" else "abc", Modifier.width(110.dp)) { shift = !shift }
-                Key("/", Modifier.width(78.dp)) { onValue("$value/") }
-                Key("space", Modifier.weight(1f)) { onValue("$value ") }
-                Key(".com", Modifier.width(110.dp)) { onValue("$value.com") }
-                Key("del", Modifier.width(96.dp)) { if (value.isNotEmpty()) onValue(value.dropLast(1)) }
+                Key(if (shift) "ABC" else "abc", Modifier.width(100.dp)) { shift = !shift }
+                Key("/", Modifier.width(70.dp)) { onInsert("/") }
+                Key("space", Modifier.weight(1f)) { onInsert(" ") }
+                Key(".com", Modifier.width(100.dp)) { onInsert(".com") }
+                Key("del", Modifier.width(88.dp), onClick = onBackspace)
+                OutlinedButton(
+                    onClick = onClose,
+                    modifier = Modifier.width(96.dp).height(56.dp),
+                    shapes = ButtonDefaults.shapes(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp)
+                ) { Text("Close", maxLines = 1) }
                 Button(
                     onClick = onGo,
-                    modifier = Modifier.width(120.dp).height(56.dp),
+                    modifier = Modifier.width(104.dp).height(56.dp),
                     shapes = ButtonDefaults.shapes(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) { Text("Go") }
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp)
+                ) { Text(goLabel, maxLines = 1) }
             }
         }
     }
