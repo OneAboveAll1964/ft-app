@@ -54,7 +54,7 @@ class CarBeacon(private val scope: CoroutineScope, private val name: () -> Strin
                 }.onFailure { e -> DiagLog.w(tag, "beacon socket failed: ${e.message}") }
             }
             sent++
-            if (sent == 1 || sent % 40 == 0) {
+            if (sent == 1 || sent == 4 || sent % 40 == 0) {
                 DiagLog.i(tag, "discovery beacon #$sent to ${targets.joinToString { it.hostAddress ?: "?" }.ifBlank { "no network" }} udp ${CarLifeProtocol.DISCOVERY_PORT} ($ok sent)")
             }
         }

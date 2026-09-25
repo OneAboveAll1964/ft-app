@@ -40,21 +40,4 @@ object CarLifeFraming {
     fun serviceId(channel: Int, head: ByteArray): Int =
         if (headLen(channel) == CarLifeProtocol.HEAD_CMD) Bytes.u32(head, 4) else Bytes.u32(head, 8)
 
-    fun usbPacket(channel: Int, inner: ByteArray): ByteArray {
-        val out = ByteArray(CarLifeProtocol.USB_OUTER + inner.size)
-        out[3] = channel.toByte()
-        Bytes.putU32(inner.size, out, 4)
-        System.arraycopy(inner, 0, out, CarLifeProtocol.USB_OUTER, inner.size)
-        return out
-    }
-
-    fun splitInner(channel: Int, inner: ByteArray): Pair<ByteArray, ByteArray>? {
-        val h = headLen(channel)
-        if (inner.size < h) return null
-        val head = inner.copyOfRange(0, h)
-        val declared = bodyLen(channel, head)
-        val avail = inner.size - h
-        val n = minOf(declared, avail).coerceAtLeast(0)
-        return head to inner.copyOfRange(h, h + n)
-    }
 }

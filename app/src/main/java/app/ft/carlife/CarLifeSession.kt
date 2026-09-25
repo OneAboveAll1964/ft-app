@@ -1,5 +1,6 @@
 package app.ft.carlife
 
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
@@ -47,16 +48,23 @@ class CarLifeSession(
     @Volatile var fps = 30; private set
     @Volatile var projecting = false; private set
     private var heartbeat: Job? = null
+    private var encryptProbe: Job? = null
+    private val crypto = CarLifeCrypto()
+    @Volatile private var matched = false
+    @Volatile private var initSeen = false
     private var frames = 0L
 
     fun start() {
         DiagLog.i(tag, "session start via ${link.name}")
-        link.start(scope, ::onMessage, { DiagLog.i(tag, it); if (_state.value == State.Idle) _state.value = State.Linked(link.name) }, ::closed)
+        link.start(scope, ::onMessage, { DiagLog.i(tag, it) }, ::linked, ::closed)
     }
 
     fun stop() {
         projecting = false
         heartbeat?.cancel()
+        encryptProbe?.cancel()
+        crypto.reset()
+        matched = false
         link.stop()
         _state.value = State.Idle
     }
@@ -64,8 +72,8 @@ class CarLifeSession(
     fun sendVideo(frame: ByteArray) {
         if (!projecting) return
         frames++
-        if (frames <= 3 || frames % 300 == 0L) DiagLog.d(tag, "video frame #$frames ${frame.size} bytes")
-        link.send(CarLifeProtocol.CH_VIDEO, CarLifeFraming.stream(CarLifeProtocol.VIDEO_DATA, frame))
+        if (frames <= 3 || frames % 300 == 0L) DiagLog.d(tag, "video frame #$frames ${frame.size} bytes${if (crypto.active) " (encrypted)" else ""}")
+        link.send(CarLifeProtocol.CH_VIDEO, CarLifeFraming.stream(CarLifeProtocol.VIDEO_DATA, crypto.encryptOut(frame)))
     }
 
     fun sendAudio(pcm: ByteArray) {
@@ -73,15 +81,24 @@ class CarLifeSession(
     }
 
     private fun cmd(serviceId: Int, payload: ByteArray = ByteArray(0)) {
-        val inner = CarLifeFraming.cmd(serviceId, payload)
+        val inner = CarLifeFraming.cmd(serviceId, crypto.encryptOut(payload))
         DiagLog.tx(tag, CarLifeProtocol.name(serviceId), inner)
         link.send(CarLifeProtocol.CH_CMD, inner)
+    }
+
+    private fun linked() {
+        DiagLog.i(tag, "head unit connected over ${link.name}")
+        if (_state.value == State.Idle) _state.value = State.Linked(link.name)
     }
 
     private fun closed(reason: String) {
         DiagLog.w(tag, reason)
         projecting = false
         heartbeat?.cancel()
+        encryptProbe?.cancel()
+        crypto.reset()
+        matched = false
+        initSeen = false
         onStopVideo?.invoke()
         _state.value = State.Idle
         onClosed?.invoke(reason)
@@ -89,8 +106,14 @@ class CarLifeSession(
 
     private fun onMessage(channel: Int, head: ByteArray, body: ByteArray) {
         when (channel) {
-            CarLifeProtocol.CH_CMD -> handleCmd(CarLifeFraming.parseCmd(head, body))
-            CarLifeProtocol.CH_CTRL -> handleCtrl(CarLifeFraming.parseCmd(head, body))
+            CarLifeProtocol.CH_CMD -> {
+                val c = CarLifeFraming.parseCmd(head, body)
+                handleCmd(c.copy(payload = crypto.decryptIn(c.payload)))
+            }
+            CarLifeProtocol.CH_CTRL -> {
+                val c = CarLifeFraming.parseCmd(head, body)
+                handleCtrl(c.copy(payload = crypto.decryptIn(c.payload)))
+            }
             CarLifeProtocol.CH_VIDEO -> {
                 val s = CarLifeFraming.parseStream(head, body)
                 DiagLog.d(tag, "video channel ${CarLifeProtocol.name(s.serviceId)} len=${s.payload.size}")
@@ -109,17 +132,58 @@ class CarLifeSession(
                 val r = ProtoReader(c.payload)
                 DiagLog.i(tag, "HU protocol ${r.int(1)}.${r.int(2)}")
                 cmd(CarLifeProtocol.CMD_PROTOCOL_VERSION_MATCH_STATUS, ProtoWriter().int32(1, 1).toByteArray())
-                _state.value = State.Linked(link.name)
+                matched = true
+                initSeen = false
+                if (_state.value == State.Idle) _state.value = State.Linked(link.name)
+                startHeartbeat()
+                cmd(CarLifeProtocol.CMD_MD_FEATURE_CONFIG_REQUEST)
+                armEncryptProbe()
             }
             CarLifeProtocol.CMD_HU_INFO -> {
                 val r = ProtoReader(c.payload)
                 DiagLog.i(tag, "HU info: ${r.fields.keys.joinToString { k -> "$k=${r.string(k) ?: r.int(k)}" }}")
                 cmd(CarLifeProtocol.CMD_MD_INFO, deviceInfo())
             }
+            CarLifeProtocol.CMD_HU_FEATURE_CONFIG_RESPONSE -> {
+                val r = ProtoReader(c.payload)
+                val features = r.messages(2).associate { m -> (m.string(1) ?: "") to m.int(2) }
+                DiagLog.i(tag, "HU features: " + features.entries.joinToString { "${it.key}=${it.value}" })
+                when (features["CONTENT_ENCRYPTION"]) {
+                    1 -> {
+                        DiagLog.i(tag, "head unit requires content encryption")
+                        startEncryption()
+                    }
+                    0 -> {
+                        encryptProbe?.cancel()
+                        DiagLog.i(tag, "content encryption off on this head unit")
+                    }
+                    else -> Unit
+                }
+            }
+            CarLifeProtocol.CMD_HU_RSA_PUBLIC_KEY_RESPONSE -> {
+                val pub = ProtoReader(c.payload).string(1) ?: ""
+                val request = crypto.aesKeyRequest(pub)
+                if (request == null) {
+                    DiagLog.e(tag, "head unit RSA key unusable (${pub.length} chars), staying in plaintext")
+                } else {
+                    crypto.armIncoming()
+                    cmd(CarLifeProtocol.CMD_MD_AES_KEY_SEND_REQUEST, ProtoWriter().string(1, request).toByteArray())
+                    DiagLog.i(tag, "AES session key sent, wrapped with the head unit RSA key")
+                }
+            }
+            CarLifeProtocol.CMD_HU_AES_REC_RESPONSE -> {
+                crypto.enableOutgoing()
+                cmd(CarLifeProtocol.CMD_MD_ENCRYPT_READY)
+                DiagLog.i(tag, "content encryption on")
+            }
             CarLifeProtocol.CMD_HU_BT_PAIR_INFO -> {
-                cmd(CarLifeProtocol.CMD_MD_BT_PAIR_INFO, ProtoWriter().string(1, "").string(2, "FT").toByteArray())
+                val r = ProtoReader(c.payload)
+                DiagLog.i(tag, "HU bluetooth pair info status=${r.int(7, -1)} addr=${r.string(1)} name=${r.string(6)}")
+                cmd(CarLifeProtocol.CMD_MD_BT_PAIR_INFO, btPairInfo(1))
             }
             CarLifeProtocol.CMD_VIDEO_ENCODER_INIT -> {
+                initSeen = true
+                encryptProbe?.cancel()
                 val r = ProtoReader(c.payload)
                 var w = r.int(1, width)
                 var h = r.int(2, height)
@@ -141,7 +205,7 @@ class CarLifeSession(
                 projecting = true
                 frames = 0
                 _state.value = State.Projecting(link.name, width, height, fps)
-                startHeartbeat()
+                if (heartbeat?.isActive != true) startHeartbeat()
                 onStartVideo?.invoke()
                 onKeyFrameRequest?.invoke()
                 DiagLog.i(tag, "projection started")
@@ -169,10 +233,6 @@ class CarLifeSession(
             }
             CarLifeProtocol.CMD_HU_AUTHEN_RESULT -> {
                 DiagLog.i(tag, "HU authen result ${ProtoReader(c.payload).bool(1)}")
-            }
-            CarLifeProtocol.CMD_HU_FEATURE_CONFIG_RESPONSE -> {
-                val r = ProtoReader(c.payload)
-                DiagLog.i(tag, "HU features: " + r.messages(2).joinToString { m -> "${m.string(1)}=${m.int(2)}" })
             }
             CarLifeProtocol.CMD_GO_TO_FOREGROUND -> {
                 cmd(CarLifeProtocol.CMD_GO_TO_FOREGROUND_RESPONSE)
@@ -212,14 +272,45 @@ class CarLifeSession(
         }
     }
 
+    private fun startEncryption() {
+        if (crypto.started) return
+        crypto.started = true
+        encryptProbe?.cancel()
+        cmd(CarLifeProtocol.CMD_MD_RSA_PUBLIC_KEY_REQUEST)
+    }
+
+    private fun armEncryptProbe() {
+        encryptProbe?.cancel()
+        encryptProbe = scope.launch {
+            delay(2500)
+            if (matched && !initSeen && !crypto.started) {
+                DiagLog.w(tag, "no VIDEO_ENCODER_INIT after the match, trying the content encryption handshake")
+                startEncryption()
+            }
+        }
+    }
+
     private fun startHeartbeat() {
         heartbeat?.cancel()
         heartbeat = scope.launch(Dispatchers.IO) {
-            while (isActive && projecting) {
-                delay(1000)
+            while (isActive) {
                 link.send(CarLifeProtocol.CH_VIDEO, CarLifeFraming.stream(CarLifeProtocol.VIDEO_HEARTBEAT, ByteArray(0)))
+                delay(1000)
             }
         }
+    }
+
+    private fun btPairInfo(status: Int): ByteArray {
+        val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        val address = runCatching { adapter?.address }.getOrNull().orEmpty()
+        val name = runCatching { adapter?.name }.getOrNull().orEmpty().ifBlank { prefs.carName }
+        return ProtoWriter()
+            .string(1, address)
+            .string(2, "")
+            .string(5, "00001101-0000-1000-8000-00805F9B34FB")
+            .string(6, name)
+            .int32(7, status)
+            .toByteArray()
     }
 
     private fun deviceInfo(): ByteArray {
