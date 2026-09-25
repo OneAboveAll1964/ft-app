@@ -229,18 +229,20 @@ private fun AaOverlay(aa: app.ft.aa.AaState) {
             },
             modifier = Modifier.fillMaxSize()
         )
-        AnimatedVisibility(visible = aa.phase != AaSession.Phase.STREAMING, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.Center)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                LoadingIndicator()
-                Text(
-                    when {
-                        aa.connected -> "Connecting to ${aa.deviceName.ifBlank { "your phone" }}…"
-                        aa.listening -> "Waiting for a phone on port ${aa.port}"
-                        else -> "Starting Android Auto head unit…"
-                    },
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleLarge
-                )
+        AnimatedVisibility(visible = aa.phase != AaSession.Phase.STREAMING, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    LoadingIndicator()
+                    Text(
+                        when {
+                            aa.connected -> "Connecting to ${aa.deviceName.ifBlank { "your phone" }}…"
+                            aa.listening -> "Waiting for a phone on port ${aa.port}"
+                            else -> "Starting Android Auto head unit…"
+                        },
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
             }
         }
     }
