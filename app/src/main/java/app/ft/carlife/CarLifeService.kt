@@ -7,9 +7,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.projection.MediaProjectionManager
 import android.os.IBinder
+import android.os.PowerManager
 import android.view.WindowManager
 import app.ft.FTApp
 import app.ft.FTTouchService
@@ -92,6 +94,8 @@ class CarLifeService : Service() {
     private var stateJob: Job? = null
     private var mirrorJob: Job? = null
     private var listenOnly = false
+    private var wakeLock: PowerManager.WakeLock? = null
+    private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
     @Volatile private var aaAutoLaunched = false
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
@@ -128,11 +132,32 @@ class CarLifeService : Service() {
         return START_STICKY
     }
 
-    private fun foreground(text: String, projection: Boolean = false) {
-        val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or (if (projection) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
-        startForeground(NOTIFICATION_ID, notification(text), type)
+    private fun foreground(text: String, projection: Boolean = false, microphone: Boolean = false) {
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        if (projection) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        if (microphone) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        val note = notification(text)
+        val fallback = type and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
+        runCatching { startForeground(NOTIFICATION_ID, note, type) }
+            .onFailure { t ->
+                DiagLog.w(tag, "foreground type $type refused (${t.message}), continuing without the microphone type")
+                runCatching { startForeground(NOTIFICATION_ID, note, fallback) }
+            }
+        awake()
         _state.update { it.copy(running = true, ip = NetUtil.localIpv4()) }
     }
+
+    private fun awake() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FT:carlife").apply {
+            setReferenceCounted(false)
+            runCatching { acquire() }
+        }
+    }
+
+    private fun canRecord(): Boolean =
+        checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun startWifiLink() {
         if (wifiLink != null) return
@@ -246,12 +271,30 @@ class CarLifeService : Service() {
 
     private fun startAndroidAuto() {
         val pkg = app.prefs.aaPackage
-        if (packageManager.getLaunchIntentForPackage(pkg) == null) {
-            DiagLog.w(tag, "Android Auto ($pkg) is not installed on this phone")
+        val installed = runCatching { packageManager.getPackageInfo(pkg, 0) }.isSuccess
+        if (!installed) {
+            DiagLog.w(tag, "Android Auto ($pkg) is not installed; set the right package in Settings")
             return
         }
-        DiagLog.i(tag, "starting Android Auto on the car")
-        launch(pkg)
+        val intent = androidAutoIntent(pkg)
+        if (intent == null) {
+            DiagLog.w(tag, "Android Auto is installed but exposes no entry point this phone lets FT open")
+            return
+        }
+        DiagLog.i(tag, "starting Android Auto on the car via ${intent.action}${intent.categories?.joinToString(prefix = " ") ?: ""}")
+        launchIntent(intent, pkg)
+    }
+
+    private fun androidAutoIntent(pkg: String): Intent? {
+        val pm = packageManager
+        pm.getLaunchIntentForPackage(pkg)?.let { return it }
+        val carDock = Intent(Intent.ACTION_MAIN).addCategory("android.intent.category.CAR_DOCK").setPackage(pkg)
+        if (pm.resolveActivity(carDock, 0) != null) return carDock
+        val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_DEFAULT).setPackage(pkg)
+        if (pm.resolveActivity(main, 0) != null) return main
+        val anyCarDock = Intent(Intent.ACTION_MAIN).addCategory("android.intent.category.CAR_DOCK")
+        if (pm.resolveActivity(anyCarDock, 0) != null) return anyCarDock
+        return null
     }
 
     private fun routeTouch(action: Int, x: Int, y: Int) {
@@ -308,6 +351,10 @@ class CarLifeService : Service() {
             DiagLog.w(tag, "no launcher for $pkg")
             return
         }
+        launchIntent(intent, pkg)
+    }
+
+    private fun launchIntent(intent: Intent, pkg: String) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         try {
             startActivity(intent)
@@ -345,7 +392,7 @@ class CarLifeService : Service() {
             return false
         }
         return try {
-            foreground("Mirroring $pkg to the car", projection = true)
+            foreground("Mirroring $pkg to the car", projection = true, microphone = canRecord())
             val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val mp = mpm.getMediaProjection(code, data)
             app.mirrorResultCode = 0
@@ -358,11 +405,13 @@ class CarLifeService : Service() {
             val metrics = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).maximumWindowMetrics.bounds
             mirror.open(mp, metrics.width(), metrics.height(), resources.displayMetrics.densityDpi) {
                 app.mirrorGranted.value = false
+                audio.stop()
                 mirrorJob?.cancel()
                 mirrorJob = null
                 _state.update { it.copy(mirroring = false, mirrorPackage = "") }
                 carDisplay.requestKeyFrame()
             }
+            if (canRecord()) audio.start(mp) else DiagLog.w(tag, "no microphone permission, the car will get picture without sound")
             true
         } catch (t: Throwable) {
             DiagLog.e(tag, "mirror start failed", t)
@@ -385,6 +434,7 @@ class CarLifeService : Service() {
 
     private fun mirrorClose() {
         mirrorStop()
+        audio.stop()
         if (mirror.ready) {
             mirror.close()
             app.mirrorGranted.value = false
@@ -411,6 +461,8 @@ class CarLifeService : Service() {
         wifiLink = null
         listenOnly = false
         carDisplay.stop()
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        wakeLock = null
         _state.value = CarState()
     }
 

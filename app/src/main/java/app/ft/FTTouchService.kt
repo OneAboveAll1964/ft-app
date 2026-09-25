@@ -49,7 +49,7 @@ class FTTouchService : AccessibilityService() {
             else -> {
                 val p = path ?: Path().apply { moveTo(x, y) }
                 if (lastX != x || lastY != y) p.lineTo(x, y)
-                val duration = (SystemClock.uptimeMillis() - downAt).coerceIn(40L, 4000L)
+                val duration = (SystemClock.uptimeMillis() - downAt).coerceIn(1L, 4000L)
                 val stroke = GestureDescription.StrokeDescription(p, 0, duration)
                 dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
                 path = null
