@@ -105,6 +105,9 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("auto", false)) CarLifeService.startAuto(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)
         if (intent.getBooleanExtra("mirror", false)) requestMirror()
+        intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }
+        if (intent.hasExtra("aaAuto")) app.prefs.aaAutoStart = intent.getBooleanExtra("aaAuto", false)
+        if (intent.getBooleanExtra("startAa", false)) CarLifeService.startAa()
         intent.getStringExtra("pkgMaps")?.let { app.prefs.mapsPackage = it }
         intent.getStringExtra("pkgVideo")?.let { app.prefs.videoPackage = it }
         intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }

@@ -146,23 +146,9 @@ private fun Launcher(state: app.ft.carlife.CarState, aa: app.ft.aa.AaState, onDr
                     }
                     AssistChip(onClick = {}, label = { Text(label) })
                 }
-                Spacer(Modifier.height(8.dp))
-                AssistChip(
-                    onClick = {},
-                    label = {
-                        Text(
-                            when {
-                                aa.connected && aa.phase == AaSession.Phase.STREAMING -> "Android Auto · ${aa.deviceName.ifBlank { "phone" }} streaming"
-                                aa.connected -> "Android Auto · ${aa.phase?.name?.lowercase() ?: "connecting"}"
-                                aa.listening -> "Android Auto · waiting on :${aa.port}"
-                                else -> "Android Auto · off"
-                            }
-                        )
-                    }
-                )
             }
             Button(
-                onClick = { CarLifeService.setAaOverlay(true) },
+                onClick = { CarLifeService.startAa() },
                 modifier = Modifier.fillMaxWidth().height(96.dp),
                 shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

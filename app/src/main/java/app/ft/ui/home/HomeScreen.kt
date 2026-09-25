@@ -55,9 +55,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
 import app.ft.FTTouchService
-import app.ft.aa.AaHeadUnitService
-import app.ft.aa.AaSession
-import app.ft.aa.AaState
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
@@ -65,7 +62,7 @@ import app.ft.core.DiagLog
 
 private data class Hero(val headline: String, val detail: String, val level: Int)
 
-private fun hero(car: CarState, aa: AaState, autoConnect: Boolean): Hero {
+private fun hero(car: CarState, autoConnect: Boolean): Hero {
     val s = car.session
     return when {
         s is CarLifeSession.State.Projecting -> Hero("Projecting to the car", "${s.width}×${s.height} at ${s.fps} fps over ${s.via}", 3)
@@ -85,11 +82,10 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
-    val aa by AaHeadUnitService.state.collectAsState()
     val log by DiagLog.entries.collectAsState()
     val mirrorGranted by app.mirrorGranted.collectAsState()
     var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
-    var bluetooth by remember { mutableStateOf(app.prefs.aaBluetooth) }
+    var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
@@ -97,7 +93,7 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
     }
     val touchOn = remember(resumed) { FTTouchService.enabled }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
-    val h = hero(car, aa, autoConnect)
+    val h = hero(car, autoConnect)
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(
         when (h.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
@@ -167,26 +163,17 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
         }
 
         item {
-            Section("Android Auto head unit", Icons.Filled.PlayArrow) {
+            Section("Android Auto", Icons.Filled.PlayArrow) {
                 InfoRow(
-                    when {
-                        aa.connected && aa.phase == AaSession.Phase.STREAMING -> "Streaming from ${aa.deviceName.ifBlank { "the phone" }}"
-                        aa.connected -> "Connecting to ${aa.deviceName.ifBlank { "the phone" }}"
-                        aa.listening -> "Waiting for a phone"
-                        else -> "Off"
-                    },
-                    when {
-                        aa.listening -> "TCP ${aa.port}" + (aa.hotspot?.let { " · hotspot ${it.ssid}" } ?: "") + (if (aa.bluetooth != "idle") " · Bluetooth ${aa.bluetooth}" else "")
-                        else -> "Starts by itself when you tap Android Auto on the car"
-                    }
+                    if (car.mirroring && car.mirrorPackage == app.prefs.aaPackage) "Showing on the car" else "Your phone's Android Auto, on the car",
+                    "Runs Android Auto on this phone and projects it onto the car screen"
                 )
-                SwitchRow("Bluetooth handoff", "Lets a second phone find this head unit", bluetooth) {
-                    bluetooth = it
-                    app.prefs.aaBluetooth = it
+                SwitchRow("Start automatically after connection", "Launches Android Auto as soon as the car connects", aaAuto) {
+                    aaAuto = it
+                    app.prefs.aaAutoStart = it
                 }
                 Actions {
-                    FilledTonalButton(onClick = { AaHeadUnitService.start(context, bluetooth) }, modifier = Modifier.weight(1f)) { Text("Start now", maxLines = 1) }
-                    OutlinedButton(onClick = { AaHeadUnitService.stop(context) }, modifier = Modifier.weight(1f)) { Text("Stop", maxLines = 1) }
+                    FilledTonalButton(onClick = { CarLifeService.startAa() }, modifier = Modifier.weight(1f)) { Text("Start Android Auto", maxLines = 1) }
                 }
             }
         }
