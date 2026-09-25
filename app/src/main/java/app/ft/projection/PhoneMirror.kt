@@ -21,52 +21,91 @@ class PhoneMirror {
     private val tag = "Mirror"
     private var projection: MediaProjection? = null
     private var display: VirtualDisplay? = null
+    private var pending: Surface? = null
     private var shown = false
     var width = 0; private set
     var height = 0; private set
+    var dpi = 160; private set
+    var ownDisplay = false; private set
 
     val ready: Boolean get() = display != null
     val active: Boolean get() = shown && display != null
+    val displayId: Int get() = display?.display?.displayId ?: -1
 
-    fun open(projection: MediaProjection, width: Int, height: Int, dpi: Int, onStopped: () -> Unit) {
+    fun open(projection: MediaProjection, width: Int, height: Int, dpi: Int, ownDisplay: Boolean, onStopped: () -> Unit): Boolean {
         close()
         this.projection = projection
-        this.width = width
-        this.height = height
         projection.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() {
                 DiagLog.i(tag, "projection stopped")
-                runCatching { display?.release() }
-                display = null
-                shown = false
+                releaseDisplay()
                 this@PhoneMirror.projection = null
                 onStopped()
             }
         }, Handler(Looper.getMainLooper()))
-        display = projection.createVirtualDisplay("FT-Mirror", width, height, dpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, null, null, null)
-        DiagLog.i(tag, "mirror ${width}x$height ready")
+        return createDisplay(width, height, dpi, ownDisplay)
+    }
+
+    fun switchMode(ownDisplay: Boolean, width: Int, height: Int, dpi: Int): Boolean {
+        if (projection == null) return false
+        val surface = pending
+        releaseDisplay()
+        val ok = createDisplay(width, height, dpi, ownDisplay)
+        if (ok && surface != null) show(surface)
+        return ok
+    }
+
+    private fun createDisplay(width: Int, height: Int, dpi: Int, ownDisplay: Boolean): Boolean {
+        val p = projection ?: return false
+        this.width = width
+        this.height = height
+        this.dpi = dpi
+        this.ownDisplay = ownDisplay
+        val flags = if (ownDisplay) {
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC or
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION or
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+        } else {
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
+        }
+        display = runCatching {
+            p.createVirtualDisplay(if (ownDisplay) "FT-Car" else "FT-Mirror", width, height, dpi, flags, null, null, null)
+        }.getOrElse {
+            DiagLog.e(tag, "could not create the ${if (ownDisplay) "car" else "mirror"} display", it)
+            null
+        }
+        if (display == null) return false
+        DiagLog.i(tag, "${if (ownDisplay) "car display" else "phone mirror"} ${width}x$height ready (display ${displayId})")
+        return true
     }
 
     fun show(surface: Surface) {
+        pending = surface
         val d = display ?: return
         d.surface = surface
-        if (!shown) DiagLog.i(tag, "mirror ${width}x$height started")
+        if (!shown) DiagLog.i(tag, "${if (ownDisplay) "car display" else "mirror"} ${width}x$height started")
         shown = true
     }
 
     fun hide() {
-        val d = display ?: return
-        if (shown) {
+        val d = display
+        if (d != null && shown) {
             d.surface = null
-            DiagLog.i(tag, "mirror hidden")
+            DiagLog.i(tag, "output hidden")
         }
+        shown = false
+    }
+
+    private fun releaseDisplay() {
+        runCatching { display?.release() }
+        display = null
         shown = false
     }
 
     fun close() {
         hide()
-        runCatching { display?.release() }
-        display = null
+        pending = null
+        releaseDisplay()
         runCatching { projection?.stop() }
         projection = null
     }

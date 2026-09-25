@@ -1,5 +1,6 @@
 package app.ft.carlife
 
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -97,6 +98,7 @@ class CarLifeService : Service() {
     private var stateJob: Job? = null
     private var mirrorJob: Job? = null
     private var finderFallback: Job? = null
+    private var aaWatch: Job? = null
     private var listenOnly = false
     private var wakeLock: PowerManager.WakeLock? = null
     private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
@@ -284,6 +286,12 @@ class CarLifeService : Service() {
 
     private fun onVideoConfig(w: Int, h: Int, fps: Int) {
         val s = session ?: return
+        if (carDisplay.active.value && carDisplay.width == w && carDisplay.height == h) {
+            DiagLog.i(tag, "head unit re-sent the same video config, keeping the current screen")
+            carDisplay.setFrameRate(fps)
+            carDisplay.requestKeyFrame()
+            return
+        }
         carDisplay.start(
             w, h, fps, app.prefs.maxBitrate,
             onConfig = { cfg -> s.sendVideo(cfg) },
@@ -323,8 +331,20 @@ class CarLifeService : Service() {
             DiagLog.w(tag, "Android Auto ($pkg) is not installed on this phone")
             return
         }
-        DiagLog.i(tag, "bridging this phone's Android Auto onto the car")
-        aaOverlay(true)
+        mirrorStop()
+        if (AaHeadUnitService.current == null && !AaHeadUnitService.state.value.listening) {
+            AaHeadUnitService.start(this, app.prefs.aaBluetooth)
+        }
+        DiagLog.i(tag, "bridging this phone's Android Auto onto the car, waiting for it to start projecting")
+        aaWatch?.cancel()
+        aaWatch = scope.launch {
+            AaHeadUnitService.state.collect { s ->
+                if (s.connected && !_state.value.aaOverlay) {
+                    DiagLog.i(tag, "Android Auto is projecting, showing it on the car")
+                    aaOverlay(true)
+                }
+            }
+        }
     }
 
     private fun routeTouch(action: Int, x: Int, y: Int) {
@@ -341,12 +361,16 @@ class CarLifeService : Service() {
         if (st.mirroring && !corner) {
             val svc = FTTouchService.instance
             if (svc != null && mirror.active) {
-                val w = carDisplay.width.coerceAtLeast(1).toFloat()
-                val h = carDisplay.height.coerceAtLeast(1).toFloat()
-                val scale = minOf(w / mirror.width, h / mirror.height)
-                val offX = (w - mirror.width * scale) / 2f
-                val offY = (h - mirror.height * scale) / 2f
-                svc.inject(action, ((x - offX) / scale).coerceIn(0f, mirror.width - 1f), ((y - offY) / scale).coerceIn(0f, mirror.height - 1f))
+                if (mirror.ownDisplay) {
+                    svc.inject(action, x.toFloat().coerceIn(0f, mirror.width - 1f), y.toFloat().coerceIn(0f, mirror.height - 1f), mirror.displayId)
+                } else {
+                    val w = carDisplay.width.coerceAtLeast(1).toFloat()
+                    val h = carDisplay.height.coerceAtLeast(1).toFloat()
+                    val scale = minOf(w / mirror.width, h / mirror.height)
+                    val offX = (w - mirror.width * scale) / 2f
+                    val offY = (h - mirror.height * scale) / 2f
+                    svc.inject(action, ((x - offX) / scale).coerceIn(0f, mirror.width - 1f), ((y - offY) / scale).coerceIn(0f, mirror.height - 1f))
+                }
                 return
             }
         }
@@ -366,10 +390,7 @@ class CarLifeService : Service() {
     }
 
     private fun aaOverlay(on: Boolean) {
-        if (on) {
-            mirrorStop()
-            if (AaHeadUnitService.current == null && !AaHeadUnitService.state.value.listening) AaHeadUnitService.start(this, app.prefs.aaBluetooth)
-        }
+        if (on) mirrorStop() else aaWatch?.cancel()
         _state.update { it.copy(aaOverlay = on) }
         DiagLog.i(tag, "android auto overlay ${if (on) "on" else "off"}")
         carDisplay.requestKeyFrame()
@@ -386,17 +407,33 @@ class CarLifeService : Service() {
 
     private fun launchIntent(intent: Intent, pkg: String) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-        try {
-            startActivity(intent)
-            DiagLog.i(tag, "launched $pkg")
-        } catch (t: Throwable) {
-            DiagLog.e(tag, "launch failed", t)
+        if (!mirror.ready && !mirrorOpen(pkg, ownDisplay = true)) {
+            _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
+            return
         }
+        var placed = false
+        if (mirror.ownDisplay && mirror.displayId > 0) {
+            placed = runCatching {
+                val options = ActivityOptions.makeBasic().setLaunchDisplayId(mirror.displayId)
+                startActivity(intent, options.toBundle())
+                true
+            }.getOrElse { t ->
+                DiagLog.w(tag, "$pkg would not open on the car display (${t.javaClass.simpleName}: ${t.message}), mirroring the phone instead")
+                false
+            }
+            if (!placed) {
+                DiagLog.w(tag, "this phone will not let FT place apps on a car-sized display; turn 'Car-sized apps' off in Settings to mirror instead")
+            }
+        }
+        if (!placed) {
+            runCatching { startActivity(intent) }.onFailure { DiagLog.e(tag, "launch failed", it) }
+        }
+        DiagLog.i(tag, "launched $pkg on ${if (mirror.ownDisplay) "the car display" else "the phone, mirrored"}")
         mirrorStart(pkg)
     }
 
     private fun mirrorStart(pkg: String) {
-        if (!mirror.ready && !mirrorOpen(pkg)) {
+        if (!mirror.ready && !mirrorOpen(pkg, ownDisplay = true)) {
             _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
             return
         }
@@ -414,7 +451,7 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun mirrorOpen(pkg: String): Boolean {
+    private fun mirrorOpen(pkg: String, ownDisplay: Boolean): Boolean {
         val code = app.mirrorResultCode
         val data = app.mirrorData
         if (code == 0 || data == null) {
@@ -432,8 +469,12 @@ class CarLifeService : Service() {
                 app.mirrorGranted.value = false
                 return false
             }
+            val useCar = ownDisplay && app.prefs.carSizedApps && carDisplay.width > 0 && carDisplay.height > 0
             val metrics = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).maximumWindowMetrics.bounds
-            mirror.open(mp, metrics.width(), metrics.height(), resources.displayMetrics.densityDpi) {
+            val w = if (useCar) carDisplay.width else metrics.width()
+            val h = if (useCar) carDisplay.height else metrics.height()
+            val d = if (useCar) app.prefs.carDensity else resources.displayMetrics.densityDpi
+            mirror.open(mp, w, h, d, useCar) {
                 app.mirrorGranted.value = false
                 audio.stop()
                 mirrorJob?.cancel()
@@ -484,6 +525,8 @@ class CarLifeService : Service() {
         aaAutoLaunched = false
         finderFallback?.cancel()
         finderFallback = null
+        aaWatch?.cancel()
+        aaWatch = null
         finder?.stop()
         finder = null
         session?.stop()

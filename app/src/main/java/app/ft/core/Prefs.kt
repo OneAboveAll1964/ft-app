@@ -31,6 +31,8 @@ class Prefs(context: Context) {
     var forceFps: Int get() = int("forceFps", 0); set(v) = set("forceFps", v)
     var minFps: Int get() = int("minFps", 0); set(v) = set("minFps", v)
     var maxBitrate: Int get() = int("maxBitrate", 3_000_000); set(v) = set("maxBitrate", v)
+    var carDensity: Int get() = int("carDensity", 160); set(v) = set("carDensity", v)
+    var carSizedApps: Boolean get() = bool("carSizedApps", false); set(v) = set("carSizedApps", v)
 
     var autoStartWifi: Boolean get() = bool("autoStartWifi", false); set(v) = set("autoStartWifi", v)
     var autoStartAa: Boolean get() = bool("autoStartAa", false); set(v) = set("autoStartAa", v)

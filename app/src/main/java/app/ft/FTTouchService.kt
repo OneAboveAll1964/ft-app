@@ -3,6 +3,7 @@ package app.ft
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.os.Build
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import app.ft.core.DiagLog
@@ -16,6 +17,7 @@ class FTTouchService : AccessibilityService() {
     }
 
     private var stroke: GestureDescription.StrokeDescription? = null
+    private var target = 0
     private var downAt = 0L
     private var lastX = 0f
     private var lastY = 0f
@@ -34,7 +36,8 @@ class FTTouchService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
     override fun onInterrupt() = Unit
 
-    fun inject(action: Int, x: Float, y: Float) {
+    fun inject(action: Int, x: Float, y: Float, displayId: Int = 0) {
+        target = displayId
         when (action) {
             0 -> {
                 lastX = x
@@ -69,7 +72,11 @@ class FTTouchService : AccessibilityService() {
     }
 
     private fun dispatch(s: GestureDescription.StrokeDescription) {
-        val ok = runCatching { dispatchGesture(GestureDescription.Builder().addStroke(s).build(), null, null) }.getOrDefault(false)
+        val ok = runCatching {
+            val b = GestureDescription.Builder().addStroke(s)
+            if (target > 0 && Build.VERSION.SDK_INT >= 30) b.setDisplayId(target)
+            dispatchGesture(b.build(), null, null)
+        }.getOrDefault(false)
         if (!ok) stroke = null
     }
 

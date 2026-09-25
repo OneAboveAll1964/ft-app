@@ -131,6 +131,12 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.NEARBY_WIFI_DEVICES
         else wanted += Manifest.permission.ACCESS_FINE_LOCATION
         wanted += Manifest.permission.RECORD_AUDIO
+        if (Build.VERSION.SDK_INT >= 33) {
+            wanted += Manifest.permission.READ_MEDIA_VIDEO
+            wanted += Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            wanted += Manifest.permission.READ_EXTERNAL_STORAGE
+        }
         val missing = wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
     }

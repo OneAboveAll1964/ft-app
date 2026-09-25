@@ -25,8 +25,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
@@ -75,11 +78,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+enum class CarView { LAUNCHER, DRAWER, BROWSER, YOUTUBE, MEDIA }
+
 @Composable
 fun CarScreen() {
     val state by CarLifeService.state.collectAsState()
     val aa by AaHeadUnitService.state.collectAsState()
-    var drawer by remember { mutableStateOf(false) }
+    var view by remember { mutableStateOf(CarView.LAUNCHER) }
+    val drawerGrid = rememberLazyGridState()
+    LaunchedEffect(view) { app.ft.core.DiagLog.i("Car", "car screen: ${view.name}") }
     Box(
         Modifier
             .fillMaxSize()
@@ -88,11 +95,14 @@ fun CarScreen() {
         when {
             state.aaOverlay -> AaOverlay(aa)
             state.mirroring -> MirrorOverlay(state.mirrorPackage)
-            drawer -> AppDrawer(onClose = { drawer = false })
-            else -> Launcher(state, aa, onDrawer = { drawer = true })
+            view == CarView.DRAWER -> AppDrawer(drawerGrid, onClose = { view = CarView.LAUNCHER })
+            view == CarView.BROWSER -> CarBrowser("https://duckduckgo.com") { view = CarView.LAUNCHER }
+            view == CarView.YOUTUBE -> CarBrowser("https://m.youtube.com", "https://m.youtube.com/results?search_query=%s") { view = CarView.LAUNCHER }
+            view == CarView.MEDIA -> CarMedia { view = CarView.LAUNCHER }
+            else -> Launcher(state, aa, onOpen = { view = it })
         }
-        if (state.aaOverlay || state.mirroring || drawer) {
-            CornerPill(onClick = { drawer = false; CarLifeService.goHome() })
+        if (state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) {
+            CornerPill(onClick = { view = CarView.LAUNCHER; CarLifeService.goHome() })
         }
     }
 }
@@ -121,7 +131,7 @@ private fun CornerPill(onClick: () -> Unit) {
 }
 
 @Composable
-private fun Launcher(state: app.ft.carlife.CarState, aa: app.ft.aa.AaState, onDrawer: () -> Unit) {
+private fun Launcher(state: app.ft.carlife.CarState, aa: app.ft.aa.AaState, onOpen: (CarView) -> Unit) {
     val prefs = FTApp.instance.prefs
     var clock by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
@@ -160,13 +170,13 @@ private fun Launcher(state: app.ft.carlife.CarState, aa: app.ft.aa.AaState, onDr
         }
         Column(Modifier.weight(0.58f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Tile(Modifier.weight(1f), "Maps", Icons.Filled.Place) { CarLifeService.launchApp(prefs.mapsPackage) }
-                Tile(Modifier.weight(1f), "Music", Icons.Filled.Star) { CarLifeService.launchApp(prefs.musicPackage) }
-                Tile(Modifier.weight(1f), "Video", Icons.Filled.PlayArrow) { CarLifeService.launchApp(prefs.videoPackage) }
+                Tile(Modifier.weight(1f), "Browser", Icons.Filled.Search) { onOpen(CarView.BROWSER) }
+                Tile(Modifier.weight(1f), "YouTube", Icons.Filled.PlayArrow) { onOpen(CarView.YOUTUBE) }
+                Tile(Modifier.weight(1f), "Media", Icons.Filled.Star) { onOpen(CarView.MEDIA) }
             }
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Tile(Modifier.weight(1f), "Phone", Icons.Filled.Call) { CarLifeService.launchApp(prefs.phonePackage) }
-                Tile(Modifier.weight(1f), "All apps", Icons.Filled.List, onClick = onDrawer)
+                Tile(Modifier.weight(1f), "Maps", Icons.Filled.Place) { CarLifeService.launchApp(prefs.mapsPackage) }
+                Tile(Modifier.weight(1f), "All apps", Icons.Filled.List) { onOpen(CarView.DRAWER) }
                 Tile(Modifier.weight(1f), "Home", Icons.Filled.Home) { CarLifeService.goHome() }
             }
         }
@@ -255,7 +265,7 @@ private fun MirrorOverlay(pkg: String) {
 }
 
 @Composable
-private fun AppDrawer(onClose: () -> Unit) {
+private fun AppDrawer(gridState: LazyGridState, onClose: () -> Unit) {
     val context = LocalContext.current
     val apps = remember {
         val pm = context.packageManager
@@ -265,7 +275,12 @@ private fun AppDrawer(onClose: () -> Unit) {
     }
     Column(Modifier.fillMaxSize().padding(start = 110.dp, end = 28.dp, top = 24.dp, bottom = 24.dp)) {
         Text("All apps", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
-        LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(150.dp),
+            state = gridState,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             items(apps, key = { it.activityInfo.packageName }) { info -> AppCell(info, onClose) }
         }
     }
