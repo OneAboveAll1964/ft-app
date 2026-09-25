@@ -19,6 +19,13 @@ class CarDisplay(private val context: Context) {
     private var virtualDisplay: VirtualDisplay? = null
     private var presentation: CarPresentation? = null
     private var downTime = 0L
+    private val ticker = object : Runnable {
+        override fun run() {
+            val p = presentation ?: return
+            p.window?.decorView?.invalidate()
+            main.postDelayed(this, 100)
+        }
+    }
     private val _active = MutableStateFlow(false)
     val active: StateFlow<Boolean> = _active
     var width = 0; private set
@@ -51,6 +58,7 @@ class CarDisplay(private val context: Context) {
                 p.show()
                 presentation = p
                 _active.value = true
+                main.postDelayed(ticker, 100)
                 DiagLog.i(tag, "presentation shown")
             } catch (t: Throwable) {
                 DiagLog.e(tag, "presentation failed", t)
@@ -80,6 +88,7 @@ class CarDisplay(private val context: Context) {
     }
 
     fun stop() {
+        main.removeCallbacks(ticker)
         val p = presentation
         presentation = null
         if (p != null) main.post { runCatching { p.destroy() } }

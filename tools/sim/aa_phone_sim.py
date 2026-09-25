@@ -47,11 +47,13 @@ class Phone:
         self.q = queue.Queue()
         self.lock = threading.Lock()
         self.bufs = {}
+        self.touches = []
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(srv_cert, srv_key)
         ctx.verify_mode = ssl.CERT_REQUIRED
         ctx.load_verify_locations(hu_cert)
         ctx.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
+        ctx.verify_flags |= 0x200000
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.maximum_version = ssl.TLSVersion.TLSv1_2
         ctx.check_hostname = False
@@ -136,9 +138,14 @@ class Phone:
             c, control, m, body = self.recv(max(0.05, deadline - time.time()))
             if c == ch and m == mid:
                 return body
-            if (c, m) in allow or m == PING_REQUEST:
-                if m == PING_REQUEST:
-                    self.send(CH_CONTROL, PING_RESPONSE, f_varint(1, first(decode(body), 1, 0)))
+            if c == CH_CONTROL and m == PING_REQUEST:
+                self.send(CH_CONTROL, PING_RESPONSE, f_varint(1, first(decode(body), 1, 0)))
+                continue
+            if c == CH_INPUT and m == INPUT_EVENT:
+                self.touches.append(body)
+                self.log("  (buffered touch from car)")
+                continue
+            if (c, m) in allow:
                 continue
             self.log("  (unexpected ch%d msg 0x%04x, %d bytes)" % (c, m, len(body)))
         raise TimeoutError("timeout waiting ch%d 0x%04x" % (ch, mid))
@@ -289,7 +296,7 @@ def main():
         if a.wait_touch > 0:
             log("waiting up to %.0fs for a touch from the car..." % a.wait_touch)
             try:
-                body = ph.expect(CH_INPUT, INPUT_EVENT, timeout=a.wait_touch)
+                body = ph.touches.pop(0) if ph.touches else ph.expect(CH_INPUT, INPUT_EVENT, timeout=a.wait_touch)
                 rep = decode(body)
                 te = decode(first(rep, 3, b""))
                 pt = decode(first(te, 1, b""))

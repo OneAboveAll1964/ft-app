@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.net.ServerSocket
@@ -96,14 +97,14 @@ class AaHeadUnitService : Service() {
         }
         if (bluetooth) {
             bt = AaBluetoothAdvertiser(this, port).also { it.start(scope) }
-            scope.launch { bt?.status?.collect { s -> _state.value = _state.value.copy(bluetooth = s) } }
-            scope.launch { bt?.info?.collect { i -> _state.value = _state.value.copy(hotspot = i) } }
+            scope.launch { bt?.status?.collect { s -> _state.update { it.copy(bluetooth = s) } } }
+            scope.launch { bt?.info?.collect { i -> _state.update { it.copy(hotspot = i) } } }
         }
         acceptJob = scope.launch {
             try {
                 val ss = ServerSocket(port).also { it.reuseAddress = true }
                 server = ss
-                _state.value = _state.value.copy(listening = true, port = port)
+                _state.update { it.copy(listening = true, port = port) }
                 DiagLog.i(tag, "head unit listening on tcp:$port")
                 while (isActive) {
                     val s = ss.accept()
@@ -113,7 +114,7 @@ class AaHeadUnitService : Service() {
                 }
             } catch (t: Throwable) {
                 if (server != null) DiagLog.w(tag, "listen ended: ${t.message}")
-                _state.value = _state.value.copy(listening = false)
+                _state.update { it.copy(listening = false) }
             }
         }
     }
@@ -126,14 +127,14 @@ class AaHeadUnitService : Service() {
             runCatching { s.close() }
             if (current != null) {
                 current = null
-                _state.value = _state.value.copy(connected = false, phase = null, deviceName = "")
+                _state.update { it.copy(connected = false, phase = null, deviceName = "") }
                 updateNotification("Android Auto head unit ready")
             }
         }
         current = session
-        _state.value = _state.value.copy(connected = true, phase = AaSession.Phase.CONNECTED)
-        scope.launch { session.phase.collect { p -> _state.value = _state.value.copy(phase = p); if (p == AaSession.Phase.STREAMING) updateNotification("Android Auto streaming") } }
-        scope.launch { session.deviceName.collect { n -> _state.value = _state.value.copy(deviceName = n) } }
+        _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED) }
+        scope.launch { session.phase.collect { p -> _state.update { it.copy(phase = p) }; if (p == AaSession.Phase.STREAMING) updateNotification("Android Auto streaming") } }
+        scope.launch { session.deviceName.collect { n -> _state.update { it.copy(deviceName = n) } } }
         session.start()
     }
 

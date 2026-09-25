@@ -272,7 +272,7 @@ def main():
         sim.drain(a.seconds)
         st = video_stats(sim.video)
         result["video_launcher"] = st
-        result["checks"]["video_flowing"] = st["frames"] >= a.fps and st["sps"] > 0 and st["pps"] > 0 and st["idr"] > 0
+        result["checks"]["video_flowing"] = st["frames"] >= int(a.seconds * 5) and st["sps"] > 0 and st["pps"] > 0 and st["idr"] > 0
         write_h264(os.path.join(a.out, "launcher.h264"), sim.video)
         log("launcher video: %s" % st)
 

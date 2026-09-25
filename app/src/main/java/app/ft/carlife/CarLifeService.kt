@@ -32,6 +32,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class CarState(
@@ -129,7 +130,7 @@ class CarLifeService : Service() {
     private fun foreground(text: String, projection: Boolean = false) {
         val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or (if (projection) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
         startForeground(NOTIFICATION_ID, notification(text), type)
-        _state.value = _state.value.copy(running = true, ip = NetUtil.localIpv4())
+        _state.update { it.copy(running = true, ip = NetUtil.localIpv4()) }
     }
 
     private fun startUsbLink(acc: UsbAccessory) {
@@ -156,7 +157,7 @@ class CarLifeService : Service() {
             )
         )
         wifiLink = l
-        _state.value = _state.value.copy(listening = _state.value.listening + "WiFi ${p.cmdPort}")
+        _state.update { it.copy(listening = it.listening + "WiFi ${p.cmdPort}") }
         attachSession(l)
     }
 
@@ -164,7 +165,7 @@ class CarLifeService : Service() {
         if (muxLink != null) return
         val l = DebugMuxTcpLink(app.prefs.debugMuxPort)
         muxLink = l
-        _state.value = _state.value.copy(listening = _state.value.listening + "USB-SIM ${app.prefs.debugMuxPort}")
+        _state.update { it.copy(listening = it.listening + "USB-SIM ${app.prefs.debugMuxPort}") }
         attachSession(l)
     }
 
@@ -181,7 +182,7 @@ class CarLifeService : Service() {
         s.onHardKey = { k -> onHardKey(k) }
         s.onClosed = { reason -> DiagLog.i(tag, "link closed: $reason"); if (l === wifiLink) Unit }
         stateJob?.cancel()
-        stateJob = scope.launch { s.state.collect { st -> _state.value = _state.value.copy(link = l.name, session = st) } }
+        stateJob = scope.launch { s.state.collect { st -> _state.update { it.copy(link = l.name, session = st) } } }
         s.start()
         updateNotification("CarLife via ${l.name}")
     }
@@ -201,7 +202,7 @@ class CarLifeService : Service() {
     private fun onStopVideo() {
         mirrorStop()
         carDisplay.stop()
-        _state.value = _state.value.copy(aaOverlay = false)
+        _state.update { it.copy(aaOverlay = false) }
     }
 
     private fun routeTouch(action: Int, x: Int, y: Int) {
@@ -247,7 +248,7 @@ class CarLifeService : Service() {
             mirrorStop()
             if (AaHeadUnitService.current == null && !AaHeadUnitService.state.value.listening) AaHeadUnitService.start(this, app.prefs.aaBluetooth)
         }
-        _state.value = _state.value.copy(aaOverlay = on)
+        _state.update { it.copy(aaOverlay = on) }
         DiagLog.i(tag, "android auto overlay ${if (on) "on" else "off"}")
         carDisplay.requestKeyFrame()
     }
@@ -273,10 +274,10 @@ class CarLifeService : Service() {
         val data = app.mirrorData
         if (code == 0 || data == null) {
             DiagLog.w(tag, "screen mirror not permitted yet, open FT on the phone and tap Allow mirror")
-            _state.value = _state.value.copy(mirroring = false, mirrorPackage = pkg)
+            _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
             return
         }
-        _state.value = _state.value.copy(aaOverlay = false, mirroring = true, mirrorPackage = pkg)
+        _state.update { it.copy(aaOverlay = false, mirroring = true, mirrorPackage = pkg) }
         mirrorJob?.cancel()
         mirrorJob = scope.launch {
             MirrorSink.surface.collect { surface ->
@@ -293,7 +294,7 @@ class CarLifeService : Service() {
                         carDisplay.requestKeyFrame()
                     } catch (t: Throwable) {
                         DiagLog.e(tag, "mirror start failed", t)
-                        _state.value = _state.value.copy(mirroring = false)
+                        _state.update { it.copy(mirroring = false) }
                     }
                 }
             }
@@ -305,7 +306,7 @@ class CarLifeService : Service() {
         mirrorJob = null
         val was = mirror.active
         mirror.stop()
-        if (_state.value.mirroring) _state.value = _state.value.copy(mirroring = false, mirrorPackage = "")
+        if (_state.value.mirroring) _state.update { it.copy(mirroring = false, mirrorPackage = "") }
         if (was) DiagLog.i(tag, "mirror stopped")
         carDisplay.requestKeyFrame()
     }

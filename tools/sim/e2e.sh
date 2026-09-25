@@ -32,28 +32,32 @@ LOGPID=$!
 echo "== screen-mirror consent =="
 $ADB shell am start -n $PKG/.MainActivity --ez mirror true --es pkgMaps com.android.settings >/dev/null 2>&1
 sleep 3
-$ADB shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && $ADB pull /sdcard/ui.xml "$OUT/consent_ui.xml" >/dev/null 2>&1
-tapnode(){ python3 - "$OUT/consent_ui.xml" "$1" <<'PY'
+dump(){ $ADB shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; $ADB pull /sdcard/ui.xml "$OUT/consent_ui.xml" >/dev/null 2>&1; }
+findnode(){ python3 - "$OUT/consent_ui.xml" "$1" "$2" <<'PY'
 import re,sys
-xml=open(sys.argv[1],encoding="utf-8",errors="replace").read()
+xml=open(sys.argv[1],encoding="utf-8",errors="replace").read(); want=sys.argv[2]; mode=sys.argv[3]
 for node in re.finditer(r'<node [^>]*>', xml):
-    n=node.group(0)
-    if re.search(r'text="%s"'%re.escape(sys.argv[2]), n) and 'clickable="true"' in n:
+    n=node.group(0); t=re.search(r'text="([^"]*)"',n); t=t.group(1) if t else ''
+    hit=(t==want) if mode=='eq' else (want.lower() in t.lower())
+    if hit:
         m=re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
-        if m:
-            x=(int(m.group(1))+int(m.group(3)))//2; y=(int(m.group(2))+int(m.group(4)))//2
-            print(x,y); sys.exit(0)
+        if m: print((int(m.group(1))+int(m.group(3)))//2,(int(m.group(2))+int(m.group(4)))//2); sys.exit(0)
 sys.exit(1)
 PY
 }
-consent=0
-for label in "Start now" "Start" "Share" "Allow" "Start recording or casting"; do
-  xy=$(tapnode "$label") && { $ADB shell input tap $xy; consent=1; sleep 2; break; }
+for round in 1 2 3 4; do
+  dump
+  if xy=$(findnode "Share one app" eq); then
+    $ADB shell input tap $xy; sleep 1; dump
+    if xy2=$(findnode "entire screen" sub); then $ADB shell input tap $xy2; sleep 1; dump; fi
+  fi
+  tapped=0
+  for label in "Share screen" "Start now" "Start sharing" "Start" "Next" "Share" "Allow"; do
+    if xy=$(findnode "$label" eq); then $ADB shell input tap $xy; tapped=1; sleep 2; break; fi
+  done
+  grep -q 'screen mirror permitted' "$OUT/logcat.txt" && break
+  [ $tapped = 0 ] && break
 done
-if [ $consent = 0 ]; then
-  $ADB shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && $ADB pull /sdcard/ui.xml "$OUT/consent_ui.xml" >/dev/null 2>&1
-  for label in "Start now" "Start" "Share" "Allow"; do xy=$(tapnode "$label") && { $ADB shell input tap $xy; consent=1; sleep 2; break; }; done
-fi
 sleep 1
 check "mirror consent granted" "grep -q 'screen mirror permitted' '$OUT/logcat.txt'"
 
@@ -65,7 +69,7 @@ check "AA head unit listening" "grep -q 'head unit listening on tcp:5277' '$OUT/
 
 echo "== run simulators =="
 python3 "$SIMDIR/aa_phone_sim.py" --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" \
-  --h264 "$OUT/aa_testsrc.h264" --seconds 3 --wait-touch 20 --out "$OUT/aa" > "$OUT/aa_sim.log" 2>&1 &
+  --h264 "$OUT/aa_testsrc8.h264" --seconds 8 --wait-touch 20 --out "$OUT/aa" > "$OUT/aa_sim.log" 2>&1 &
 AAPID=$!
 sleep 1
 python3 "$SIMDIR/carlife_hu_sim.py" --mode usb --mux-port 7250 --width 1280 --height 720 --fps 30 --seconds 4 \
@@ -96,10 +100,13 @@ check "session closed by bye-bye" "grep -q 'bye-bye' '$OUT/logcat.txt'"
 
 echo "== frames (visual proof) =="
 for f in "$OUT"/carlife/*.h264; do
-  b=$(basename "$f" .h264)
-  ffmpeg -y -loglevel error -i "$f" -vf "select=gte(n\,10)" -frames:v 1 -update 1 "$OUT/frames/$b.png" 2>/dev/null
-  y=$(ffmpeg -i "$f" -vf "select=gte(n\,10),signalstats" -frames:v 1 -f null - 2>&1 | grep -o 'YAVG:[0-9.]*' | head -1)
-  echo "   $b  ${y:-no-frame}  $( [ -s "$OUT/frames/$b.png" ] && echo png-ok )"
+  b=$(basename "$f" .h264); png="$OUT/frames/$b.png"; rm -f "$png"
+  for n in 10 2 0; do
+    ffmpeg -y -loglevel error -i "$f" -vf "select=gte(n\,$n)" -frames:v 1 -update 1 "$png" 2>/dev/null
+    [ -s "$png" ] && break
+  done
+  y=$(ffmpeg -i "$f" -vf "signalstats" -frames:v 1 -f null - 2>&1 | grep -o 'YAVG:[0-9.]*' | head -1)
+  echo "   $b  ${y:-no-frame}  $( [ -s "$png" ] && echo png-ok )"
 done
 check "launcher frame decoded to PNG" "[ -s '$OUT/frames/launcher.png' ]"
 

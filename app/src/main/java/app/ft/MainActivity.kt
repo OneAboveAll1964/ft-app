@@ -126,7 +126,8 @@ class MainActivity : ComponentActivity() {
 
     private fun requestMirror() {
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mirrorConsent.launch(mpm.createScreenCaptureIntent())
+        val request = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
+        mirrorConsent.launch(request)
     }
 
     private fun requestRuntimePermissions() {
