@@ -2,14 +2,9 @@ package app.ft
 
 import android.Manifest
 import android.app.Activity
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.hardware.usb.UsbAccessory
-import android.hardware.usb.UsbManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -68,7 +63,6 @@ enum class Screen(val label: String, val icon: ImageVector) {
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as FTApp
-    private val usbPermissionAction = "app.ft.USB_PERMISSION"
 
     private val mirrorConsent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         if (r.resultCode == Activity.RESULT_OK && r.data != null) {
@@ -81,21 +75,9 @@ class MainActivity : ComponentActivity() {
 
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
-    private val usbPermission = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != usbPermissionAction) return
-            val acc = accessoryOf(intent)
-            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) && acc != null) {
-                DiagLog.i("USB", "permission granted for ${acc.manufacturer}/${acc.model}")
-                CarLifeService.startUsb(this@MainActivity, acc)
-            } else DiagLog.w("USB", "permission denied")
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        registerReceiver(usbPermission, IntentFilter(usbPermissionAction), Context.RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
         if (app.prefs.autoConnect) CarLifeService.startAuto(this)
@@ -106,16 +88,10 @@ class MainActivity : ComponentActivity() {
                 FTRoot(
                     onAllowMirror = { requestMirror() },
                     onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                    onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
-                    onConnectUsb = { connectUsbNow() }
+                    onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
                 )
             }
         }
-    }
-
-    override fun onDestroy() {
-        runCatching { unregisterReceiver(usbPermission) }
-        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -125,40 +101,13 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        if (intent.action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED) accessoryOf(intent)?.let { connectUsb(it) }
         if (intent.getBooleanExtra("wifi", false)) CarLifeService.startWifi(this)
         if (intent.getBooleanExtra("auto", false)) CarLifeService.startAuto(this)
-        if (intent.getBooleanExtra("mux", false)) CarLifeService.startMux(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)
         if (intent.getBooleanExtra("mirror", false)) requestMirror()
         intent.getStringExtra("pkgMaps")?.let { app.prefs.mapsPackage = it }
         intent.getStringExtra("pkgVideo")?.let { app.prefs.videoPackage = it }
         intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }
-    }
-
-    private fun accessoryOf(intent: Intent): UsbAccessory? =
-        if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY, UsbAccessory::class.java)
-        else @Suppress("DEPRECATION") intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
-
-    private fun connectUsbNow() {
-        val usb = getSystemService(Context.USB_SERVICE) as UsbManager
-        val acc = usb.accessoryList?.firstOrNull()
-        if (acc == null) {
-            DiagLog.w("USB", "no CarLife accessory attached; plug the phone into the car")
-            return
-        }
-        connectUsb(acc)
-    }
-
-    private fun connectUsb(acc: UsbAccessory) {
-        val usb = getSystemService(Context.USB_SERVICE) as UsbManager
-        DiagLog.i("USB", "accessory ${acc.manufacturer}/${acc.model} v${acc.version}")
-        if (usb.hasPermission(acc)) {
-            CarLifeService.startUsb(this, acc)
-        } else {
-            val pi = PendingIntent.getBroadcast(this, 0, Intent(usbPermissionAction).setPackage(packageName), PendingIntent.FLAG_MUTABLE)
-            usb.requestPermission(acc, pi)
-        }
     }
 
     private fun requestMirror() {
@@ -183,7 +132,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onConnectUsb: () -> Unit) {
+fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
     val barState = rememberTopAppBarState()
@@ -228,8 +177,7 @@ fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOve
                     onOpenLog = { screen = Screen.LOG },
                     onAllowMirror = onAllowMirror,
                     onOpenAccessibility = onOpenAccessibility,
-                    onOpenOverlay = onOpenOverlay,
-                    onConnectUsb = onConnectUsb
+                    onOpenOverlay = onOpenOverlay
                 )
                 Screen.LOG -> DiagnosticsScreen(pad)
                 Screen.SETTINGS -> SettingsScreen(pad)
