@@ -40,9 +40,23 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
             r.startRecording()
             thread = Thread {
                 val buf = ByteArray(3840)
+                var blocks = 0L
+                var peak = 0
                 while (running.get()) {
                     val n = runCatching { r.read(buf, 0, buf.size) }.getOrDefault(-1)
                     if (n <= 0) { if (n < 0) break else continue }
+                    var i = 0
+                    while (i + 1 < n) {
+                        val s = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xff)).toShort().toInt()
+                        val a = if (s < 0) -s else s
+                        if (a > peak) peak = a
+                        i += 2
+                    }
+                    blocks++
+                    if (blocks % 100 == 0L) {
+                        DiagLog.i(tag, "captured ${blocks * n / 192} ms, loudest sample $peak/32767 ${if (peak < 40) "(silent - this phone will not capture FT's own sound)" else ""}")
+                        peak = 0
+                    }
                     onPcm(if (n == buf.size) buf.copyOf() else buf.copyOf(n))
                 }
             }.also { it.isDaemon = true; it.start() }

@@ -179,6 +179,35 @@ private fun Launcher(state: app.ft.carlife.CarState, aa: app.ft.aa.AaState, onOp
                 Tile(Modifier.weight(1f), "All apps", Icons.Filled.List) { onOpen(CarView.DRAWER) }
                 Tile(Modifier.weight(1f), "Home", Icons.Filled.Home) { CarLifeService.goHome() }
             }
+            PhoneControls()
+        }
+    }
+}
+
+@Composable
+fun PhoneControls(modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().height(64.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ControlKey(Modifier.weight(1f), "Vol −") { CarLifeService.volumeDown() }
+        ControlKey(Modifier.weight(1f), "Vol +") { CarLifeService.volumeUp() }
+        ControlKey(Modifier.weight(1f), "Back") { CarLifeService.navBack() }
+        ControlKey(Modifier.weight(1f), "Phone home") { CarLifeService.navHome() }
+    }
+}
+
+@Composable
+private fun ControlKey(modifier: Modifier, label: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = modifier.height(56.dp)
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
         }
     }
 }

@@ -88,6 +88,10 @@ class CarLifeService : Service() {
         fun searchAgain() = instance?.restartFinder()
         fun startAa() = instance?.startAndroidAuto()
         fun startAaWireless() = instance?.triggerAaWireless()
+        fun volumeUp() = instance?.volume(true)
+        fun volumeDown() = instance?.volume(false)
+        fun navBack() = FTTouchService.instance?.back()
+        fun navHome() = FTTouchService.instance?.home()
         fun launchApp(pkg: String) = instance?.launch(pkg)
         fun stopMirror() = instance?.mirrorStop()
         fun goHome() = instance?.home()
@@ -109,6 +113,7 @@ class CarLifeService : Service() {
     private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
     @Volatile private var aaAutoLaunched = false
+    @Volatile private var askedForShare = false
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
     private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
@@ -535,8 +540,34 @@ class CarLifeService : Service() {
             DiagLog.w(tag, "no microphone permission, the car will get picture without sound")
             return
         }
-        val mp = ensureProjection("Sending sound to the car") ?: return
+        val mp = ensureProjection("Sending sound to the car")
+        if (mp == null) {
+            askForScreenShare()
+            return
+        }
         audio.start(mp)
+    }
+
+    private fun askForScreenShare() {
+        if (askedForShare) return
+        askedForShare = true
+        DiagLog.i(tag, "asking for screen sharing so the car can have sound")
+        runCatching {
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra("mirror", true)
+            )
+        }.onFailure { DiagLog.w(tag, "could not open FT to ask for screen sharing: ${it.message}") }
+    }
+
+    fun volume(up: Boolean) {
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        am.adjustStreamVolume(
+            android.media.AudioManager.STREAM_MUSIC,
+            if (up) android.media.AudioManager.ADJUST_RAISE else android.media.AudioManager.ADJUST_LOWER,
+            android.media.AudioManager.FLAG_SHOW_UI
+        )
     }
 
     private fun mirrorOpen(pkg: String, ownDisplay: Boolean): Boolean {
@@ -600,6 +631,7 @@ class CarLifeService : Service() {
         wifiLink?.stop()
         wifiLink = null
         listenOnly = false
+        askedForShare = false
         carDisplay.stop()
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null
