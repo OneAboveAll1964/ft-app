@@ -98,6 +98,12 @@ class AaHeadUnitService : Service() {
         surfaceJob = scope.launch {
             AaVideoSink.surface.collect { s -> dec.setSurface(s) }
         }
+        if (bt == null) {
+            DiagLog.i(tag, "advertising the Android Auto wireless service so it can find this head unit")
+            bt = AaBluetoothAdvertiser(this, port).also { it.start(scope) }
+            scope.launch { bt?.status?.collect { s -> _state.update { it.copy(bluetooth = s) } } }
+            scope.launch { bt?.info?.collect { i -> _state.update { it.copy(hotspot = i) } } }
+        }
         acceptJob = scope.launch {
             try {
                 val ss = ServerSocket(port).also { it.reuseAddress = true }
