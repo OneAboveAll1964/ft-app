@@ -21,11 +21,13 @@ object AaMessages {
     fun authComplete(): ByteArray = ProtoWriter().enum(1, AaProtocol.STATUS_OK).toByteArray()
 
     fun serviceDiscoveryResponse(width: Int, height: Int, fps: Int, density: Int, advertiseAudio: Boolean, name: String): ByteArray {
-        val resolution = when {
-            width >= 1920 -> AaProtocol.RES_1920x1080
-            width >= 1280 -> AaProtocol.RES_1280x720
-            else -> AaProtocol.RES_800x480
+        val (resolution, fullW, fullH) = when {
+            width > 1280 || height > 720 -> Triple(AaProtocol.RES_1920x1080, 1920, 1080)
+            width > 800 || height > 480 -> Triple(AaProtocol.RES_1280x720, 1280, 720)
+            else -> Triple(AaProtocol.RES_800x480, 800, 480)
         }
+        val marginW = (fullW - width).coerceAtLeast(0)
+        val marginH = (fullH - height).coerceAtLeast(0)
         val video = ProtoWriter()
             .int32(1, AaProtocol.CH_VIDEO)
             .message(
@@ -35,8 +37,8 @@ object AaMessages {
                         4, ProtoWriter()
                             .enum(1, resolution)
                             .enum(2, if (fps >= 60) AaProtocol.FPS_60 else AaProtocol.FPS_30)
-                            .uint32(3, 0)
-                            .uint32(4, 0)
+                            .uint32(3, marginW)
+                            .uint32(4, marginH)
                             .uint32(5, density)
                     )
                     .bool(5, true)
@@ -73,6 +75,16 @@ object AaMessages {
             w.message(1, sink(AaProtocol.CH_MEDIA_AUDIO, AaProtocol.AUDIO_TYPE_MEDIA, 48000, 2))
             w.message(1, sink(AaProtocol.CH_SPEECH_AUDIO, AaProtocol.AUDIO_TYPE_SPEECH, 16000, 1))
             w.message(1, sink(AaProtocol.CH_SYSTEM_AUDIO, AaProtocol.AUDIO_TYPE_SYSTEM, 16000, 1))
+            w.message(
+                1, ProtoWriter()
+                    .int32(1, AaProtocol.CH_AV_INPUT)
+                    .message(
+                        5, ProtoWriter()
+                            .enum(1, AaProtocol.CODEC_AUDIO_PCM)
+                            .message(2, ProtoWriter().uint32(1, 16000).uint32(2, 16).uint32(3, 1))
+                            .bool(3, true)
+                    )
+            )
         }
         w.string(2, name)
             .string(3, "Universal")

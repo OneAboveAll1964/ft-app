@@ -2,6 +2,7 @@ package app.ft.aa
 
 import android.content.Context
 import app.ft.core.Bytes
+import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
 import kotlinx.coroutines.CoroutineScope
@@ -229,7 +230,15 @@ class AaSession(
         when (id) {
             AaProtocol.AV_SETUP_REQUEST -> sendEnc(channel, AaProtocol.AV_SETUP_RESPONSE, AaMessages.avSetupResponse())
             AaProtocol.AV_START_INDICATION, AaProtocol.AV_STOP_INDICATION -> Unit
-            AaProtocol.AV_MEDIA_WITH_TIMESTAMP, AaProtocol.AV_MEDIA_INDICATION -> sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(0))
+            AaProtocol.AV_MEDIA_WITH_TIMESTAMP, AaProtocol.AV_MEDIA_INDICATION -> {
+                val pcm = if (id == AaProtocol.AV_MEDIA_WITH_TIMESTAMP && body.size > 8) body.copyOfRange(8, body.size) else body
+                if (pcm.isNotEmpty()) {
+                    val rate = if (channel == AaProtocol.CH_MEDIA_AUDIO) 48000 else 16000
+                    val ch = if (channel == AaProtocol.CH_MEDIA_AUDIO) 2 else 1
+                    CarAudioBus.play(CarAudioBus.toCarFormat(pcm, rate, ch))
+                }
+                sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(0))
+            }
             else -> Unit
         }
     }

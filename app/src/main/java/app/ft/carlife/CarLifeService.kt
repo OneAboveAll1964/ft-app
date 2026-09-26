@@ -23,6 +23,7 @@ import app.ft.FTTouchService
 import app.ft.MainActivity
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
+import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.projection.CarDisplay
 import app.ft.projection.MirrorSink
@@ -117,6 +118,7 @@ class CarLifeService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
+    private val carAudio: (ByteArray) -> Unit = { pcm -> session?.sendAudio(pcm) }
     @Volatile private var aaAutoLaunched = false
     @Volatile private var askedForShare = false
     private var savedVolume = -1
@@ -127,6 +129,7 @@ class CarLifeService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        CarAudioBus.sink = carAudio
         carDisplay = CarDisplay(this)
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel(CHANNEL, "FT projection", NotificationManager.IMPORTANCE_LOW))
@@ -384,6 +387,21 @@ class CarLifeService : Service() {
             .onFailure { DiagLog.w(tag, "Android Auto would not take the request: ${it.message}") }
     }
 
+    private fun matchCarScreen() {
+        val s = _state.value.session
+        val size = when (s) {
+            is CarLifeSession.State.Projecting -> Triple(s.width, s.height, s.fps)
+            is CarLifeSession.State.Negotiated -> Triple(s.width, s.height, s.fps)
+            else -> null
+        } ?: return
+        if (size.first <= 0 || size.second <= 0) return
+        if (app.prefs.aaWidth == size.first && app.prefs.aaHeight == size.second) return
+        app.prefs.aaWidth = size.first
+        app.prefs.aaHeight = size.second
+        if (size.third > 0) app.prefs.aaFps = size.third
+        DiagLog.i(tag, "Android Auto will draw at the car's own ${size.first}x${size.second}")
+    }
+
     private fun startAndroidAuto() {
         val pkg = app.prefs.aaPackage
         if (runCatching { packageManager.getPackageInfo(pkg, 0) }.isFailure) {
@@ -391,6 +409,7 @@ class CarLifeService : Service() {
             return
         }
         mirrorStop()
+        matchCarScreen()
         if (AaHeadUnitService.current == null && !AaHeadUnitService.state.value.listening) {
             AaHeadUnitService.start(this, app.prefs.aaBluetooth)
         }
@@ -703,6 +722,7 @@ class CarLifeService : Service() {
     override fun onDestroy() {
         teardown()
         scope.cancel()
+        CarAudioBus.sink = null
         instance = null
         super.onDestroy()
     }
