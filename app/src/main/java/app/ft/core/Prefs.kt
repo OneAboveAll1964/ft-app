@@ -21,6 +21,7 @@ class Prefs(context: Context) {
     var touchPort: Int get() = int("touchPort", 9340); set(v) = set("touchPort", v)
 
     var aaPort: Int get() = int("aaPort", 5288); set(v) = set("aaPort", v)
+    var aaSelfPort: Int get() = int("aaSelfPort", 5277); set(v) = set("aaSelfPort", v)
     var aaWidth: Int get() = int("aaWidth", 1280); set(v) = set("aaWidth", v)
     var aaHeight: Int get() = int("aaHeight", 720); set(v) = set("aaHeight", v)
     var aaFps: Int get() = int("aaFps", 30); set(v) = set("aaFps", v)

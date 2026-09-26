@@ -63,6 +63,7 @@ class AaHeadUnitService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var server: ServerSocket? = null
     private var acceptJob: Job? = null
+    private var dialJob: Job? = null
     private var surfaceJob: Job? = null
     private var bt: AaBluetoothAdvertiser? = null
     private var decoder: AaVideoDecoder? = null
@@ -115,6 +116,28 @@ class AaHeadUnitService : Service() {
                 _state.update { it.copy(listening = false) }
             }
         }
+        dialJob = scope.launch {
+            var moaned = false
+            while (isActive) {
+                if (current == null) {
+                    val s = runCatching {
+                        Socket().apply {
+                            tcpNoDelay = true
+                            keepAlive = true
+                            connect(InetSocketAddress("127.0.0.1", app.prefs.aaSelfPort), 1200)
+                        }
+                    }.getOrNull()
+                    if (s != null) {
+                        DiagLog.i(tag, "Android Auto is serving on ${app.prefs.aaSelfPort}, connected to it")
+                        onPhone(s, dec)
+                    } else if (!moaned) {
+                        DiagLog.d(tag, "Android Auto is not serving on ${app.prefs.aaSelfPort}; waiting for it to dial tcp:$port instead")
+                        moaned = true
+                    }
+                }
+                delay(3000)
+            }
+        }
     }
 
     private fun onPhone(s: Socket, dec: AaVideoDecoder) {
@@ -141,6 +164,7 @@ class AaHeadUnitService : Service() {
         runCatching { server?.close() }
         server = null
         acceptJob?.cancel()
+        dialJob?.cancel()
         surfaceJob?.cancel()
         bt?.stop()
         bt = null
