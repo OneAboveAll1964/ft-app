@@ -54,6 +54,10 @@ class AaHeadUnitService : Service() {
             context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth))
         }
 
+        fun feedCarMicrophone(pcm: ByteArray) {
+            current?.feedCarMicrophone(pcm)
+        }
+
         fun stop(context: Context) {
             context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP))
         }

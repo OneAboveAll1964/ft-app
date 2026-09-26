@@ -64,6 +64,7 @@ class CarLifeService : Service() {
         const val ACTION_AUDIO = "app.ft.carlife.AUDIO"
         const val EXTRA_BT_ADDR = "btAddr"
         const val CORNER = 96
+        private val AA_KEYS = setOf(3, 4, 19, 20, 21, 22, 23, 84, 85, 86, 87, 88, 126, 127)
         private const val CHANNEL = "ft_carlife"
         private const val NOTIFICATION_ID = 41
 
@@ -289,8 +290,10 @@ class CarLifeService : Service() {
         s.onKeyFrameRequest = { carDisplay.requestKeyFrame() }
         s.onTouch = { a, x, y -> routeTouch(a, x, y) }
         s.onHardKey = { k -> onHardKey(k) }
+        s.onVoiceAudio = { pcm -> AaHeadUnitService.current?.feedCarMicrophone(pcm) }
         s.onClosed = { reason ->
             DiagLog.i(tag, "link closed: $reason")
+            stopAndroidAuto("the car disconnected")
             updateBeacon()
         }
         stateJob?.cancel()
@@ -420,10 +423,15 @@ class CarLifeService : Service() {
         }
         aaWatch?.cancel()
         aaWatch = scope.launch {
+            var shown = false
             AaHeadUnitService.state.collect { s ->
                 if (s.connected && !_state.value.aaOverlay) {
                     DiagLog.i(tag, "Android Auto is projecting, showing it on the car")
+                    shown = true
                     aaOverlay(true)
+                } else if (!s.connected && shown) {
+                    shown = false
+                    stopAndroidAuto("Android Auto closed on the phone")
                 }
             }
         }
@@ -461,18 +469,34 @@ class CarLifeService : Service() {
 
     private fun onHardKey(key: Int) {
         val st = _state.value
+        val mapped = when (key) {
+            231, 219 -> 84
+            79 -> 85
+            else -> key
+        }
         when {
             st.aaOverlay -> {
                 val aa = AaHeadUnitService.current
-                if (aa != null && key in 3..4) aa.sendKey(key) else aaOverlay(false)
+                when {
+                    aa == null -> Unit
+                    mapped in AA_KEYS -> {
+                        DiagLog.i(tag, "steering wheel key $key sent to Android Auto as $mapped")
+                        aa.sendKey(mapped)
+                    }
+                    else -> DiagLog.w(tag, "steering wheel key $key has no Android Auto action yet")
+                }
             }
-            st.mirroring -> if (key == 4) FTTouchService.instance?.back() else mirrorStop()
+            st.mirroring -> when (mapped) {
+                4 -> FTTouchService.instance?.back()
+                3 -> mirrorStop()
+                else -> DiagLog.i(tag, "steering wheel key $key ignored while mirroring")
+            }
             else -> Unit
         }
     }
 
     private fun aaOverlay(on: Boolean) {
-        if (on) mirrorStop() else aaWatch?.cancel()
+        if (on) mirrorStop()
         _state.update { it.copy(aaOverlay = on) }
         DiagLog.i(tag, "android auto overlay ${if (on) "on" else "off"}")
         carDisplay.requestKeyFrame()
@@ -678,7 +702,22 @@ class CarLifeService : Service() {
 
     private fun home() {
         mirrorStop()
-        aaOverlay(false)
+        stopAndroidAuto("you went back to FT")
+    }
+
+    private fun stopAndroidAuto(reason: String) {
+        val wasOn = _state.value.aaOverlay
+        val wasRunning = AaHeadUnitService.current != null || AaHeadUnitService.state.value.listening
+        if (!wasOn && !wasRunning) return
+        aaWatch?.cancel()
+        aaWatch = null
+        aaAutoLaunched = false
+        if (wasOn) aaOverlay(false)
+        CarAudioBus.clear(CarAudioBus.LANE_MEDIA)
+        CarAudioBus.clear(CarAudioBus.LANE_SPEECH)
+        CarAudioBus.clear(CarAudioBus.LANE_SYSTEM)
+        if (wasRunning) AaHeadUnitService.stop(this)
+        DiagLog.i(tag, "Android Auto stopped because $reason")
     }
 
     private fun teardown() {

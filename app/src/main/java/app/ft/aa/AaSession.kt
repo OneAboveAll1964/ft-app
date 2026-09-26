@@ -41,6 +41,8 @@ class AaSession(
     val deviceName: StateFlow<String> = _deviceName
     private val openChannels = HashSet<Int>()
     private val mic = AaMicrophone { pcm -> sendMicrophone(pcm) }
+    @Volatile private var micWanted = false
+    @Volatile private var carMicAt = 0L
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
@@ -247,7 +249,21 @@ class AaSession(
 
     private fun startMicrophone() {
         if (mic.active) return
+        if (System.nanoTime() - carMicAt < 2_000_000_000L) {
+            DiagLog.i(tag, "using the car's microphone for Android Auto")
+            return
+        }
         if (!mic.start()) DiagLog.w(tag, "Android Auto asked to listen but the microphone is not available")
+    }
+
+    fun feedCarMicrophone(pcm: ByteArray) {
+        carMicAt = System.nanoTime()
+        if (!micWanted) return
+        if (mic.active) {
+            DiagLog.i(tag, "the car is sending its own microphone, letting go of the phone's")
+            mic.stop()
+        }
+        sendMicrophone(pcm)
     }
 
     private fun sendMicrophone(pcm: ByteArray) {
@@ -264,6 +280,7 @@ class AaSession(
             AaProtocol.AV_INPUT_OPEN_REQUEST -> {
                 val wanted = AaMessages.avInputOpenWanted(body)
                 sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_INPUT_OPEN_RESPONSE, AaMessages.avInputOpenResponse(if (wanted) 0 else AaMessages.avInputOpenSession(body)))
+                micWanted = wanted
                 if (wanted) startMicrophone() else mic.stop()
             }
             AaProtocol.AV_MEDIA_ACK -> Unit

@@ -41,6 +41,9 @@ class CarLifeSession(
     var onFrameRate: ((fps: Int) -> Unit)? = null
     var onTouch: ((action: Int, x: Int, y: Int) -> Unit)? = null
     var onHardKey: ((keyCode: Int) -> Unit)? = null
+    var onVoiceAudio: ((ByteArray) -> Unit)? = null
+    private var voicePackets = 0L
+    private var voiceBytes = 0L
     var onLaunchMode: ((mode: String) -> Unit)? = null
     var onClosed: ((reason: String) -> Unit)? = null
 
@@ -119,9 +122,22 @@ class CarLifeSession(
                 val s = CarLifeFraming.parseStream(head, body)
                 DiagLog.d(tag, "video channel ${CarLifeProtocol.name(s.serviceId)} len=${s.payload.size}")
             }
+            CarLifeProtocol.CH_VR -> {
+                val s = CarLifeFraming.parseStream(head, body)
+                if (s.payload.isNotEmpty()) {
+                    voicePackets++
+                    voiceBytes += s.payload.size
+                    if (voicePackets == 1L || voicePackets % 50L == 0L) {
+                        DiagLog.i(tag, "car microphone sending: $voicePackets packets, $voiceBytes bytes, service ${CarLifeProtocol.name(s.serviceId)}")
+                    }
+                    onVoiceAudio?.invoke(s.payload)
+                } else {
+                    DiagLog.i(tag, "voice channel ${CarLifeProtocol.name(s.serviceId)} (empty)")
+                }
+            }
             else -> {
                 val sid = CarLifeFraming.serviceId(channel, head)
-                DiagLog.d(tag, "${CarLifeProtocol.channelName(channel)} ${CarLifeProtocol.name(sid)} len=${body.size}")
+                DiagLog.i(tag, "${CarLifeProtocol.channelName(channel)} ${CarLifeProtocol.name(sid)} len=${body.size}")
             }
         }
     }
@@ -269,8 +285,9 @@ class CarLifeSession(
                 if (action >= 0 && x >= 0 && y >= 0) onTouch?.invoke(action, x, y)
             }
             CarLifeProtocol.CAR_HARD_KEY_CODE -> {
-                val key = ProtoReader(c.payload).int(1, -1)
-                DiagLog.i(tag, "hard key $key")
+                val r2 = ProtoReader(c.payload)
+                val key = r2.int(1, -1)
+                DiagLog.i(tag, "steering wheel key $key (payload ${c.payload.joinToString(" ") { b -> "%02X".format(b) }})")
                 if (key >= 0) onHardKey?.invoke(key)
             }
             else -> DiagLog.rx(tag, "ctrl ${CarLifeProtocol.name(c.serviceId)}", c.payload)
