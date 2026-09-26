@@ -117,7 +117,7 @@ class CarLifeService : Service() {
     private var listenOnly = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var projection: MediaProjection? = null
-    private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
+    private val audio = AudioCapture { pcm -> CarAudioBus.write(CarAudioBus.LANE_PHONE, pcm) }
     private val carAudio: (ByteArray) -> Unit = { pcm -> session?.sendAudio(pcm) }
     @Volatile private var aaAutoLaunched = false
     @Volatile private var askedForShare = false

@@ -155,4 +155,5 @@ object AaMessages {
     fun navFocusRequestType(b: ByteArray): Int = ProtoReader(b).int(1, AaProtocol.NAV_FOCUS_PROJECTED)
     fun byeByeReason(b: ByteArray): Int = ProtoReader(b).int(1, 0)
     fun avInputOpenSession(b: ByteArray): Int = ProtoReader(b).int(1, 0)
+    fun avInputOpenWanted(b: ByteArray): Boolean = ProtoReader(b).bool(1, false)
 }

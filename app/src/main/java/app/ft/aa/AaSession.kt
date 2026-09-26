@@ -40,6 +40,7 @@ class AaSession(
     private val _deviceName = MutableStateFlow("")
     val deviceName: StateFlow<String> = _deviceName
     private val openChannels = HashSet<Int>()
+    private val mic = AaMicrophone { pcm -> sendMicrophone(pcm) }
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
@@ -62,6 +63,7 @@ class AaSession(
 
     fun close(reason: String) {
         if (!running.getAndSet(false)) return
+        mic.stop()
         runCatching { input.close() }
         runCatching { output.close() }
         decoder.stop()
@@ -235,7 +237,7 @@ class AaSession(
                 if (pcm.isNotEmpty()) {
                     val rate = if (channel == AaProtocol.CH_MEDIA_AUDIO) 48000 else 16000
                     val ch = if (channel == AaProtocol.CH_MEDIA_AUDIO) 2 else 1
-                    CarAudioBus.play(CarAudioBus.toCarFormat(pcm, rate, ch))
+                    CarAudioBus.write(channel, CarAudioBus.toCarFormat(pcm, rate, ch))
                 }
                 sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(0))
             }
@@ -243,10 +245,28 @@ class AaSession(
         }
     }
 
+    private fun startMicrophone() {
+        if (mic.active) return
+        if (!mic.start()) DiagLog.w(tag, "Android Auto asked to listen but the microphone is not available")
+    }
+
+    private fun sendMicrophone(pcm: ByteArray) {
+        if (!running.get()) return
+        val payload = ByteArray(8 + pcm.size)
+        Bytes.putU64(System.nanoTime() / 1000L, payload, 0)
+        System.arraycopy(pcm, 0, payload, 8, pcm.size)
+        sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_MEDIA_WITH_TIMESTAMP, payload)
+    }
+
     private fun handleAvInput(id: Int, body: ByteArray) {
         when (id) {
             AaProtocol.AV_SETUP_REQUEST -> sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_SETUP_RESPONSE, AaMessages.avSetupResponse())
-            AaProtocol.AV_INPUT_OPEN_REQUEST -> sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_INPUT_OPEN_RESPONSE, AaMessages.avInputOpenResponse(AaMessages.avInputOpenSession(body)))
+            AaProtocol.AV_INPUT_OPEN_REQUEST -> {
+                val wanted = AaMessages.avInputOpenWanted(body)
+                sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_INPUT_OPEN_RESPONSE, AaMessages.avInputOpenResponse(if (wanted) 0 else AaMessages.avInputOpenSession(body)))
+                if (wanted) startMicrophone() else mic.stop()
+            }
+            AaProtocol.AV_MEDIA_ACK -> Unit
             else -> Unit
         }
     }
