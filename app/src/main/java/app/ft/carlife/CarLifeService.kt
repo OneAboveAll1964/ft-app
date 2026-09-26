@@ -363,18 +363,22 @@ class CarLifeService : Service() {
             return
         }
         val name = runCatching { device.name }.getOrNull() ?: device.address
-        for (action in listOf(
-            "com.google.android.projection.gearhead.START_WIRELESS_PROJECTION",
-            "com.google.android.apps.auto.wireless.setup.receiver.wirelessstartup.START"
-        )) {
-            val i = Intent(action)
-                .setPackage("com.google.android.projection.gearhead")
-                .putExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, device)
-                .putExtra("com.google.android.apps.auto.wireless.setup.service.EXTRA_BLUETOOTH_DEVICE", device)
-            runCatching { sendBroadcast(i) }
-                .onSuccess { DiagLog.i(tag, "asked Android Auto to start wireless projection with '$name' via $action") }
-                .onFailure { DiagLog.w(tag, "wireless projection request failed: ${it.message}") }
-        }
+        DiagLog.d(tag, "car bluetooth present as '$name'")
+        askAndroidAutoToConnect()
+    }
+
+    private fun askAndroidAutoToConnect() {
+        val i = Intent("com.google.android.apps.auto.wireless.setup.receiver.wirelessstartup.START")
+            .setComponent(
+                android.content.ComponentName(
+                    "com.google.android.projection.gearhead",
+                    "com.google.android.apps.auto.wireless.setup.receiver.WirelessStartupReceiver"
+                )
+            )
+            .addFlags(Intent.FLAG_EXCLUDE_STOPPED_PACKAGES or Intent.FLAG_RECEIVER_FOREGROUND)
+        runCatching { sendBroadcast(i) }
+            .onSuccess { DiagLog.i(tag, "asked Android Auto to connect to FT's head unit port") }
+            .onFailure { DiagLog.w(tag, "Android Auto would not take the request: ${it.message}") }
     }
 
     private fun startAndroidAuto() {
@@ -388,6 +392,10 @@ class CarLifeService : Service() {
             AaHeadUnitService.start(this, app.prefs.aaBluetooth)
         }
         DiagLog.i(tag, "bridging this phone's Android Auto onto the car, waiting for it to start projecting")
+        scope.launch {
+            delay(1500)
+            askAndroidAutoToConnect()
+        }
         aaWatch?.cancel()
         aaWatch = scope.launch {
             AaHeadUnitService.state.collect { s ->
