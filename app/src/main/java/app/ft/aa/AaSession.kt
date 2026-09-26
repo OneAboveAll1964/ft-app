@@ -130,7 +130,7 @@ class AaSession(
                 DiagLog.i(tag, "service discovery from '${_deviceName.value}'")
                 sendEnc(
                     AaProtocol.CH_CONTROL, AaProtocol.SERVICE_DISCOVERY_RESPONSE,
-                    AaMessages.serviceDiscoveryResponse(prefs.aaWidth, prefs.aaHeight, prefs.aaFps, prefs.aaDensity, true, prefs.carName)
+                    AaMessages.serviceDiscoveryResponse(prefs.aaWidth, prefs.aaHeight, prefs.aaFps, prefs.aaDensity, true, prefs.carName, prefs.aaControlsLeft)
                 )
                 _phase.value = Phase.DISCOVERED
             }

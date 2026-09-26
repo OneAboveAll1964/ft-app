@@ -26,6 +26,7 @@ class Prefs(context: Context) {
     var aaHeight: Int get() = int("aaHeight", 720); set(v) = set("aaHeight", v)
     var aaFps: Int get() = int("aaFps", 30); set(v) = set("aaFps", v)
     var aaDensity: Int get() = int("aaDensity", 160); set(v) = set("aaDensity", v)
+    var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
 
     var forceWidth: Int get() = int("forceWidth", 0); set(v) = set("forceWidth", v)
     var forceHeight: Int get() = int("forceHeight", 0); set(v) = set("forceHeight", v)

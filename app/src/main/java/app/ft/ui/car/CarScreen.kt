@@ -56,6 +56,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -236,14 +238,15 @@ private fun Tile(modifier: Modifier, label: String, icon: ImageVector, onClick: 
 @Composable
 private fun AaOverlay(aa: app.ft.aa.AaState) {
     val prefs = FTApp.instance.prefs
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    val (fullW, fullH) = app.ft.aa.AaProtocol.standardSize(prefs.aaWidth, prefs.aaHeight)
+    Box(Modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
                     surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                         override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
-                            st.setDefaultBufferSize(prefs.aaWidth, prefs.aaHeight)
-                            AaVideoSink.attach(Surface(st), prefs.aaWidth, prefs.aaHeight)
+                            st.setDefaultBufferSize(fullW, fullH)
+                            AaVideoSink.attach(Surface(st), fullW, fullH)
                         }
                         override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = Unit
                         override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean { AaVideoSink.detach(); return true }
@@ -251,7 +254,7 @@ private fun AaOverlay(aa: app.ft.aa.AaState) {
                     }
                 }
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxWidth().aspectRatio(fullW.toFloat() / fullH).align(Alignment.TopCenter)
         )
         AnimatedVisibility(visible = aa.phase != AaSession.Phase.STREAMING, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {

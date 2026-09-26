@@ -100,6 +100,12 @@ object AaProtocol {
     const val WIFI_SECURITY_WPA2_PERSONAL = 8
     const val WIFI_AP_DYNAMIC = 1
 
+    fun standardSize(width: Int, height: Int): Pair<Int, Int> = when {
+        width > 1280 || height > 720 -> 1920 to 1080
+        width > 800 || height > 480 -> 1280 to 720
+        else -> 800 to 480
+    }
+
     fun channelName(ch: Int) = when (ch) {
         CH_CONTROL -> "CONTROL"; CH_INPUT -> "INPUT"; CH_SENSOR -> "SENSOR"; CH_VIDEO -> "VIDEO"
         CH_MEDIA_AUDIO -> "MEDIA_AUDIO"; CH_SPEECH_AUDIO -> "SPEECH_AUDIO"; CH_SYSTEM_AUDIO -> "SYSTEM_AUDIO"

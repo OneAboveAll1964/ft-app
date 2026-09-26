@@ -20,11 +20,12 @@ object AaMessages {
 
     fun authComplete(): ByteArray = ProtoWriter().enum(1, AaProtocol.STATUS_OK).toByteArray()
 
-    fun serviceDiscoveryResponse(width: Int, height: Int, fps: Int, density: Int, advertiseAudio: Boolean, name: String): ByteArray {
-        val (resolution, fullW, fullH) = when {
-            width > 1280 || height > 720 -> Triple(AaProtocol.RES_1920x1080, 1920, 1080)
-            width > 800 || height > 480 -> Triple(AaProtocol.RES_1280x720, 1280, 720)
-            else -> Triple(AaProtocol.RES_800x480, 800, 480)
+    fun serviceDiscoveryResponse(width: Int, height: Int, fps: Int, density: Int, advertiseAudio: Boolean, name: String, controlsLeft: Boolean = true): ByteArray {
+        val (fullW, fullH) = AaProtocol.standardSize(width, height)
+        val resolution = when (fullW) {
+            1920 -> AaProtocol.RES_1920x1080
+            1280 -> AaProtocol.RES_1280x720
+            else -> AaProtocol.RES_800x480
         }
         val marginW = (fullW - width).coerceAtLeast(0)
         val marginH = (fullH - height).coerceAtLeast(0)
@@ -90,7 +91,7 @@ object AaMessages {
             .string(3, "Universal")
             .string(4, "2024")
             .string(5, "0001")
-            .varint(6, 1)
+            .varint(6, if (controlsLeft) 0L else 1L)
             .string(7, "FT")
             .string(8, "FT")
             .string(9, "1")
