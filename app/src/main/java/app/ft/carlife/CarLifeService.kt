@@ -119,6 +119,7 @@ class CarLifeService : Service() {
     private val audio = AudioCapture { pcm -> session?.sendAudio(pcm) }
     @Volatile private var aaAutoLaunched = false
     @Volatile private var askedForShare = false
+    private var savedVolume = -1
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
     private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
@@ -556,7 +557,25 @@ class CarLifeService : Service() {
             askForScreenShare()
             return
         }
-        audio.start(mp)
+        if (audio.start(mp)) silencePhone()
+    }
+
+    private fun silencePhone() {
+        if (!app.prefs.muteWhileProjecting || savedVolume >= 0) return
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val current = runCatching { am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) }.getOrNull() ?: return
+        savedVolume = current
+        runCatching { am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, 0, 0) }
+            .onSuccess { DiagLog.i(tag, "phone speaker silenced, sound plays on the car only (phone volume was $current)") }
+            .onFailure { DiagLog.w(tag, "could not silence the phone speaker: ${it.message}"); savedVolume = -1 }
+    }
+
+    private fun restorePhone() {
+        if (savedVolume < 0) return
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        runCatching { am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, savedVolume, 0) }
+        DiagLog.i(tag, "phone speaker back to $savedVolume")
+        savedVolume = -1
     }
 
     private fun askForScreenShare() {
@@ -574,6 +593,12 @@ class CarLifeService : Service() {
 
     fun volume(up: Boolean) {
         val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        if (savedVolume >= 0) {
+            val max = runCatching { am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) }.getOrDefault(15)
+            savedVolume = (savedVolume + if (up) 1 else -1).coerceIn(0, max)
+            DiagLog.i(tag, "phone volume for when you disconnect: $savedVolume (use the car's own volume for the car)")
+            return
+        }
         am.adjustStreamVolume(
             android.media.AudioManager.STREAM_MUSIC,
             if (up) android.media.AudioManager.ADJUST_RAISE else android.media.AudioManager.ADJUST_LOWER,
@@ -611,6 +636,7 @@ class CarLifeService : Service() {
     private fun mirrorClose() {
         mirrorStop()
         audio.stop()
+        restorePhone()
         mirror.close()
         if (projection != null) {
             runCatching { projection?.stop() }
