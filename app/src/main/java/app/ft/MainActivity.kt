@@ -2,8 +2,11 @@ package app.ft
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
@@ -48,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import app.ft.aa.AaHeadUnitService
+import app.ft.aa.AaInstaller
 import app.ft.carlife.CarLifeService
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
@@ -76,9 +80,38 @@ class MainActivity : ComponentActivity() {
 
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
+    private val pickAaApk = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) DiagLog.w("AaSetup", "no file chosen") else AaInstaller.install(this, uri)
+    }
+
+    private val installResult = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            val job = i?.getStringExtra(AaInstaller.EXTRA_JOB) ?: AaInstaller.JOB_INSTALL
+            when (i?.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
+                PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                    val next = if (Build.VERSION.SDK_INT >= 33)
+                        i.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                    else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_INTENT) as Intent?
+                    next?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    runCatching { startActivity(next) }
+                }
+                PackageInstaller.STATUS_SUCCESS -> if (job == AaInstaller.JOB_UNINSTALL) {
+                    DiagLog.i("AaSetup", "Android Auto removed, now pick the apk to put it back")
+                    takeOverAndroidAuto()
+                } else {
+                    DiagLog.i("AaSetup", "Android Auto installed by FT, so FT is now its installer")
+                    AaInstaller.enableWirelessComponents(this@MainActivity)
+                    AaInstaller.stopAutoUpdates(this@MainActivity)
+                }
+                else -> DiagLog.w("AaSetup", "$job did not finish: ${i?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "cancelled"}")
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
         if (app.prefs.autoConnect) CarLifeService.startAuto(this)
@@ -89,7 +122,8 @@ class MainActivity : ComponentActivity() {
                 FTRoot(
                     onAllowMirror = { requestMirror() },
                     onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                    onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
+                    onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
+                    onTakeOverAa = { takeOverAndroidAuto() }
                 )
             }
         }
@@ -108,6 +142,8 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("mirror", false)) requestMirror()
         intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }
         if (intent.hasExtra("aaAuto")) app.prefs.aaAutoStart = intent.getBooleanExtra("aaAuto", false)
+        if (intent.getBooleanExtra("aaSetup", false)) takeOverAndroidAuto()
+        if (intent.getBooleanExtra("aaStash", false)) AaInstaller.stash(this)
         if (intent.getBooleanExtra("startAa", false)) CarLifeService.startAa()
         if (intent.getBooleanExtra("aaWireless", false)) CarLifeService.startAaWireless()
         intent.getStringExtra("btSend")?.let { CarLifeService.btSend(it) }
@@ -115,6 +151,38 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra("pkgMaps")?.let { app.prefs.mapsPackage = it }
         intent.getStringExtra("pkgVideo")?.let { app.prefs.videoPackage = it }
         intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }
+    }
+
+    private fun takeOverAndroidAuto() {
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            DiagLog.i("AaSetup", "let FT install apps on the screen that just opened, then tap Set up again")
+            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))) }
+            return
+        }
+        when (AaInstaller.step(this)) {
+            AaInstaller.Step.DONE -> {
+                AaInstaller.enableWirelessComponents(this)
+                AaInstaller.stopAutoUpdates(this)
+            }
+            AaInstaller.Step.REMOVE_UPDATES -> {
+                AaInstaller.stash(this)
+                AaInstaller.removeUpdates(this)
+            }
+            AaInstaller.Step.UNINSTALL -> {
+                AaInstaller.stash(this)
+                AaInstaller.uninstall(this)
+            }
+            AaInstaller.Step.INSTALL -> if (AaInstaller.stashed(this).isNotEmpty()) AaInstaller.installStash(this) else {
+                DiagLog.i("AaSetup", "pick a saved copy of Android Auto, an apk or an apks, and FT will install it")
+                runCatching { pickAaApk.launch(arrayOf("*/*")) }
+                    .onFailure { DiagLog.e("AaSetup", "no file picker available", it) }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(installResult) }
+        super.onDestroy()
     }
 
     private fun requestMirror() {
@@ -146,7 +214,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
+fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
     val barState = rememberTopAppBarState()
@@ -191,7 +259,8 @@ fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOve
                     onOpenLog = { screen = Screen.LOG },
                     onAllowMirror = onAllowMirror,
                     onOpenAccessibility = onOpenAccessibility,
-                    onOpenOverlay = onOpenOverlay
+                    onOpenOverlay = onOpenOverlay,
+                    onTakeOverAa = onTakeOverAa
                 )
                 Screen.LOG -> DiagnosticsScreen(pad)
                 Screen.SETTINGS -> SettingsScreen(pad)

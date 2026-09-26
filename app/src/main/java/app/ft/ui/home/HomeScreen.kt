@@ -50,11 +50,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
 import app.ft.FTTouchService
+import app.ft.aa.AaInstaller
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
@@ -78,7 +80,7 @@ private fun hero(car: CarState, autoConnect: Boolean): Hero {
 }
 
 @Composable
-fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
+fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
@@ -92,6 +94,9 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
         onPauseOrDispose { }
     }
     val touchOn = remember(resumed) { FTTouchService.enabled }
+    val aaStep = remember(resumed) { AaInstaller.step(context) }
+    val aaSays = remember(resumed) { AaInstaller.explain(context) }
+    val aaHasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
     val h = hero(car, autoConnect)
     val scheme = MaterialTheme.colorScheme
@@ -168,12 +173,28 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                     if (car.aaOverlay) "Showing on the car" else "Your phone's Android Auto, on the car",
                     "FT acts as the Android Auto head unit and bridges the picture to the car"
                 )
+                InfoRow(aaSays.first, aaSays.second)
                 SwitchRow("Start automatically after connection", "Launches Android Auto as soon as the car connects", aaAuto) {
                     aaAuto = it
                     app.prefs.aaAutoStart = it
                 }
                 Actions {
-                    FilledTonalButton(onClick = { CarLifeService.startAa() }, modifier = Modifier.weight(1f)) { Text("Start Android Auto", maxLines = 1) }
+                    FilledTonalButton(
+                        onClick = { if (aaStep == AaInstaller.Step.DONE) CarLifeService.startAa() else onTakeOverAa() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            when (aaStep) {
+                                AaInstaller.Step.DONE -> "Start Android Auto"
+                                AaInstaller.Step.REMOVE_UPDATES -> "Remove the Android Auto update"
+                                AaInstaller.Step.UNINSTALL -> "Remove Android Auto"
+                                AaInstaller.Step.INSTALL -> if (aaHasCopy) "Put Android Auto back" else "Install Android Auto"
+                            },
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

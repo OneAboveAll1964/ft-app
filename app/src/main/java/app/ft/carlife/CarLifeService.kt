@@ -368,6 +368,7 @@ class CarLifeService : Service() {
     }
 
     private fun askAndroidAutoToConnect() {
+        val port = app.prefs.aaPort
         val i = Intent("com.google.android.apps.auto.wireless.setup.receiver.wirelessstartup.START")
             .setComponent(
                 android.content.ComponentName(
@@ -375,9 +376,11 @@ class CarLifeService : Service() {
                     "com.google.android.apps.auto.wireless.setup.receiver.WirelessStartupReceiver"
                 )
             )
-            .addFlags(Intent.FLAG_EXCLUDE_STOPPED_PACKAGES or Intent.FLAG_RECEIVER_FOREGROUND)
+            .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES or Intent.FLAG_RECEIVER_FOREGROUND)
+            .putExtra("ip_address", "127.0.0.1")
+            .putExtra("projection_port", port)
         runCatching { sendBroadcast(i) }
-            .onSuccess { DiagLog.i(tag, "asked Android Auto to connect to FT's head unit port") }
+            .onSuccess { DiagLog.i(tag, "asked Android Auto to project onto FT at 127.0.0.1:$port") }
             .onFailure { DiagLog.w(tag, "Android Auto would not take the request: ${it.message}") }
     }
 
