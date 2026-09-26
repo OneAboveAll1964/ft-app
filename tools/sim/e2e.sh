@@ -30,8 +30,6 @@ $ADB logcat -v time > "$OUT/logcat.txt" 2>&1 &
 LOGPID=$!
 
 echo "== screen-mirror consent =="
-$ADB shell am start -n $PKG/.MainActivity --ez mirror true --es pkgMaps com.android.settings >/dev/null 2>&1
-sleep 3
 dump(){ $ADB shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; $ADB pull /sdcard/ui.xml "$OUT/consent_ui.xml" >/dev/null 2>&1; }
 findnode(){ python3 - "$OUT/consent_ui.xml" "$1" "$2" <<'PY'
 import re,sys
@@ -45,22 +43,31 @@ for node in re.finditer(r'<node [^>]*>', xml):
 sys.exit(1)
 PY
 }
-for round in 1 2 3 4; do
-  dump
-  if xy=$(findnode "Share one app" eq); then
-    $ADB shell input tap $xy; sleep 1; dump
-    if xy2=$(findnode "entire screen" sub); then $ADB shell input tap $xy2; sleep 1; dump; fi
-  fi
-  tapped=0
-  for label in "Share screen" "Start now" "Start sharing" "Start" "Next" "Share" "Allow"; do
-    if xy=$(findnode "$label" eq); then $ADB shell input tap $xy; tapped=1; sleep 2; break; fi
+grant_mirror(){
+  local before
+  before=$(grep -c 'screen mirror permitted' "$OUT/logcat.txt" 2>/dev/null || echo 0)
+  $ADB shell am start -n $PKG/.MainActivity --ez mirror true --es pkgMaps com.android.settings >/dev/null 2>&1
+  sleep 3
+  for round in 1 2 3 4; do
+    dump
+    if xy=$(findnode "Share one app" eq); then
+      $ADB shell input tap $xy; sleep 1; dump
+      if xy2=$(findnode "entire screen" sub); then $ADB shell input tap $xy2; sleep 1; dump; fi
+    fi
+    tapped=0
+    for label in "Share screen" "Start now" "Start sharing" "Start" "Next" "Share" "Allow"; do
+      if xy=$(findnode "$label" eq); then $ADB shell input tap $xy; tapped=1; sleep 2; break; fi
+    done
+    local now
+    now=$(grep -c 'screen mirror permitted' "$OUT/logcat.txt" 2>/dev/null || echo 0)
+    [ "$now" -gt "$before" ] && break
+    [ $tapped = 0 ] && break
   done
-  grep -q 'screen mirror permitted' "$OUT/logcat.txt" && break
-  [ $tapped = 0 ] && break
-done
-sleep 1
+  sleep 1
+}
+grant_mirror
 check "mirror consent granted" "grep -q 'screen mirror permitted' '$OUT/logcat.txt'"
-sleep 1; dump; cp "$OUT/consent_ui.xml" "$OUT/home_after_consent.xml"
+sleep 1; $ADB shell input swipe 700 2200 700 900 250 >/dev/null 2>&1; sleep 2; dump; cp "$OUT/consent_ui.xml" "$OUT/home_after_consent.xml"
 check "consent reflected on Home (no Allow button left)" "grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect, Android Auto auto-start on) =="
@@ -81,9 +88,13 @@ check "encoder followed the plain head unit size" "grep -q 'encoder started 1024
 check "content encryption reported off for the plain unit" "grep -q 'content encryption off on this head unit' '$OUT/logcat.txt'"
 sleep 3
 
+grant_mirror
+$ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true >/dev/null 2>&1
+sleep 3
+
 echo "== run the head unit simulator =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
-  --touches "284,606@0;40,40@3;672,195@6;40,40@10;668,530@13" --tail-seconds 8 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
+  --touches "284,606@0;40,40@2;672,195@4;40,40@6;668,530@8" --tail-seconds 8 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
 kill $LOGPID 2>/dev/null
@@ -100,7 +111,11 @@ check "video heartbeats flowed before VIDEO_ENCODER_INIT (watchdog rule)" "pytho
 check "encoder honours the rate the head unit asked for (15)" "grep -q 'encoder started 1280x720@15' '$OUT/logcat.txt'"
 check "redraw clock follows the negotiated rate" "grep -q 'redraw every 66ms' '$OUT/logcat.txt'"
 check "projected stream paced to the negotiated rate, not flooded" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));f=d['video_launcher']['frames'];assert 30<=f<=110, f\" 2>/dev/null"
-check "Android Auto bridge starts after connection" "grep -q 'auto-starting Android Auto after connection' '$OUT/logcat.txt' && grep -q 'looking for Android Auto on this phone' '$OUT/logcat.txt'"
+check "Android Auto bridge starts after connection" "grep -q 'auto-starting Android Auto after connection' '$OUT/logcat.txt' && grep -q 'bridging this phone' '$OUT/logcat.txt'"
+check "Android Auto is pointed at FT's own head unit port" "grep -qE 'asked Android Auto to project onto FT at 127.0.0.1:[0-9]+' '$OUT/logcat.txt'"
+check "Android Auto is told to draw at the car's size" "grep -q \"Android Auto will draw at the car's own 1280x720\" '$OUT/logcat.txt'"
+check "Android Auto stops when the car link drops" "grep -q 'Android Auto stopped because' '$OUT/logcat.txt'"
+check "car audio never outruns the car" "! grep -qE 'to the car (19[6-9][0-9]{3}|[2-9][0-9]{5}) of 192000' '$OUT/logcat.txt'"
 check "car keeps showing the launcher while Android Auto is not projecting" "! grep -q 'android auto overlay on' '$OUT/logcat.txt'"
 check "presentation shown on virtual display" "grep -q 'presentation shown' '$OUT/logcat.txt'"
 check "encoder started 1280x720" "grep -q 'encoder started 1280x720' '$OUT/logcat.txt'"

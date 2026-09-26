@@ -166,9 +166,11 @@ class CarLifeService : Service() {
     }
 
     private fun foreground(text: String, projection: Boolean = false, microphone: Boolean = false) {
+        val keepProjection = projection || this.projection != null
+        val keepMicrophone = microphone || audio.active
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        if (projection) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-        if (microphone) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        if (keepProjection) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        if (keepMicrophone) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         val note = notification(text)
         val fallback = type and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
         runCatching { startForeground(NOTIFICATION_ID, note, type) }
@@ -578,6 +580,10 @@ class CarLifeService : Service() {
             }
             mp.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {
+                    if (projection !== mp) {
+                        DiagLog.d(tag, "an older screen share ended, the current one keeps running")
+                        return
+                    }
                     DiagLog.i(tag, "screen sharing ended")
                     projection = null
                     app.mirrorGranted.value = false
@@ -589,7 +595,9 @@ class CarLifeService : Service() {
                     carDisplay.requestKeyFrame()
                 }
             }, Handler(Looper.getMainLooper()))
+            val previous = projection
             projection = mp
+            if (previous != null && previous !== mp) runCatching { previous.stop() }
             mp
         } catch (t: Throwable) {
             DiagLog.e(tag, "could not start screen sharing", t)

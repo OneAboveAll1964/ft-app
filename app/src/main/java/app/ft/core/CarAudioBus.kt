@@ -12,6 +12,8 @@ object CarAudioBus {
     private const val FRAME_MS = 20
     private const val CHUNK = RATE / 1000 * FRAME_MS * 4
     private const val CAP = CHUNK * 5
+    private const val FRAME_NS = FRAME_MS * 1_000_000L
+    private const val BURST_NS = FRAME_NS * 3
 
     private class Lane {
         val parts = ArrayDeque<ByteArray>()
@@ -106,11 +108,6 @@ object CarAudioBus {
         return m
     }
 
-    private fun anything(): Boolean {
-        for (lane in lanes.values) if (lane.size > 0) return true
-        return false
-    }
-
     private fun startPump() {
         if (pump?.isAlive == true) return
         pump = Thread {
@@ -119,8 +116,10 @@ object CarAudioBus {
             val frame = ByteArray(CHUNK)
             var reported = System.nanoTime()
             var sent = 0L
+            var tokens = 0L
+            var last = System.nanoTime()
             while (!Thread.currentThread().isInterrupted && out != null) {
-                var have = false
+                var ready = false
                 synchronized(lock) {
                     if (fullest() < CHUNK) {
                         try {
@@ -129,7 +128,27 @@ object CarAudioBus {
                             return@Thread
                         }
                     }
-                    have = anything()
+                    ready = fullest() >= CHUNK
+                }
+                var moment = System.nanoTime()
+                if (!ready) {
+                    last = moment
+                    continue
+                }
+                tokens = (tokens + (moment - last)).coerceAtMost(BURST_NS)
+                last = moment
+                if (tokens < FRAME_NS) {
+                    val need = FRAME_NS - tokens
+                    try {
+                        Thread.sleep(need / 1_000_000L, (need % 1_000_000L).toInt())
+                    } catch (_: InterruptedException) {
+                        return@Thread
+                    }
+                    continue
+                }
+                var have = false
+                synchronized(lock) {
+                    have = fullest() >= CHUNK
                     if (have) {
                         java.util.Arrays.fill(mix, 0)
                         for (lane in lanes.values) {
@@ -149,13 +168,14 @@ object CarAudioBus {
                     }
                 }
                 if (have) {
+                    tokens -= FRAME_NS
                     runCatching { out?.invoke(frame.copyOf()) }
                     sent += CHUNK
                 }
-                val now = System.nanoTime()
-                if (now - reported > 5_000_000_000L) {
-                    report(now - reported, sent)
-                    reported = now
+                moment = System.nanoTime()
+                if (moment - reported > 5_000_000_000L) {
+                    report(moment - reported, sent)
+                    reported = moment
                     sent = 0L
                 }
             }

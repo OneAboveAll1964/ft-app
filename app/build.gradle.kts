@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 31
-        versionName = "1.9.9"
+        versionCode = 32
+        versionName = "2.0.0"
     }
 
     signingConfigs {
@@ -44,6 +44,10 @@ android {
 
     buildFeatures { compose = true }
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -63,6 +67,7 @@ kotlin {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.compose.material3:material3:1.4.0-alpha18")
