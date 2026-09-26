@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
             app.mirrorData = r.data
             app.mirrorGranted.value = true
             DiagLog.i("App", "screen mirror permitted")
+            CarLifeService.startAudio(this)
         } else DiagLog.w("App", "screen mirror declined")
     }
 

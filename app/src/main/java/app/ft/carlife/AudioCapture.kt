@@ -53,8 +53,8 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
                         i += 2
                     }
                     blocks++
-                    if (blocks % 100 == 0L) {
-                        DiagLog.i(tag, "captured ${blocks * n / 192} ms, loudest sample $peak/32767 ${if (peak < 40) "(silent - this phone will not capture FT's own sound)" else ""}")
+                    if (blocks % 250 == 0L) {
+                        DiagLog.i(tag, "sound to the car: loudest sample $peak/32767${if (peak < 40) " (nothing playing)" else ""}")
                         peak = 0
                     }
                     onPcm(if (n == buf.size) buf.copyOf() else buf.copyOf(n))

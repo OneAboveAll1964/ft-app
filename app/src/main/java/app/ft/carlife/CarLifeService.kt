@@ -60,6 +60,7 @@ class CarLifeService : Service() {
         const val ACTION_WIFI = "app.ft.carlife.WIFI"
         const val ACTION_AUTO = "app.ft.carlife.AUTO"
         const val ACTION_STOP = "app.ft.carlife.STOP"
+        const val ACTION_AUDIO = "app.ft.carlife.AUDIO"
         const val EXTRA_BT_ADDR = "btAddr"
         const val CORNER = 96
         private const val CHANNEL = "ft_carlife"
@@ -79,6 +80,10 @@ class CarLifeService : Service() {
 
         fun stop(context: Context) {
             context.startService(Intent(context, CarLifeService::class.java).setAction(ACTION_STOP))
+        }
+
+        fun startAudio(context: Context) {
+            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUDIO))
         }
 
         fun btSend(hex: String) = instance?.sendBluetooth(hex)
@@ -138,6 +143,12 @@ class CarLifeService : Service() {
                 listenOnly = true
                 startWifiLink()
                 updateBeacon()
+            }
+            ACTION_AUDIO -> {
+                askedForShare = true
+                audio.stop()
+                foreground("Sending sound to the car", projection = true, microphone = canRecord())
+                startAudioToCar()
             }
             ACTION_AUTO -> {
                 foreground("Looking for the car")

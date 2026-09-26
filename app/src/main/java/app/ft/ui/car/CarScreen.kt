@@ -179,7 +179,6 @@ private fun Launcher(state: app.ft.carlife.CarState, aa: app.ft.aa.AaState, onOp
                 Tile(Modifier.weight(1f), "All apps", Icons.Filled.List) { onOpen(CarView.DRAWER) }
                 Tile(Modifier.weight(1f), "Home", Icons.Filled.Home) { CarLifeService.goHome() }
             }
-            PhoneControls()
         }
     }
 }
@@ -289,7 +288,10 @@ private fun MirrorOverlay(pkg: String) {
             },
             modifier = Modifier.fillMaxSize()
         )
-        Text(pkg.substringAfterLast('.'), color = Color.White.copy(alpha = 0.35f), modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp))
+        Text(pkg.substringAfterLast('.'), color = Color.White.copy(alpha = 0.35f), modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
+        PhoneControls(
+            Modifier.align(Alignment.BottomCenter).padding(start = 110.dp, end = 20.dp, bottom = 14.dp)
+        )
     }
 }
 
