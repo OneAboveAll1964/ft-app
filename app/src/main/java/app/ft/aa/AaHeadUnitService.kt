@@ -98,32 +98,21 @@ class AaHeadUnitService : Service() {
             AaVideoSink.surface.collect { s -> dec.setSurface(s) }
         }
         acceptJob = scope.launch {
-            _state.update { it.copy(listening = true, port = port) }
-            DiagLog.i(tag, "looking for Android Auto on this phone at 127.0.0.1:$port")
-            var announced = false
-            while (isActive) {
-                if (current != null) {
-                    delay(1000)
-                    continue
+            try {
+                val ss = ServerSocket(port).also { it.reuseAddress = true }
+                server = ss
+                _state.update { it.copy(listening = true, port = port) }
+                DiagLog.i(tag, "head unit waiting for Android Auto on tcp:$port")
+                while (isActive) {
+                    val s = ss.accept()
+                    s.tcpNoDelay = true
+                    s.keepAlive = true
+                    DiagLog.i(tag, "Android Auto connected from ${s.inetAddress.hostAddress}")
+                    onPhone(s, dec)
                 }
-                val s = runCatching {
-                    Socket().apply {
-                        tcpNoDelay = true
-                        keepAlive = true
-                        connect(InetSocketAddress("127.0.0.1", port), 1500)
-                    }
-                }.getOrNull()
-                if (s == null) {
-                    if (!announced) {
-                        DiagLog.w(tag, "Android Auto is not serving yet; enable its developer mode and tap 'Start head unit server'")
-                        announced = true
-                    }
-                    delay(2000)
-                    continue
-                }
-                announced = false
-                DiagLog.i(tag, "connected to Android Auto on this phone")
-                onPhone(s, dec)
+            } catch (t: Throwable) {
+                if (server != null) DiagLog.w(tag, "head unit port closed: ${t.message}")
+                _state.update { it.copy(listening = false) }
             }
         }
     }
