@@ -15,11 +15,13 @@ class CarWirelessSetup(
     private val buffer = ArrayList<Byte>(1024)
     private var askedForName = false
     private var vendorPolls = 0
+    private var described = false
 
     fun reset() {
         buffer.clear()
         askedForName = false
         vendorPolls = 0
+        described = false
     }
 
     fun hello(): Boolean {
@@ -51,27 +53,70 @@ class CarWirelessSetup(
         if (buffer.size < 4) return false
         if ((buffer[0].toInt() and 0xFF) != 0xFF) return false
         val kind = buffer[1].toInt() and 0xFF
-        if (kind != VENDOR_POLL && kind != VENDOR_REPLY) return false
-        val len = buffer[2].toInt() and 0xFF
-        val total = 4 + len
-        if (buffer.size < total) return false
-        val frame = ByteArray(total) { buffer[it] }
-        repeat(total) { buffer.removeAt(0) }
-        var sum = len
-        for (i in 0 until len) sum += frame[3 + i].toInt() and 0xFF
-        val want = (-sum) and 0xFF
-        val got = frame[total - 1].toInt() and 0xFF
-        val body = frame.copyOfRange(3, total - 1)
-        DiagLog.rx(tag, "head unit vendor 0x${kind.toString(16)}${if (want != got) " (checksum $got wanted $want)" else ""}", frame)
         if (kind == VENDOR_POLL) {
+            val len = buffer[2].toInt() and 0xFF
+            val total = 4 + len
+            if (buffer.size < total) return false
+            val frame = ByteArray(total) { buffer[it] }
+            repeat(total) { buffer.removeAt(0) }
+            var sum = len
+            for (i in 0 until len) sum += frame[3 + i].toInt() and 0xFF
+            val want = (-sum) and 0xFF
+            val got = frame[total - 1].toInt() and 0xFF
+            DiagLog.rx(tag, "head unit call${if (want != got) " (checksum $got wanted $want)" else ""}", frame)
             vendorPolls++
             if (vendorPolls == 1) progress("Head unit is calling over bluetooth, answering it")
             send(frame)
-            if (vendorPolls == 3) send(vendor(byteArrayOf(0x00, 0xEE.toByte())))
-        } else {
-            progress("Head unit answered the bluetooth call")
+            return true
         }
-        return true
+        if (kind == VENDOR_REPLY) {
+            if (buffer.size < 4) return false
+            val total = ((buffer[2].toInt() and 0xFF) shl 8) or (buffer[3].toInt() and 0xFF)
+            if (total < 5 || total > MAX_BODY) {
+                buffer.removeAt(0)
+                return true
+            }
+            if (buffer.size < total) return false
+            val frame = ByteArray(total) { buffer[it] }
+            repeat(total) { buffer.removeAt(0) }
+            val body = frame.copyOfRange(4, total)
+            if (!described) {
+                described = true
+                DiagLog.rx(tag, "head unit capability", frame)
+                readReply(body)
+            }
+            send(frame)
+            return true
+        }
+        return false
+    }
+
+    private fun readReply(body: ByteArray) {
+        if (body.size >= 15) {
+            val video = ((body[9].toInt() and 0xFF) shl 8) or (body[10].toInt() and 0xFF)
+            val audio = ((body[11].toInt() and 0xFF) shl 8) or (body[12].toInt() and 0xFF)
+            val fps = body[13].toInt() and 0xFF
+            if (video in 200..20000 && fps in 10..120) {
+                progress("Head unit offers $video kbps video at $fps fps")
+                DiagLog.i(tag, "head unit capability: video $video kbps, audio $audio kbps, $fps fps")
+                return
+            }
+        }
+        plainText(body)
+    }
+
+    private fun plainText(body: ByteArray) {
+        val text = StringBuilder()
+        var run = StringBuilder()
+        for (b in body) {
+            val c = b.toInt() and 0xFF
+            if (c in 0x20..0x7E) run.append(c.toChar()) else {
+                if (run.length >= 4) text.append(run).append(' ')
+                run = StringBuilder()
+            }
+        }
+        if (run.length >= 4) text.append(run)
+        if (text.isNotEmpty()) DiagLog.i(tag, "head unit said: ${text.toString().trim()}")
     }
 
     private fun vendor(body: ByteArray): ByteArray {
