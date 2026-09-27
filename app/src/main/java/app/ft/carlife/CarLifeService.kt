@@ -280,11 +280,11 @@ class CarLifeService : Service() {
 
     private fun scheduleFinderFallback() {
         finderFallback?.cancel()
-        _state.update { it.copy(p2p = "not needed while the car is on this network") }
+        _state.update { it.copy(p2p = "waiting") }
         finderFallback = scope.launch {
             delay(25_000)
             if (wifiLink?.connected != true && finder == null) {
-                DiagLog.i(tag, "no head unit reached us on this network, falling back to WiFi Direct")
+                step("The car has not reached FT, looking for its WiFi Direct group")
                 startFinder()
             }
         }
@@ -347,7 +347,7 @@ class CarLifeService : Service() {
                 _state.update { it.copy(link = l.name, session = st) }
                 updateBeacon()
                 if (st !is CarLifeSession.State.Idle) stopFinder("car is on this network, WiFi Direct not needed")
-                else if (finder == null && finderFallback?.isActive != true) scheduleFinderFallback()
+                else if (app.prefs.linkMode == 1 && finder == null && finderFallback?.isActive != true) scheduleFinderFallback()
                 if (st is CarLifeSession.State.Projecting && app.prefs.aaAutoStart && !aaAutoLaunched) {
                     aaAutoLaunched = true
                     DiagLog.i(tag, "auto-starting Android Auto after connection")

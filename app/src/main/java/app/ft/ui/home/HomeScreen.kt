@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -65,7 +66,7 @@ import app.ft.core.DiagLog
 
 private data class Hero(val headline: String, val detail: String, val level: Int)
 
-private fun hero(car: CarState, autoConnect: Boolean): Hero {
+private fun hero(car: CarState, autoConnect: Boolean, direct: Boolean): Hero {
     val s = car.session
     return when {
         s is CarLifeSession.State.Projecting -> Hero("Projecting to the car", "${s.width}×${s.height} at ${s.fps} fps over ${s.via}", 3)
@@ -73,10 +74,11 @@ private fun hero(car: CarState, autoConnect: Boolean): Hero {
         s is CarLifeSession.State.Linked -> Hero("Head unit connected", "Handshake in progress", 2)
         car.carIp != null -> Hero("On the car network", "Car at ${car.carIp}, waiting for the head unit", 2)
         car.p2p.startsWith("connecting") -> Hero("Joining the car", car.p2p.replaceFirstChar { it.uppercase() }, 1)
-        car.running && car.p2p == "searching" -> Hero("Searching for the car", "WiFi Direct scan in progress", 1)
-        car.running -> Hero("Ready", if (car.listening) "Listening for a head unit" + (car.ip?.let { " at $it" } ?: "") else "Service running", 1)
-        autoConnect -> Hero("Starting", "Auto-connect is turning on", 1)
-        else -> Hero("Off", "Turn on auto-connect to find the car by itself", 0)
+        car.running && direct && car.p2p == "searching" -> Hero("Looking for the car", "Over WiFi Direct and bluetooth", 1)
+        car.running && direct -> Hero("Waiting for the car", "Over WiFi Direct and bluetooth", 1)
+        car.running -> Hero("Waiting for the car", car.ip?.let { "Ready on $it, connect the car to this phone" } ?: "Turn on the hotspot so the car can join", 1)
+        autoConnect -> Hero("Starting", "FT is turning on", 1)
+        else -> Hero("Off", "Turn this on to let FT connect to the car", 0)
     }
 }
 
@@ -101,7 +103,7 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
     val aaSays = remember(resumed) { AaInstaller.explain(context) }
     val aaHasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
-    val h = hero(car, autoConnect)
+    val h = hero(car, autoConnect, linkMode == 1)
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(
         when (h.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
@@ -142,34 +144,11 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
 
         item {
             Section("Car link", Icons.Filled.Place) {
-                InfoRow("Bluetooth", "Connect the phone to the car; the head unit then raises its WiFi Direct group")
-                InfoRow("WiFi Direct", car.p2p.replaceFirstChar { it.uppercase() })
-                if (car.step.isNotBlank()) InfoRow("Step", car.step)
-                InfoRow("Phone address", (car.ip ?: "Not on a network yet") + (if (car.beacon) " · calling the head unit" else ""))
-                InfoRow("Head unit ports", "${app.prefs.cmdPort} · ${app.prefs.videoPort} · ${app.prefs.touchPort}")
-                if (car.peers.isNotEmpty()) {
-                    Text("Nearby", style = MaterialTheme.typography.labelLarge, color = scheme.primary, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
-                    car.peers.forEach { name ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    if (name == app.prefs.carP2pName) "Remembered as your car" else "Tap Use to pick this one",
-                                    style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            FilledTonalButton(onClick = { CarLifeService.pickCar(name) }) { Text("Use") }
-                        }
-                    }
-                }
-                Text("How the car connects", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0 to "The car joins my phone", 1 to "WiFi Direct and bluetooth").forEach { (value, label) ->
-                        val chosen = linkMode == value
-                        if (chosen) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Hotspot", 1 to "WiFi + BL").forEach { (value, label) ->
+                        if (linkMode == value) {
                             FilledTonalButton(onClick = {}, modifier = Modifier.weight(1f)) {
-                                Text(label, maxLines = 2, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge)
+                                Text(label, maxLines = 1, textAlign = TextAlign.Center)
                             }
                         } else {
                             OutlinedButton(
@@ -180,10 +159,43 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text(label, maxLines = 2, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge)
+                                Text(label, maxLines = 1, textAlign = TextAlign.Center)
                             }
                         }
                     }
+                }
+                Text(
+                    if (linkMode == 1) "FT asks the car over bluetooth to raise its own WiFi Direct group, then joins it."
+                    else "The car joins the network this phone is sharing, and reaches FT on it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+                HorizontalDivider(color = scheme.outlineVariant)
+                Spacer(Modifier.height(10.dp))
+                if (car.step.isNotBlank()) InfoRow("Now", car.step)
+                InfoRow("Phone address", (car.ip ?: "Not on a network yet") + (if (car.beacon) " · calling the head unit" else ""))
+                if (linkMode == 1) {
+                    InfoRow("WiFi Direct", car.p2p.replaceFirstChar { it.uppercase() })
+                    InfoRow("Bluetooth", "FT needs bluetooth on and the car paired")
+                    if (car.peers.isNotEmpty()) {
+                        Text("Nearby", style = MaterialTheme.typography.labelLarge, color = scheme.primary, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                        car.peers.forEach { name ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        if (name == app.prefs.carP2pName) "Remembered as your car" else "Tap Use to pick this one",
+                                        style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                FilledTonalButton(onClick = { CarLifeService.pickCar(name) }) { Text("Use") }
+                            }
+                        }
+                    }
+                } else {
+                    InfoRow("Head unit ports", "${app.prefs.cmdPort} · ${app.prefs.videoPort} · ${app.prefs.touchPort}")
                 }
                 Actions {
                     FilledTonalButton(onClick = { if (car.running) CarLifeService.searchAgain() else CarLifeService.startAuto(context) }, modifier = Modifier.weight(1f)) { Text("Search", maxLines = 1) }
@@ -197,10 +209,10 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
             Section("Android Auto", Icons.Filled.PlayArrow) {
                 InfoRow(
                     if (car.aaOverlay) "Showing on the car" else "Your phone's Android Auto, on the car",
-                    "FT acts as the Android Auto head unit and bridges the picture to the car"
+                    "FT pretends to be a car, so Android Auto projects onto it and FT passes it to your car"
                 )
                 InfoRow(aaSays.first, aaSays.second)
-                SwitchRow("Start automatically after connection", "Launches Android Auto as soon as the car connects", aaAuto) {
+                SwitchRow("Start automatically", "Opens Android Auto as soon as the car is projecting", aaAuto) {
                     aaAuto = it
                     app.prefs.aaAutoStart = it
                 }

@@ -60,7 +60,7 @@ object AaInstaller {
 
     fun explain(context: Context): Pair<String, String> = when (step(context)) {
         Step.DONE -> "FT installed Android Auto" to
-            "FT can switch on its wireless parts and ask it to connect"
+            "FT can ask it to project onto the car"
         Step.REMOVE_UPDATES -> "Android Auto belongs to ${installerOfAndroidAuto(context) ?: "the phone"}" to
             "FT keeps a copy, takes the update off, then puts its own copy back"
         Step.UNINSTALL -> "Android Auto belongs to ${installerOfAndroidAuto(context) ?: "another installer"}" to
