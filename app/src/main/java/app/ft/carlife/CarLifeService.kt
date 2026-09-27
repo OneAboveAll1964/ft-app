@@ -165,6 +165,7 @@ class CarLifeService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        CarAudioBus.mixTogether = app.prefs.mixGuidance
         CarAudioBus.sink = carAudio
         carDisplay = CarDisplay(this)
         getSystemService(NotificationManager::class.java)
@@ -521,12 +522,6 @@ class CarLifeService : Service() {
         bt.onFrame = { frame -> wireless.feed(frame) }
         bt.onProbe = { wireless.reset(); wireless.hello() }
         bt.onStep = { text -> step(text) }
-        scope.launch {
-            delay(1500)
-            wireless.hello()
-            delay(2500)
-            wireless.askForName()
-        }
     }
 
     private fun onCarRaisedWifiDirect(name: String) {

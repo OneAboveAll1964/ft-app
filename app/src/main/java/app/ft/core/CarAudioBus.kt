@@ -30,6 +30,9 @@ object CarAudioBus {
     private var heldAt = 0L
 
     @Volatile
+    var mixTogether = true
+
+    @Volatile
     private var out: ((ByteArray) -> Unit)? = null
 
     var sink: ((ByteArray) -> Unit)?
@@ -78,7 +81,7 @@ object CarAudioBus {
             if (lane == LANE_MEDIA || lane == LANE_PHONE) {
                 mainAt = now
                 send.add(blend(pcm))
-            } else if (now - mainAt < MAIN_ALIVE_NS) {
+            } else if (mixTogether && now - mainAt < MAIN_ALIVE_NS) {
                 if (held == 0) heldAt = now
                 hold(pcm)
             } else {

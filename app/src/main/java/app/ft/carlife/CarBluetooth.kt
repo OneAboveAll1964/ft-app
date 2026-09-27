@@ -133,7 +133,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             bonded.filter { runCatching { it.name }.getOrNull()?.contains(want, true) == true }
                 .forEach { if (it !in named) named.add(it) }
         }
-        val rest = bonded.filter { it !in named }.sortedByDescending { rank(it) }.filter { rank(it) > 0 }
+        val rest = bonded.filter { it !in named }.filter { rank(it) > 0 }.sortedByDescending { rank(it) }
         return named + rest
     }
 
@@ -147,14 +147,15 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     }
 
     private fun rank(device: BluetoothDevice): Int {
-        val offered = services(device)
         if (!couldBeACar(device)) return 0
-        return when {
-            offered.any { it == CARLIFE_UUID.toString().lowercase() } -> 4
-            offered.any { it == AA_WIRELESS_UUID } -> 3
-            offered.any { it == SPP_UUID.toString().lowercase() } -> 2
-            else -> 0
+        val offered = services(device)
+        val base = when {
+            offered.any { it == CARLIFE_UUID.toString().lowercase() } -> 6
+            offered.any { it == AA_WIRELESS_UUID } -> 5
+            offered.any { it == SPP_UUID.toString().lowercase() } -> 4
+            else -> 2
         }
+        return if (isConnected(device)) base + 10 else base
     }
 
     private fun isConnected(device: BluetoothDevice): Boolean = runCatching {
@@ -167,7 +168,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         runCatching { a.cancelDiscovery() }
         onStep?.invoke("Trying '$name' over bluetooth")
         describe(device, name)
-        if (rank(device) == 0 && prefs.carBtAddress.isBlank()) {
+        if (!couldBeACar(device) && prefs.carBtAddress.isBlank()) {
             DiagLog.d(tag, "skipping '$name', it offers no serial link")
             return false
         }

@@ -58,6 +58,10 @@ fun SettingsScreen(pad: PaddingValues) {
         }
         item {
             Group("Sound") {
+                BoolSetting("Blend directions into the music", p.mixGuidance) {
+                    p.mixGuidance = it
+                    app.ft.core.CarAudioBus.mixTogether = it
+                }
                 BoolSetting("Let the car play the sound over bluetooth", p.audioOverBluetooth) { p.audioOverBluetooth = it }
                 BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
             }

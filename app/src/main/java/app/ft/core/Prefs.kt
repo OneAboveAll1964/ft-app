@@ -51,6 +51,7 @@ class Prefs(context: Context) {
     var carBtName: String get() = str("carBtName", ""); set(v) = set("carBtName", v)
     var carBtAddress: String get() = str("carBtAddress", ""); set(v) = set("carBtAddress", v)
     var swapTrackKeys: Boolean get() = bool("swapTrackKeys", false); set(v) = set("swapTrackKeys", v)
+    var mixGuidance: Boolean get() = bool("mixGuidance", true); set(v) = set("mixGuidance", v)
     var carWpsPin: String get() = str("carWpsPin", ""); set(v) = set("carWpsPin", v)
 
     var mapsPackage: String get() = str("pkgMaps", "com.google.android.apps.maps"); set(v) = set("pkgMaps", v)
