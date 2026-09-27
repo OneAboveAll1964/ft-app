@@ -39,20 +39,19 @@ class CarBtAudio(private val context: Context) {
         a2dp = null
     }
 
-    fun playingOnCar(): BluetoothDevice? =
+    fun somethingIsPlaying(): BluetoothDevice? =
         runCatching { a2dp?.connectedDevices?.firstOrNull() }.getOrNull()
 
-    fun carThatCouldPlay(preferredName: String, address: String?): BluetoothDevice? {
+    fun theCar(preferredName: String, address: String): BluetoothDevice? {
         val a = adapter ?: return null
         val bonded = runCatching { a.bondedDevices?.toList() }.getOrNull().orEmpty()
-        address?.let { want -> bonded.firstOrNull { it.address.equals(want, true) }?.let { return it } }
-        val want = preferredName.trim()
-        if (want.isNotEmpty()) {
-            bonded.firstOrNull { runCatching { it.name }.getOrNull()?.contains(want, true) == true }?.let { return it }
+        val want = address.trim()
+        if (want.isNotEmpty()) bonded.firstOrNull { it.address.equals(want, true) }?.let { return it }
+        val name = preferredName.trim()
+        if (name.isNotEmpty()) {
+            bonded.firstOrNull { runCatching { it.name }.getOrNull()?.contains(name, true) == true }?.let { return it }
         }
-        return bonded.firstOrNull { device ->
-            runCatching { device.bluetoothClass?.hasService(android.bluetooth.BluetoothClass.Service.AUDIO) }.getOrNull() == true
-        }
+        return null
     }
 
     fun askCarToPlay(device: BluetoothDevice): Boolean {

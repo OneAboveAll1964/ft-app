@@ -90,11 +90,18 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             if (socket?.isConnected != true) {
                 runCatching { socket?.close() }
                 socket = null
-                val device = pickDevice(a)
-                if (device == null) {
-                    DiagLog.d(tag, "no bonded car device to poke over bluetooth yet")
-                } else if (connect(a, device)) {
-                    keepAlive()
+                val list = candidates(a)
+                if (list.isEmpty()) {
+                    DiagLog.d(tag, "no paired device here offers a serial link, so none of them can raise WiFi Direct")
+                } else {
+                    for (device in list) {
+                        if (job?.isActive != true) break
+                        if (connect(a, device)) {
+                            prefs.carBtAddress = device.address
+                            keepAlive()
+                            break
+                        }
+                    }
                 }
             }
             delay(4000)
@@ -103,14 +110,32 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         socket = null
     }
 
-    private fun pickDevice(a: BluetoothAdapter): BluetoothDevice? {
+    private fun candidates(a: BluetoothAdapter): List<BluetoothDevice> {
         val bonded = runCatching { a.bondedDevices?.toList() }.getOrNull().orEmpty()
+        val named = ArrayList<BluetoothDevice>()
+        val remembered = prefs.carBtAddress.trim()
+        if (remembered.isNotEmpty()) bonded.firstOrNull { it.address.equals(remembered, true) }?.let { named.add(it) }
+        target?.let { addr -> bonded.firstOrNull { it.address.equals(addr, true) }?.let { if (it !in named) named.add(it) } }
         val want = prefs.carBtName.trim()
-        target?.let { addr -> bonded.firstOrNull { it.address.equals(addr, true) }?.let { return it } }
         if (want.isNotEmpty()) {
-            bonded.firstOrNull { runCatching { it.name }.getOrNull()?.contains(want, true) == true }?.let { return it }
+            bonded.filter { runCatching { it.name }.getOrNull()?.contains(want, true) == true }
+                .forEach { if (it !in named) named.add(it) }
         }
-        return bonded.firstOrNull { isConnected(it) } ?: bonded.firstOrNull()
+        val rest = bonded.filter { it !in named }.sortedByDescending { rank(it) }.filter { rank(it) > 0 }
+        return named + rest
+    }
+
+    private fun services(device: BluetoothDevice): List<String> =
+        runCatching { device.uuids?.map { it.uuid.toString().lowercase() } }.getOrNull().orEmpty()
+
+    private fun rank(device: BluetoothDevice): Int {
+        val offered = services(device)
+        return when {
+            offered.any { it == CARLIFE_UUID.toString().lowercase() } -> 4
+            offered.any { it == AA_WIRELESS_UUID } -> 3
+            offered.any { it == SPP_UUID.toString().lowercase() } -> 2
+            else -> 0
+        }
     }
 
     private fun isConnected(device: BluetoothDevice): Boolean = runCatching {
@@ -122,6 +147,10 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         val name = runCatching { device.name }.getOrNull() ?: device.address
         runCatching { a.cancelDiscovery() }
         describe(device, name)
+        if (rank(device) == 0 && prefs.carBtAddress.isBlank()) {
+            DiagLog.d(tag, "skipping '$name', it offers no serial link")
+            return false
+        }
         for (attempt in attempts(device)) {
             val s = runCatching { attempt.first() }.getOrNull() ?: continue
             try {
@@ -200,5 +229,6 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     companion object {
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private val CARLIFE_UUID: UUID = UUID.fromString("a45bc7e5-bb50-4949-9de1-f78299cf6d78")
+        private const val AA_WIRELESS_UUID = "4de17a00-52cb-11e6-bdf4-0800200c9a66"
     }
 }

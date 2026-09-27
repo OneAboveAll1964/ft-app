@@ -49,6 +49,7 @@ class Prefs(context: Context) {
     var autoConnect: Boolean get() = bool("autoConnect", false); set(v) = set("autoConnect", v)
     var carP2pName: String get() = str("carP2pName", ""); set(v) = set("carP2pName", v)
     var carBtName: String get() = str("carBtName", ""); set(v) = set("carBtName", v)
+    var carBtAddress: String get() = str("carBtAddress", ""); set(v) = set("carBtAddress", v)
     var carWpsPin: String get() = str("carWpsPin", ""); set(v) = set("carWpsPin", v)
 
     var mapsPackage: String get() = str("pkgMaps", "com.google.android.apps.maps"); set(v) = set("pkgMaps", v)

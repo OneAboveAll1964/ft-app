@@ -666,19 +666,20 @@ class CarLifeService : Service() {
         if (!app.prefs.audioOverBluetooth) return false
         btAudio.open()
         if (!btAudio.ready()) return false
-        val playing = btAudio.playingOnCar()
+        val playing = btAudio.somethingIsPlaying()
         if (playing != null) {
+            val who = runCatching { playing.name }.getOrNull() ?: playing.address
             restorePhone()
             audio.stop()
-            DiagLog.i(tag, "the car is playing this phone's sound over bluetooth, so FT will not send it again")
+            DiagLog.i(tag, "'$who' is already playing this phone's sound over bluetooth, so FT will not send it again")
             return true
         }
-        val car = btAudio.carThatCouldPlay(app.prefs.carBtName, null)
+        val car = btAudio.theCar(app.prefs.carBtName, app.prefs.carBtAddress)
         if (car != null && btAudio.askCarToPlay(car)) {
             restorePhone()
             return true
         }
-        DiagLog.i(tag, "the car is not taking sound over bluetooth, FT will stream it instead")
+        DiagLog.i(tag, "nothing is taking this phone's sound over bluetooth, FT will stream it to the car instead")
         return false
     }
 
