@@ -47,6 +47,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -226,7 +230,11 @@ fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOve
             TopAppBar(
                 title = {
                     AnimatedContent(targetState = screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { s ->
-                        if (s == Screen.HOME) Text("FT", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
+                        if (s == Screen.HOME) Image(
+                            painter = painterResource(R.drawable.ft_logo),
+                            contentDescription = "FT",
+                            modifier = Modifier.height(40.dp)
+                        )
                         else Text(s.label, style = MaterialTheme.typography.titleLarge)
                     }
                 },
