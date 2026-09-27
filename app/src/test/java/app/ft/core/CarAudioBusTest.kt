@@ -41,13 +41,38 @@ class CarAudioBusTest {
     }
 
     @Test
-    fun lanesDoNotInterfere() {
+    fun guidanceOnItsOwnGoesStraightToTheCar() {
         listen()
-        CarAudioBus.write(CarAudioBus.LANE_MEDIA, ByteArray(512) { 7 })
         CarAudioBus.write(CarAudioBus.LANE_SPEECH, ByteArray(256) { 9 })
+        assertEquals(1, got.size)
+        assertEquals(256, got[0].size)
+    }
+
+    @Test
+    fun guidanceOverMusicIsMixedInRatherThanQueuedBehindIt() {
+        listen()
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, ByteArray(512) { 0 })
+        CarAudioBus.write(CarAudioBus.LANE_SPEECH, ByteArray(512) { 0 })
+        assertEquals("guidance was sent as its own block", 1, got.size)
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, ByteArray(512) { 0 })
         assertEquals(2, got.size)
-        assertEquals(512, got[0].size)
-        assertEquals(256, got[1].size)
+        assertEquals("the car was sent more audio than music alone", 512, got[1].size)
+    }
+
+    @Test
+    fun mixingTwoSourcesAddsThemTogether() {
+        listen()
+        val quiet = ByteArray(8)
+        for (i in 0 until 4) {
+            quiet[i * 2] = 0x10
+            quiet[i * 2 + 1] = 0x00
+        }
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, quiet)
+        CarAudioBus.write(CarAudioBus.LANE_SPEECH, quiet)
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, quiet)
+        val mixed = got[1]
+        val sample = ((mixed[1].toInt() shl 8) or (mixed[0].toInt() and 0xFF))
+        assertEquals("two equal sources should sum", 0x20, sample)
     }
 
     @Test

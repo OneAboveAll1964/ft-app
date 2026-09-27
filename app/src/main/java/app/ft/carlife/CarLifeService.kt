@@ -54,7 +54,8 @@ data class CarState(
     val p2p: String = "off",
     val peers: List<String> = emptyList(),
     val carIp: String? = null,
-    val beacon: Boolean = false
+    val beacon: Boolean = false,
+    val step: String = ""
 )
 
 class CarLifeService : Service() {
@@ -147,11 +148,17 @@ class CarLifeService : Service() {
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
     private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
     private val btAudio by lazy { CarBtAudio(this) }
+    private fun step(text: String) {
+        DiagLog.i(tag, text)
+        _state.update { it.copy(step = text) }
+    }
+
     private val wireless by lazy {
         CarWirelessSetup(
             send = { bytes -> bt.write(bytes) },
             localIp = { NetUtil.localIpv4() },
-            onCarWifiName = { name -> onCarRaisedWifiDirect(name) }
+            onCarWifiName = { name -> onCarRaisedWifiDirect(name) },
+            progress = { text -> step(text) }
         )
     }
 
@@ -509,9 +516,11 @@ class CarLifeService : Service() {
     }
 
     private fun startWirelessSetup() {
+        step("Looking for the car over bluetooth")
         wireless.reset()
         bt.onFrame = { frame -> wireless.feed(frame) }
         bt.onProbe = { wireless.reset(); wireless.hello() }
+        bt.onStep = { text -> step(text) }
         scope.launch {
             delay(1500)
             wireless.hello()
@@ -527,7 +536,7 @@ class CarLifeService : Service() {
             DiagLog.i(tag, "already connected to the car, leaving WiFi Direct alone")
             return
         }
-        DiagLog.i(tag, "joining the car's WiFi Direct group '$name'")
+        step("Joining the car's WiFi Direct group '$name'")
         finder?.connectByName(name) ?: run {
             startFinder()
             scope.launch {

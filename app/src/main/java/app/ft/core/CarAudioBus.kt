@@ -12,6 +12,8 @@ object CarAudioBus {
     private const val REAL_TIME = RATE * 4
     private const val CEILING = REAL_TIME * 102 / 100
     private const val WINDOW_NS = 1_000_000_000L
+    private const val MAIN_ALIVE_NS = 400_000_000L
+    private const val HOLD_CAP = REAL_TIME / 4
 
     private val lock = Any()
     private val recent = ArrayDeque<LongArray>()
@@ -20,6 +22,10 @@ object CarAudioBus {
     private var dropped = 0L
     private val perLane = HashMap<Int, Long>()
     private var reported = System.nanoTime()
+    private val waiting = ArrayDeque<ByteArray>()
+    private var held = 0
+    private var offset = 0
+    private var mainAt = 0L
 
     @Volatile
     private var out: ((ByteArray) -> Unit)? = null
@@ -32,6 +38,10 @@ object CarAudioBus {
                 recent.clear()
                 inWindow = 0
                 perLane.clear()
+                waiting.clear()
+                held = 0
+                offset = 0
+                mainAt = 0
             }
         }
 
@@ -49,12 +59,58 @@ object CarAudioBus {
         val target = out ?: return
         if (pcm.isEmpty()) return
         val now = System.nanoTime()
+        var give: ByteArray? = null
         synchronized(lock) {
             perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
-            sent += pcm.size
+            if (lane == LANE_MEDIA || lane == LANE_PHONE) {
+                mainAt = now
+                give = blend(pcm)
+            } else if (now - mainAt < MAIN_ALIVE_NS) {
+                hold(pcm)
+            } else {
+                give = pcm
+            }
+            give?.let { sent += it.size }
         }
-        runCatching { target(pcm) }
+        give?.let { runCatching { target(it) } }
         report(now)
+    }
+
+    private fun hold(pcm: ByteArray) {
+        waiting.addLast(pcm)
+        held += pcm.size
+        while (held > HOLD_CAP) {
+            val first = waiting.pollFirst() ?: break
+            held -= first.size
+            dropped += first.size
+        }
+    }
+
+    private fun blend(media: ByteArray): ByteArray {
+        if (held == 0) return media
+        val out = media.copyOf()
+        var at = 0
+        while (at + 1 < out.size && held > 0) {
+            val first = waiting.peekFirst() ?: break
+            val take = minOf(first.size - offset, out.size - at)
+            var i = 0
+            while (i + 1 < take) {
+                val a = ((out[at + i + 1].toInt() shl 8) or (out[at + i].toInt() and 0xFF)).toShort()
+                val b = ((first[offset + i + 1].toInt() shl 8) or (first[offset + i].toInt() and 0xFF)).toShort()
+                val sum = (a + b).coerceIn(-32768, 32767)
+                out[at + i] = (sum and 0xFF).toByte()
+                out[at + i + 1] = ((sum shr 8) and 0xFF).toByte()
+                i += 2
+            }
+            at += take
+            offset += take
+            held -= take
+            if (offset >= first.size) {
+                waiting.pollFirst()
+                offset = 0
+            }
+        }
+        return out
     }
 
     private fun laneName(id: Int) = when (id) {

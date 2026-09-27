@@ -37,6 +37,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -87,6 +88,7 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
     val log by DiagLog.entries.collectAsState()
     val mirrorGranted by app.mirrorGranted.collectAsState()
     var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
+    LaunchedEffect(car.running) { if (car.running) autoConnect = true }
     var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
@@ -128,7 +130,7 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                         Text(h.detail, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.width(12.dp))
-                    Switch(checked = autoConnect, onCheckedChange = { on ->
+                    Switch(checked = car.running || autoConnect, onCheckedChange = { on ->
                         autoConnect = on
                         app.prefs.autoConnect = on
                         if (on) CarLifeService.startAuto(context) else CarLifeService.stop(context)
@@ -141,6 +143,7 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
             Section("Car link", Icons.Filled.Place) {
                 InfoRow("Bluetooth", "Connect the phone to the car; the head unit then raises its WiFi Direct group")
                 InfoRow("WiFi Direct", car.p2p.replaceFirstChar { it.uppercase() })
+                if (car.step.isNotBlank()) InfoRow("Step", car.step)
                 InfoRow("Phone address", (car.ip ?: "Not on a network yet") + (if (car.beacon) " · calling the head unit" else ""))
                 InfoRow("Head unit ports", "${app.prefs.cmdPort} · ${app.prefs.videoPort} · ${app.prefs.touchPort}")
                 if (car.peers.isNotEmpty()) {

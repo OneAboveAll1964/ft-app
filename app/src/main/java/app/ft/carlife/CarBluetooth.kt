@@ -28,6 +28,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     @Volatile private var target: String? = null
     var onFrame: ((ByteArray) -> Unit)? = null
     var onProbe: (() -> Unit)? = null
+    var onStep: ((String) -> Unit)? = null
     @Volatile private var heard = false
 
     val open: Boolean get() = socket?.isConnected == true
@@ -164,6 +165,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private fun connect(a: BluetoothAdapter, device: BluetoothDevice): Boolean {
         val name = runCatching { device.name }.getOrNull() ?: device.address
         runCatching { a.cancelDiscovery() }
+        onStep?.invoke("Trying '$name' over bluetooth")
         describe(device, name)
         if (rank(device) == 0 && prefs.carBtAddress.isBlank()) {
             DiagLog.d(tag, "skipping '$name', it offers no serial link")
@@ -174,7 +176,8 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             try {
                 s.connect()
                 socket = s
-                DiagLog.i(tag, "bluetooth serial link open to '$name' via ${attempt.second}; head unit should raise WiFi Direct now")
+                onStep?.invoke("Connected to '$name' over bluetooth")
+                DiagLog.i(tag, "bluetooth serial link open to '$name' via ${attempt.second}")
                 return true
             } catch (t: Throwable) {
                 runCatching { s.close() }

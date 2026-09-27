@@ -8,7 +8,8 @@ import app.ft.core.ProtoWriter
 class CarWirelessSetup(
     private val send: (ByteArray) -> Unit,
     private val localIp: () -> String?,
-    private val onCarWifiName: (String) -> Unit
+    private val onCarWifiName: (String) -> Unit,
+    private val progress: (String) -> Unit = {}
 ) {
     private val tag = "CarBT"
     private val buffer = ArrayList<Byte>(1024)
@@ -20,7 +21,7 @@ class CarWirelessSetup(
     }
 
     fun hello() {
-        DiagLog.i(tag, "telling the head unit this phone is ready for a wireless link")
+        progress("Telling the head unit this phone is ready")
         send(CarLifeFraming.cmd(MD_READY))
     }
 
@@ -45,13 +46,13 @@ class CarWirelessSetup(
     private fun handle(serviceId: Int, body: ByteArray) {
         when (serviceId) {
             HU_READY -> {
-                DiagLog.i(tag, "head unit is ready over bluetooth, asking what wireless it offers")
+                progress("Head unit answered, asking what wireless it offers")
                 send(CarLifeFraming.cmd(MD_READY))
                 send(CarLifeFraming.cmd(MD_WIRELESS_INFO_REQUEST))
             }
             HU_BYE -> DiagLog.i(tag, "head unit closed the bluetooth wireless link")
             HU_WIRELESS_INFO -> {
-                DiagLog.i(tag, "head unit described its wireless, asking it to raise WiFi Direct")
+                progress("Asking the head unit to switch on WiFi Direct")
                 askForName()
             }
             HU_WIFI_DIRECT_NAME -> {
@@ -61,7 +62,7 @@ class CarWirelessSetup(
                 if (name.isBlank()) {
                     DiagLog.w(tag, "head unit sent no WiFi Direct name")
                 } else {
-                    DiagLog.i(tag, "head unit raised WiFi Direct as '$name'${if (p2p.isNotBlank()) " ($p2p)" else ""}")
+                    progress("Head unit switched on WiFi Direct as '$name'")
                     onCarWifiName(name)
                 }
             }
@@ -70,7 +71,7 @@ class CarWirelessSetup(
                 if (ip == null) {
                     DiagLog.w(tag, "head unit asked for this phone's address but there is none yet")
                 } else {
-                    DiagLog.i(tag, "telling the head unit this phone is at $ip")
+                    progress("Telling the head unit this phone is at $ip")
                     send(CarLifeFraming.cmd(MD_WIFI_IP, ProtoWriter().string(1, ip).toByteArray()))
                 }
             }
