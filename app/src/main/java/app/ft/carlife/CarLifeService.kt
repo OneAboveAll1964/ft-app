@@ -192,11 +192,17 @@ class CarLifeService : Service() {
                 startAudioToCar()
             }
             ACTION_AUTO -> {
-                foreground("Looking for the car")
+                val direct = app.prefs.linkMode == 1
+                foreground(if (direct) "Asking the car for WiFi Direct" else "Waiting for the car on this network")
                 startWifiLink()
-                startWirelessSetup()
-                bt.start(intent.getStringExtra(EXTRA_BT_ADDR))
-                scheduleFinderFallback()
+                if (direct) {
+                    startWirelessSetup()
+                    bt.start(intent.getStringExtra(EXTRA_BT_ADDR))
+                    startFinder()
+                } else {
+                    step("Waiting for the car to reach this phone")
+                    _state.update { it.copy(p2p = "off, the car joins this phone instead") }
+                }
             }
         }
         return START_STICKY

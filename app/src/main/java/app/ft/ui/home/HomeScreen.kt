@@ -90,6 +90,7 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
     var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
     LaunchedEffect(car.running) { if (car.running) autoConnect = true }
     var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
+    var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
@@ -159,6 +160,28 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                             }
                             Spacer(Modifier.width(8.dp))
                             FilledTonalButton(onClick = { CarLifeService.pickCar(name) }) { Text("Use") }
+                        }
+                    }
+                }
+                Text("How the car connects", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "The car joins my phone", 1 to "WiFi Direct and bluetooth").forEach { (value, label) ->
+                        val chosen = linkMode == value
+                        if (chosen) {
+                            FilledTonalButton(onClick = {}, modifier = Modifier.weight(1f)) {
+                                Text(label, maxLines = 2, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge)
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    linkMode = value
+                                    app.prefs.linkMode = value
+                                    CarLifeService.startAuto(context)
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(label, maxLines = 2, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge)
+                            }
                         }
                     }
                 }

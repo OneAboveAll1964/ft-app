@@ -85,11 +85,25 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
 
     private suspend fun loop() {
         val a = adapter
-        if (a == null || !a.isEnabled) {
-            DiagLog.w(tag, "bluetooth is off; turn it on and connect to the car so the head unit raises WiFi Direct")
+        if (a == null) {
+            DiagLog.w(tag, "this phone has no bluetooth, so the head unit cannot be asked to raise WiFi Direct")
             return
         }
+        var moaned = false
         while (scope.isActive && job?.isActive == true) {
+            if (!a.isEnabled) {
+                if (!moaned) {
+                    moaned = true
+                    onStep?.invoke("Waiting for bluetooth to be switched on")
+                    DiagLog.w(tag, "bluetooth is off, FT will pick up as soon as you switch it on")
+                }
+                delay(4000)
+                continue
+            }
+            if (moaned) {
+                moaned = false
+                DiagLog.i(tag, "bluetooth is on again, looking for the car")
+            }
             if (socket?.isConnected != true) {
                 runCatching { socket?.close() }
                 socket = null
