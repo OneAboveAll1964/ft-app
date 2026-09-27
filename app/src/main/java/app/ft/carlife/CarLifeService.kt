@@ -483,6 +483,7 @@ class CarLifeService : Service() {
     private fun startWirelessSetup() {
         wireless.reset()
         bt.onFrame = { frame -> wireless.feed(frame) }
+        bt.onProbe = { wireless.reset(); wireless.hello() }
         scope.launch {
             delay(1500)
             wireless.hello()

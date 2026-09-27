@@ -150,6 +150,7 @@ object CarAudioBus {
                 var moment = System.nanoTime()
                 if (!ready) {
                     last = moment
+                    tellRoom()
                     continue
                 }
                 tokens = (tokens + (moment - last)).coerceAtMost(BURST_NS)
@@ -189,7 +190,7 @@ object CarAudioBus {
                     runCatching { out?.invoke(frame.copyOf()) }
                     sent += CHUNK
                 }
-                var freed: List<() -> Unit>
+                tellRoom()
                 synchronized(lock) {
                     val now = System.nanoTime()
                     val stale = lanes.entries.filter { it.value.size in 1 until CHUNK && now - it.value.lastWrite > STALE_NS }
@@ -198,9 +199,7 @@ object CarAudioBus {
                         e.value.head = 0
                         e.value.size = 0
                     }
-                    freed = roomListeners.filter { (lane, _) -> (lanes[lane]?.size ?: 0) < ROOM }.values.toList()
                 }
-                freed.forEach { runCatching { it() } }
                 moment = System.nanoTime()
                 if (moment - reported > 5_000_000_000L) {
                     report(moment - reported, sent)
@@ -209,6 +208,15 @@ object CarAudioBus {
                 }
             }
         }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-audio"; start() }
+    }
+
+    private fun tellRoom() {
+        val freed: List<() -> Unit>
+        synchronized(lock) {
+            if (roomListeners.isEmpty()) return
+            freed = roomListeners.filter { (lane, _) -> (lanes[lane]?.size ?: 0) < ROOM }.values.toList()
+        }
+        freed.forEach { runCatching { it() } }
     }
 
     private fun laneName(id: Int) = when (id) {

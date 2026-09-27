@@ -27,6 +27,8 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private val described = HashSet<String>()
     @Volatile private var target: String? = null
     var onFrame: ((ByteArray) -> Unit)? = null
+    var onProbe: (() -> Unit)? = null
+    @Volatile private var heard = false
 
     val open: Boolean get() = socket?.isConnected == true
 
@@ -97,8 +99,17 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
                     for (device in list) {
                         if (job?.isActive != true) break
                         if (connect(a, device)) {
-                            prefs.carBtAddress = device.address
-                            keepAlive()
+                            if (speaksCarLife()) {
+                                prefs.carBtAddress = device.address
+                                keepAlive()
+                            } else {
+                                val who = runCatching { device.name }.getOrNull() ?: device.address
+                                DiagLog.i(tag, "'$who' answered but said nothing a head unit would say, trying the next one")
+                                runCatching { socket?.close() }
+                                socket = null
+                                if (prefs.carBtAddress.equals(device.address, true)) prefs.carBtAddress = ""
+                                continue
+                            }
                             break
                         }
                     }
@@ -128,8 +139,15 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private fun services(device: BluetoothDevice): List<String> =
         runCatching { device.uuids?.map { it.uuid.toString().lowercase() } }.getOrNull().orEmpty()
 
+    private fun couldBeACar(device: BluetoothDevice): Boolean {
+        val major = runCatching { device.bluetoothClass?.majorDeviceClass }.getOrNull() ?: return false
+        return major == android.bluetooth.BluetoothClass.Device.Major.AUDIO_VIDEO ||
+            major == android.bluetooth.BluetoothClass.Device.Major.UNCATEGORIZED
+    }
+
     private fun rank(device: BluetoothDevice): Int {
         val offered = services(device)
+        if (!couldBeACar(device)) return 0
         return when {
             offered.any { it == CARLIFE_UUID.toString().lowercase() } -> 4
             offered.any { it == AA_WIRELESS_UUID } -> 3
@@ -206,6 +224,28 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         }
     }
 
+    private suspend fun speaksCarLife(): Boolean {
+        val s = socket ?: return false
+        onProbe?.invoke()
+        val input = runCatching { s.inputStream }.getOrNull() ?: return false
+        val buf = ByteArray(256)
+        val until = System.nanoTime() + PROBE_NS
+        while (System.nanoTime() < until && scope.isActive) {
+            val ready = runCatching { input.available() }.getOrDefault(0)
+            if (ready > 0) {
+                val n = runCatching { input.read(buf) }.getOrDefault(-1)
+                if (n > 0) {
+                    heard = true
+                    onFrame?.invoke(buf.copyOf(n))
+                    return true
+                }
+                if (n < 0) return false
+            }
+            delay(200)
+        }
+        return false
+    }
+
     private suspend fun keepAlive() {
         val s = socket ?: return
         val input = runCatching { s.inputStream }.getOrNull()
@@ -230,5 +270,6 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private val CARLIFE_UUID: UUID = UUID.fromString("a45bc7e5-bb50-4949-9de1-f78299cf6d78")
         private const val AA_WIRELESS_UUID = "4de17a00-52cb-11e6-bdf4-0800200c9a66"
+        private const val PROBE_NS = 4_000_000_000L
     }
 }
