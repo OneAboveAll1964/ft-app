@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import app.ft.R
 import app.ft.FTApp
 import app.ft.MainActivity
 import app.ft.core.DiagLog
@@ -200,7 +201,7 @@ class AaHeadUnitService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setContentTitle("FT")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(R.drawable.ic_stat_name)
             .setContentIntent(pi)
             .setOngoing(true)
             .build()

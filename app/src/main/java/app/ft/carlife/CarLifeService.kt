@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.view.WindowManager
+import app.ft.R
 import app.ft.FTApp
 import app.ft.FTTouchService
 import app.ft.MainActivity
@@ -794,7 +795,7 @@ class CarLifeService : Service() {
         return Notification.Builder(this, CHANNEL)
             .setContentTitle("FT")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setSmallIcon(R.drawable.ic_stat_name)
             .setContentIntent(pi)
             .setOngoing(true)
             .build()
