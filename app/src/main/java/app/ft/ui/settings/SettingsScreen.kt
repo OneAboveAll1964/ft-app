@@ -52,6 +52,12 @@ fun SettingsScreen(pad: PaddingValues) {
             }
         }
         item {
+            Group("Sound") {
+                BoolSetting("Let the car play the sound over bluetooth", p.audioOverBluetooth) { p.audioOverBluetooth = it }
+                BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
+            }
+        }
+        item {
             Group("Picture quality") {
                 Text(
                     "Presets set everything below. Change any one of them and it becomes Custom.",

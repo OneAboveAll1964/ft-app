@@ -127,6 +127,7 @@ class CarLifeService : Service() {
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
     private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
+    private val btAudio by lazy { CarBtAudio(this) }
     private val wireless by lazy {
         CarWirelessSetup(
             send = { bytes -> bt.write(bytes) },
@@ -648,6 +649,7 @@ class CarLifeService : Service() {
 
     private fun startAudioToCar() {
         if (audio.active) return
+        if (carPlaysOurSound()) return
         if (!canRecord()) {
             DiagLog.w(tag, "no microphone permission, the car will get picture without sound")
             return
@@ -658,6 +660,26 @@ class CarLifeService : Service() {
             return
         }
         if (audio.start(mp)) silencePhone()
+    }
+
+    private fun carPlaysOurSound(): Boolean {
+        if (!app.prefs.audioOverBluetooth) return false
+        btAudio.open()
+        if (!btAudio.ready()) return false
+        val playing = btAudio.playingOnCar()
+        if (playing != null) {
+            restorePhone()
+            audio.stop()
+            DiagLog.i(tag, "the car is playing this phone's sound over bluetooth, so FT will not send it again")
+            return true
+        }
+        val car = btAudio.carThatCouldPlay(app.prefs.carBtName, null)
+        if (car != null && btAudio.askCarToPlay(car)) {
+            restorePhone()
+            return true
+        }
+        DiagLog.i(tag, "the car is not taking sound over bluetooth, FT will stream it instead")
+        return false
     }
 
     private fun silencePhone() {
@@ -807,6 +829,7 @@ class CarLifeService : Service() {
     override fun onDestroy() {
         teardown()
         scope.cancel()
+        btAudio.close()
         CarAudioBus.sink = null
         instance = null
         super.onDestroy()

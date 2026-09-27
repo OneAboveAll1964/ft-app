@@ -22,6 +22,9 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private val adapter: BluetoothAdapter? = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     private var job: Job? = null
     @Volatile private var socket: BluetoothSocket? = null
+    @Volatile private var server: android.bluetooth.BluetoothServerSocket? = null
+    private var serverJob: Job? = null
+    private val described = HashSet<String>()
     @Volatile private var target: String? = null
     var onFrame: ((ByteArray) -> Unit)? = null
 
@@ -44,13 +47,37 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         if (job?.isActive == true) return
         target = deviceAddress
         job = scope.launch(Dispatchers.IO) { loop() }
+        if (serverJob?.isActive != true) serverJob = scope.launch(Dispatchers.IO) { listen() }
     }
 
     fun stop() {
         job?.cancel()
         job = null
+        serverJob?.cancel()
+        serverJob = null
+        runCatching { server?.close() }
+        server = null
+        described.clear()
         runCatching { socket?.close() }
         socket = null
+    }
+
+    private suspend fun listen() {
+        val a = adapter ?: return
+        if (!a.isEnabled) return
+        val ss = runCatching { a.listenUsingRfcommWithServiceRecord("FT", CARLIFE_UUID) }.getOrNull()
+            ?: runCatching { a.listenUsingRfcommWithServiceRecord("FT", SPP_UUID) }.getOrNull()
+            ?: return
+        server = ss
+        DiagLog.i(tag, "offering FT's own CarLife service so the head unit can dial this phone")
+        while (scope.isActive && serverJob?.isActive == true) {
+            val s = runCatching { ss.accept() }.getOrNull() ?: break
+            DiagLog.i(tag, "head unit dialled this phone over bluetooth")
+            runCatching { socket?.close() }
+            socket = s
+            keepAlive()
+        }
+        runCatching { ss.close() }
     }
 
     private suspend fun loop() {
@@ -94,6 +121,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private fun connect(a: BluetoothAdapter, device: BluetoothDevice): Boolean {
         val name = runCatching { device.name }.getOrNull() ?: device.address
         runCatching { a.cancelDiscovery() }
+        describe(device, name)
         for (attempt in attempts(device)) {
             val s = runCatching { attempt.first() }.getOrNull() ?: continue
             try {
@@ -109,6 +137,17 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         return false
     }
 
+    private fun describe(device: BluetoothDevice, name: String) {
+        if (!described.add(device.address)) return
+        runCatching { device.fetchUuidsWithSdp() }
+        val offered = runCatching { device.uuids?.map { it.uuid.toString() } }.getOrNull().orEmpty()
+        if (offered.isEmpty()) {
+            DiagLog.i(tag, "'$name' lists no bluetooth services, so FT will try the CarLife one and then each channel")
+        } else {
+            DiagLog.i(tag, "'$name' offers ${offered.size} bluetooth services: ${offered.joinToString(", ")}")
+        }
+    }
+
     private fun attempts(device: BluetoothDevice): List<Pair<() -> BluetoothSocket, String>> = listOf(
         ({ device.createRfcommSocketToServiceRecord(CARLIFE_UUID) } to "CarLife service"),
         ({ device.createInsecureRfcommSocketToServiceRecord(CARLIFE_UUID) } to "CarLife service insecure"),
@@ -118,7 +157,12 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             val m = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
             m.invoke(device, 1) as BluetoothSocket
         } to "channel 1")
-    )
+    ) + (2..12).map { ch ->
+        ({
+            val m = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+            m.invoke(device, ch) as BluetoothSocket
+        } to "channel $ch")
+    }
 
     fun write(bytes: ByteArray): Boolean {
         val s = socket ?: return false
