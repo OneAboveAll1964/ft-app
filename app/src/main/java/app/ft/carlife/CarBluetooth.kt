@@ -22,7 +22,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private val adapter: BluetoothAdapter? = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     private var job: Job? = null
     @Volatile private var socket: BluetoothSocket? = null
-    @Volatile private var server: android.bluetooth.BluetoothServerSocket? = null
+    @Volatile private var servers: List<android.bluetooth.BluetoothServerSocket> = emptyList()
     private var serverJob: Job? = null
     private val described = HashSet<String>()
     @Volatile private var target: String? = null
@@ -49,7 +49,6 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     fun start(deviceAddress: String? = null) {
         if (job?.isActive == true) return
         target = deviceAddress
-        job = scope.launch(Dispatchers.IO) { loop() }
         if (serverJob?.isActive != true) serverJob = scope.launch(Dispatchers.IO) { listen() }
     }
 
@@ -58,8 +57,8 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         job = null
         serverJob?.cancel()
         serverJob = null
-        runCatching { server?.close() }
-        server = null
+        servers.forEach { runCatching { it.close() } }
+        servers = emptyList()
         described.clear()
         runCatching { socket?.close() }
         socket = null
@@ -67,20 +66,51 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
 
     private suspend fun listen() {
         val a = adapter ?: return
-        if (!a.isEnabled) return
-        val ss = runCatching { a.listenUsingRfcommWithServiceRecord("FT", CARLIFE_UUID) }.getOrNull()
-            ?: runCatching { a.listenUsingRfcommWithServiceRecord("FT", SPP_UUID) }.getOrNull()
-            ?: return
-        server = ss
-        DiagLog.i(tag, "offering FT's own CarLife service so the head unit can dial this phone")
+        var moaned = false
         while (scope.isActive && serverJob?.isActive == true) {
-            val s = runCatching { ss.accept() }.getOrNull() ?: break
-            DiagLog.i(tag, "head unit dialled this phone over bluetooth")
-            runCatching { socket?.close() }
-            socket = s
-            keepAlive()
+            if (!a.isEnabled) {
+                if (!moaned) {
+                    moaned = true
+                    onStep?.invoke("Switch bluetooth on so the car can call this phone")
+                }
+                delay(4000)
+                continue
+            }
+            moaned = false
+            val offers = listOf(CARLIFE_UUID to "CarLife", SPP_UUID to "SPP")
+            val sockets = offers.mapNotNull { (uuid, label) ->
+                runCatching { a.listenUsingRfcommWithServiceRecord(SERVICE_NAME, uuid) }.getOrNull()?.let { it to label }
+            }
+            if (sockets.isEmpty()) {
+                delay(4000)
+                continue
+            }
+            servers = sockets.map { it.first }
+            onStep?.invoke("Waiting for the car to call this phone")
+            DiagLog.i(tag, "offering '$SERVICE_NAME' on ${sockets.joinToString(" and ") { it.second }}, waiting for the head unit to connect")
+            val taken = java.util.concurrent.atomic.AtomicBoolean(false)
+            val waits = sockets.map { (ss, label) ->
+                scope.launch(Dispatchers.IO) {
+                    val s = runCatching { ss.accept() }.getOrNull() ?: return@launch
+                    if (!taken.compareAndSet(false, true)) {
+                        runCatching { s.close() }
+                        return@launch
+                    }
+                    val who = runCatching { s.remoteDevice?.name }.getOrNull() ?: "the car"
+                    DiagLog.i(tag, "'$who' called this phone over bluetooth on $label")
+                    onStep?.invoke("'$who' called this phone")
+                    runCatching { socket?.close() }
+                    socket = s
+                    prefs.carBtAddress = runCatching { s.remoteDevice?.address }.getOrNull() ?: prefs.carBtAddress
+                    onProbe?.invoke()
+                    keepAlive()
+                }
+            }
+            waits.forEach { it.join() }
+            servers.forEach { runCatching { it.close() } }
+            servers = emptyList()
+            delay(1500)
         }
-        runCatching { ss.close() }
     }
 
     private suspend fun loop() {
@@ -289,5 +319,6 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         private val CARLIFE_UUID: UUID = UUID.fromString("a45bc7e5-bb50-4949-9de1-f78299cf6d78")
         private const val AA_WIRELESS_UUID = "4de17a00-52cb-11e6-bdf4-0800200c9a66"
         private const val PROBE_NS = 4_000_000_000L
+        private const val SERVICE_NAME = "carlife"
     }
 }

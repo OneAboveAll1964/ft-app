@@ -173,6 +173,18 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                 )
                 HorizontalDivider(color = scheme.outlineVariant)
                 Spacer(Modifier.height(10.dp))
+                val missing = remember(resumed, linkMode, car.ip) { whatIsMissing(context, linkMode == 1, car.ip) }
+                missing.forEach { need ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(need.title, style = MaterialTheme.typography.bodyLarge, color = scheme.error)
+                            Text(need.detail, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        FilledTonalButton(onClick = { runCatching { context.startActivity(need.fix) } }) { Text("Turn on") }
+                    }
+                }
+                if (missing.isNotEmpty()) Spacer(Modifier.height(6.dp))
                 if (car.step.isNotBlank()) InfoRow("Now", car.step)
                 InfoRow("Phone address", (car.ip ?: "Not on a network yet") + (if (car.beacon) " · calling the head unit" else ""))
                 if (linkMode == 1) {
@@ -320,4 +332,34 @@ private fun Actions(content: @Composable RowScope.() -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         content = content
     )
+}
+
+private data class Need(val title: String, val detail: String, val fix: android.content.Intent)
+
+private fun whatIsMissing(context: android.content.Context, direct: Boolean, ip: String?): List<Need> {
+    val needs = ArrayList<Need>()
+    if (direct) {
+        val bt = (context.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
+        if (bt != null && !bt.isEnabled) {
+            needs += Need(
+                "Bluetooth is off",
+                "The car calls this phone over bluetooth to start WiFi Direct",
+                android.content.Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+            )
+        }
+        val wifi = context.applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+        if (wifi != null && !wifi.isWifiEnabled) {
+            needs += Need(
+                "WiFi is off",
+                "WiFi Direct needs WiFi switched on",
+                android.content.Intent(Settings.ACTION_WIFI_SETTINGS)
+            )
+        }
+    } else if (ip == null) {
+        val tether = android.content.Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings")
+        val fix = if (context.packageManager.resolveActivity(tether, 0) != null) tether
+        else android.content.Intent(Settings.ACTION_WIRELESS_SETTINGS)
+        needs += Need("The hotspot is off", "The car joins the network this phone shares", fix)
+    }
+    return needs
 }
