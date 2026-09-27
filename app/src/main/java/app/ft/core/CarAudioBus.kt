@@ -13,6 +13,7 @@ object CarAudioBus {
     private const val CEILING = REAL_TIME * 102 / 100
     private const val WINDOW_NS = 1_000_000_000L
     private const val MAIN_ALIVE_NS = 400_000_000L
+    private const val HOLD_NS = 40_000_000L
     private const val HOLD_CAP = REAL_TIME / 4
 
     private val lock = Any()
@@ -26,6 +27,7 @@ object CarAudioBus {
     private var held = 0
     private var offset = 0
     private var mainAt = 0L
+    private var heldAt = 0L
 
     @Volatile
     private var out: ((ByteArray) -> Unit)? = null
@@ -42,6 +44,7 @@ object CarAudioBus {
                 held = 0
                 offset = 0
                 mainAt = 0
+                heldAt = 0
             }
         }
 
@@ -59,20 +62,31 @@ object CarAudioBus {
         val target = out ?: return
         if (pcm.isEmpty()) return
         val now = System.nanoTime()
-        var give: ByteArray? = null
+        val send = ArrayList<ByteArray>(3)
         synchronized(lock) {
             perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
+            if (held > 0 && now - heldAt > HOLD_NS) {
+                while (true) {
+                    val first = waiting.pollFirst() ?: break
+                    val part = if (offset > 0) first.copyOfRange(offset, first.size) else first
+                    offset = 0
+                    held -= part.size
+                    send.add(part)
+                }
+                held = 0
+            }
             if (lane == LANE_MEDIA || lane == LANE_PHONE) {
                 mainAt = now
-                give = blend(pcm)
+                send.add(blend(pcm))
             } else if (now - mainAt < MAIN_ALIVE_NS) {
+                if (held == 0) heldAt = now
                 hold(pcm)
             } else {
-                give = pcm
+                send.add(pcm)
             }
-            give?.let { sent += it.size }
+            send.forEach { sent += it.size }
         }
-        give?.let { runCatching { target(it) } }
+        send.forEach { runCatching { target(it) } }
         report(now)
     }
 
