@@ -74,10 +74,21 @@ fun SettingsScreen(pad: PaddingValues) {
                     }
                 }
                 Text(
-                    if (current == CUSTOM) "Custom settings" else "${current} quality",
+                    when (current) {
+                        CUSTOM -> "Custom settings"
+                        DEFAULT.name -> "The settings FT started with"
+                        else -> "$current quality"
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
+                OutlinedButton(
+                    onClick = { apply(p, DEFAULT); rev++ },
+                    enabled = current != DEFAULT.name,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (current == DEFAULT.name) "Already back to default" else "Put everything back to default")
+                }
                 Text("Resolution", style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SIZES.take(3).forEach { size ->
@@ -192,9 +203,11 @@ private fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> 
 
 private const val CUSTOM = "Custom"
 
-private data class Preset(val name: String, val w: Int, val h: Int, val fps: Int, val bitrate: Int, val density: Int)
+private data class Preset(val name: String, val w: Int, val h: Int, val fps: Int, val bitrate: Int, val density: Int, val minFps: Int = 0)
 
 private data class Size(val label: String, val w: Int, val h: Int)
+
+private val DEFAULT = Preset("Default", 0, 0, 0, 3_000_000, 160)
 
 private val PRESETS = listOf(
     Preset("Low", 1280, 720, 24, 1_500_000, 160),
@@ -211,13 +224,15 @@ private val SIZES = listOf(
     Size("1920×1080", 1920, 1080)
 )
 
+private fun matches(p: app.ft.core.Prefs, preset: Preset) =
+    preset.w == p.forceWidth && preset.h == p.forceHeight && preset.fps == p.forceFps &&
+        preset.bitrate == p.maxBitrate && preset.density == p.carDensity && preset.minFps == p.minFps
+
 private fun presetName(p: app.ft.core.Prefs): String =
-    PRESETS.firstOrNull {
-        it.w == p.forceWidth && it.h == p.forceHeight && it.fps == p.forceFps &&
-            it.bitrate == p.maxBitrate && it.density == p.carDensity
-    }?.name ?: CUSTOM
+    (listOf(DEFAULT) + PRESETS).firstOrNull { matches(p, it) }?.name ?: CUSTOM
 
 private fun apply(p: app.ft.core.Prefs, preset: Preset) {
+    p.minFps = preset.minFps
     p.forceWidth = preset.w
     p.forceHeight = preset.h
     p.forceFps = preset.fps
