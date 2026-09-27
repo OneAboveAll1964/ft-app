@@ -142,12 +142,20 @@ class CarLifeService : Service() {
     }
     @Volatile private var aaAutoLaunched = false
     @Volatile private var resumedMedia = false
+    private var carNetwork: android.net.ConnectivityManager.NetworkCallback? = null
     @Volatile private var askedForShare = false
     private var savedVolume = -1
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
     private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
     private val btAudio by lazy { CarBtAudio(this) }
+    private val ble by lazy {
+        CarIccoaBle(
+            this,
+            onOffer = { offer -> onCarOfferedNetwork(offer) },
+            onStep = { text -> step(text) }
+        )
+    }
     private fun step(text: String) {
         DiagLog.i(tag, text)
         _state.update { it.copy(step = text) }
@@ -195,9 +203,12 @@ class CarLifeService : Service() {
                 val direct = app.prefs.linkMode == 1
                 foreground(if (direct) "Asking the car for WiFi Direct" else "Waiting for the car on this network")
                 startWifiLink()
+                beacon.onlyTarget = direct
                 if (direct) {
                     startWirelessSetup()
                     bt.start(intent.getStringExtra(EXTRA_BT_ADDR))
+                    ble.start(null)
+                    wakeCarBluetooth()
                     startFinder()
                 } else {
                     step("Waiting for the car to reach this phone")
@@ -528,6 +539,80 @@ class CarLifeService : Service() {
         bt.onFrame = { frame -> wireless.feed(frame) }
         bt.onProbe = { wireless.reset(); wireless.hello() }
         bt.onStep = { text -> step(text) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun carBtDevice(): android.bluetooth.BluetoothDevice? {
+        val a = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter ?: return null
+        val bonded = runCatching { a.bondedDevices?.toList() }.getOrNull().orEmpty()
+        val want = app.prefs.carBtAddress.trim()
+        if (want.isNotEmpty()) bonded.firstOrNull { it.address.equals(want, true) }?.let { return it }
+        val name = app.prefs.carBtName.trim()
+        if (name.isNotEmpty()) {
+            bonded.firstOrNull { runCatching { it.name }.getOrNull()?.contains(name, true) == true }?.let { return it }
+        }
+        return null
+    }
+
+    private fun wakeCarBluetooth() {
+        scope.launch {
+            btAudio.open()
+            delay(1500)
+            val car = btAudio.theCar(app.prefs.carBtName, app.prefs.carBtAddress) ?: carBtDevice()
+            if (car == null) {
+                DiagLog.i(tag, "FT does not know which paired device is the car, so it cannot wake it over bluetooth")
+                return@launch
+            }
+            val who = runCatching { car.name }.getOrNull() ?: car.address
+            if (btAudio.somethingIsPlaying() != null) {
+                DiagLog.i(tag, "'$who' is already connected over bluetooth")
+                return@launch
+            }
+            step("Connecting to '$who' over bluetooth")
+            if (btAudio.askCarToPlay(car)) DiagLog.i(tag, "asked '$who' to connect over bluetooth")
+        }
+    }
+
+    private fun onCarOfferedNetwork(offer: CarWifiOffer) {
+        DiagLog.i(tag, "car network '${offer.ssid}' at ${offer.ip}:${offer.port}")
+        app.prefs.carP2pName = offer.ssid
+        if (offer.ip.isNotBlank()) _state.update { it.copy(carIp = offer.ip) }
+        step("Joining the car's network '${offer.ssid}'")
+        joinCarNetwork(offer)
+    }
+
+    private fun joinCarNetwork(offer: CarWifiOffer) {
+        val specifier = android.net.wifi.WifiNetworkSpecifier.Builder()
+            .setSsid(offer.ssid)
+            .apply { if (offer.psk.isNotBlank()) setWpa2Passphrase(offer.psk) }
+            .build()
+        val request = android.net.NetworkRequest.Builder()
+            .addTransportType(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+            .removeCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .setNetworkSpecifier(specifier)
+            .build()
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        carNetwork?.let { runCatching { cm.unregisterNetworkCallback(it) } }
+        val cb = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                DiagLog.i(tag, "joined the car's network '${offer.ssid}'")
+                step("On the car's network, waiting for the head unit")
+                runCatching { cm.bindProcessToNetwork(network) }
+            }
+
+            override fun onUnavailable() {
+                DiagLog.w(tag, "could not join the car's network '${offer.ssid}'")
+                step("Could not join the car's network")
+            }
+
+            override fun onLost(network: android.net.Network) {
+                DiagLog.i(tag, "left the car's network")
+                runCatching { cm.bindProcessToNetwork(null) }
+            }
+        }
+        carNetwork = cb
+        runCatching { cm.requestNetwork(request, cb) }
+            .onFailure { DiagLog.e(tag, "could not ask to join the car's network", it) }
     }
 
     private fun onCarRaisedWifiDirect(name: String) {
@@ -883,6 +968,11 @@ class CarLifeService : Service() {
     override fun onDestroy() {
         teardown()
         scope.cancel()
+        ble.stop()
+        carNetwork?.let { cb ->
+            runCatching { (getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).unregisterNetworkCallback(cb) }
+        }
+        carNetwork = null
         writer?.interrupt()
         writer = null
         outbound.clear()

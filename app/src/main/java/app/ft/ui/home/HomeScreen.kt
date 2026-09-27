@@ -339,6 +339,23 @@ private data class Need(val title: String, val detail: String, val fix: android.
 private fun whatIsMissing(context: android.content.Context, direct: Boolean, ip: String?): List<Need> {
     val needs = ArrayList<Need>()
     if (direct) {
+        if (android.os.Build.VERSION.SDK_INT >= 31 &&
+            context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            needs += Need(
+                "FT cannot see nearby devices",
+                "Allow nearby devices so FT can find the car",
+                android.content.Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName))
+            )
+        }
+        val lm = context.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
+        if (lm != null && !lm.isLocationEnabled) {
+            needs += Need(
+                "Location is off",
+                "Android hides nearby devices until location is on",
+                android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            )
+        }
         val bt = (context.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
         if (bt != null && !bt.isEnabled) {
             needs += Need(
