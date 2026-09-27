@@ -65,8 +65,10 @@ class CarWirelessSetup(
             val got = frame[total - 1].toInt() and 0xFF
             DiagLog.rx(tag, "head unit call${if (want != got) " (checksum $got wanted $want)" else ""}", frame)
             vendorPolls++
-            if (vendorPolls == 1) progress("Head unit is calling over bluetooth, answering it")
-            send(frame)
+            if (vendorPolls == 1) {
+                progress("Head unit is calling over bluetooth, answering it")
+                send(frame)
+            }
             return true
         }
         if (kind == VENDOR_REPLY) {
@@ -84,8 +86,9 @@ class CarWirelessSetup(
                 described = true
                 DiagLog.rx(tag, "head unit capability", frame)
                 readReply(body)
+                progress("This bluetooth channel is the car's CarPlay setup, not CarLife")
+                DiagLog.w(tag, "this is Apple's iAP2 link bring-up for wireless CarPlay; it needs MFi hardware authentication that no app can do, so it cannot raise WiFi Direct for FT")
             }
-            send(frame)
             return true
         }
         return false
