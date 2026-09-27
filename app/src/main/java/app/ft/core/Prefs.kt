@@ -27,6 +27,7 @@ class Prefs(context: Context) {
     var aaFps: Int get() = int("aaFps", 30); set(v) = set("aaFps", v)
     var aaDensity: Int get() = int("aaDensity", 160); set(v) = set("aaDensity", v)
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
+    var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)
 
     var forceWidth: Int get() = int("forceWidth", 0); set(v) = set("forceWidth", v)
     var forceHeight: Int get() = int("forceHeight", 0); set(v) = set("forceHeight", v)

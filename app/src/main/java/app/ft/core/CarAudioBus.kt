@@ -14,6 +14,8 @@ object CarAudioBus {
     private const val CAP = CHUNK * 5
     private const val FRAME_NS = FRAME_MS * 1_000_000L
     private const val BURST_NS = FRAME_NS * 3
+    private const val ROOM = CHUNK * 2
+    private const val STALE_NS = 1_000_000_000L
 
     private class Lane {
         val parts = ArrayDeque<ByteArray>()
@@ -22,6 +24,7 @@ object CarAudioBus {
         var inBytes = 0L
         var outBytes = 0L
         var dropped = 0L
+        var lastWrite = 0L
 
         fun add(pcm: ByteArray) {
             parts.addLast(pcm)
@@ -66,6 +69,7 @@ object CarAudioBus {
 
     private val lock = Object()
     private val lanes = HashMap<Int, Lane>()
+    private val roomListeners = HashMap<Int, () -> Unit>()
     private var pump: Thread? = null
 
     @Volatile
@@ -87,13 +91,26 @@ object CarAudioBus {
     fun write(lane: Int, pcm: ByteArray) {
         if (out == null || pcm.isEmpty()) return
         synchronized(lock) {
-            lanes.getOrPut(lane) { Lane() }.add(pcm)
+            val l = lanes.getOrPut(lane) { Lane() }
+            l.add(pcm)
+            l.lastWrite = System.nanoTime()
             lock.notifyAll()
         }
     }
 
+    fun hasRoom(lane: Int): Boolean = synchronized(lock) { (lanes[lane]?.size ?: 0) < ROOM }
+
+    fun onRoom(lane: Int, callback: (() -> Unit)?) {
+        synchronized(lock) {
+            if (callback == null) roomListeners.remove(lane) else roomListeners[lane] = callback
+        }
+    }
+
     fun clear(lane: Int) {
-        synchronized(lock) { lanes.remove(lane) }
+        synchronized(lock) {
+            lanes.remove(lane)
+            roomListeners.remove(lane)
+        }
     }
 
     private fun stop() {
@@ -172,6 +189,18 @@ object CarAudioBus {
                     runCatching { out?.invoke(frame.copyOf()) }
                     sent += CHUNK
                 }
+                var freed: List<() -> Unit>
+                synchronized(lock) {
+                    val now = System.nanoTime()
+                    val stale = lanes.entries.filter { it.value.size in 1 until CHUNK && now - it.value.lastWrite > STALE_NS }
+                    for (e in stale) {
+                        e.value.parts.clear()
+                        e.value.head = 0
+                        e.value.size = 0
+                    }
+                    freed = roomListeners.filter { (lane, _) -> (lanes[lane]?.size ?: 0) < ROOM }.values.toList()
+                }
+                freed.forEach { runCatching { it() } }
                 moment = System.nanoTime()
                 if (moment - reported > 5_000_000_000L) {
                     report(moment - reported, sent)

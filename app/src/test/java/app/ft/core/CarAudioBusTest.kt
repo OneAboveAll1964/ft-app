@@ -93,6 +93,46 @@ class CarAudioBusTest {
     }
 
     @Test
+    fun aSourceThatWaitsForRoomIsThrottledToRealTime() {
+        val sent = AtomicLong(0)
+        val written = AtomicLong(0)
+        CarAudioBus.sink = { pcm -> sent.addAndGet(pcm.size.toLong()) }
+        val began = System.nanoTime()
+        val greedy = Thread {
+            val block = ByteArray(3840)
+            while (!Thread.currentThread().isInterrupted) {
+                if (CarAudioBus.hasRoom(CarAudioBus.LANE_MEDIA)) {
+                    CarAudioBus.write(CarAudioBus.LANE_MEDIA, block)
+                    written.addAndGet(block.size.toLong())
+                } else {
+                    Thread.sleep(2)
+                }
+            }
+        }.apply { isDaemon = true; start() }
+        Thread.sleep(5000)
+        greedy.interrupt()
+        val secs = (System.nanoTime() - began) / 1_000_000_000.0
+        CarAudioBus.sink = null
+        val inRate = written.get() / secs
+        val outRate = sent.get() / secs
+        println("RATE back-pressure: source wrote ${inRate.toInt()} B/s, car got ${outRate.toInt()} B/s")
+        assertTrue("a source that waits for room still wrote $inRate B/s", inRate <= realTime * 1.15)
+        assertTrue("the car got $outRate B/s", outRate <= realTime * 1.05)
+        assertTrue("the car got only $outRate B/s", outRate >= realTime * 0.80)
+    }
+
+    @Test
+    fun roomIsReportedFullWhenALaneBacksUp() {
+        CarAudioBus.sink = { }
+        val block = ByteArray(3840)
+        repeat(6) { CarAudioBus.write(CarAudioBus.LANE_SPEECH, block) }
+        assertTrue("a backed up lane still reported room", !CarAudioBus.hasRoom(CarAudioBus.LANE_SPEECH))
+        Thread.sleep(400)
+        assertTrue("a drained lane never reported room again", CarAudioBus.hasRoom(CarAudioBus.LANE_SPEECH))
+        CarAudioBus.sink = null
+    }
+
+    @Test
     fun silenceProducesNothing() {
         val (rate, total) = run(2, emptyList())
         assertTrue("sent $total bytes with no source at all", total == 0L)

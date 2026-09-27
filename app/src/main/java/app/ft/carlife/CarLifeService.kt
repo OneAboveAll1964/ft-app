@@ -126,6 +126,13 @@ class CarLifeService : Service() {
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
     private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
+    private val wireless by lazy {
+        CarWirelessSetup(
+            send = { bytes -> bt.write(bytes) },
+            localIp = { NetUtil.localIpv4() },
+            onCarWifiName = { name -> onCarRaisedWifiDirect(name) }
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -158,6 +165,7 @@ class CarLifeService : Service() {
             ACTION_AUTO -> {
                 foreground("Looking for the car")
                 startWifiLink()
+                startWirelessSetup()
                 bt.start(intent.getStringExtra(EXTRA_BT_ADDR))
                 scheduleFinderFallback()
             }
@@ -393,6 +401,7 @@ class CarLifeService : Service() {
     }
 
     private fun matchCarScreen() {
+        if (!app.prefs.aaMatchCar) return
         val s = _state.value.session
         val size = when (s) {
             is CarLifeSession.State.Projecting -> Triple(s.width, s.height, s.fps)
@@ -467,6 +476,34 @@ class CarLifeService : Service() {
             }
         }
         carDisplay.dispatchTouch(action, x, y)
+    }
+
+    private fun startWirelessSetup() {
+        wireless.reset()
+        bt.onFrame = { frame -> wireless.feed(frame) }
+        scope.launch {
+            delay(1500)
+            wireless.hello()
+            delay(2500)
+            wireless.askForName()
+        }
+    }
+
+    private fun onCarRaisedWifiDirect(name: String) {
+        app.prefs.carP2pName = name
+        _state.update { it.copy(p2p = "car raised $name") }
+        if (wifiLink?.connected == true) {
+            DiagLog.i(tag, "already connected to the car, leaving WiFi Direct alone")
+            return
+        }
+        DiagLog.i(tag, "joining the car's WiFi Direct group '$name'")
+        finder?.connectByName(name) ?: run {
+            startFinder()
+            scope.launch {
+                delay(1200)
+                finder?.connectByName(name)
+            }
+        }
     }
 
     private fun onHardKey(key: Int) {

@@ -110,6 +110,8 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     }
 
     private fun attempts(device: BluetoothDevice): List<Pair<() -> BluetoothSocket, String>> = listOf(
+        ({ device.createRfcommSocketToServiceRecord(CARLIFE_UUID) } to "CarLife service"),
+        ({ device.createInsecureRfcommSocketToServiceRecord(CARLIFE_UUID) } to "CarLife service insecure"),
         ({ device.createRfcommSocketToServiceRecord(SPP_UUID) } to "SPP"),
         ({ device.createInsecureRfcommSocketToServiceRecord(SPP_UUID) } to "SPP insecure"),
         ({
@@ -117,6 +119,19 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             m.invoke(device, 1) as BluetoothSocket
         } to "channel 1")
     )
+
+    fun write(bytes: ByteArray): Boolean {
+        val s = socket ?: return false
+        return runCatching {
+            val o = s.outputStream
+            o.write(bytes)
+            o.flush()
+            true
+        }.getOrElse {
+            DiagLog.w(tag, "could not write to the head unit over bluetooth: ${it.message}")
+            false
+        }
+    }
 
     private suspend fun keepAlive() {
         val s = socket ?: return
@@ -140,5 +155,6 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
 
     companion object {
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        private val CARLIFE_UUID: UUID = UUID.fromString("a45bc7e5-bb50-4949-9de1-f78299cf6d78")
     }
 }
