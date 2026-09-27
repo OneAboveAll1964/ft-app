@@ -120,8 +120,27 @@ class CarLifeService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> CarAudioBus.write(CarAudioBus.LANE_PHONE, pcm) }
-    private val carAudio: (ByteArray) -> Unit = { pcm -> session?.sendAudio(pcm) }
+    private val outbound = java.util.concurrent.ArrayBlockingQueue<ByteArray>(24)
+    @Volatile private var writer: Thread? = null
+    private val carAudio: (ByteArray) -> Unit = { pcm ->
+        startWriter()
+        if (!outbound.offer(pcm)) {
+            outbound.poll()
+            outbound.offer(pcm)
+        }
+    }
+
+    private fun startWriter() {
+        if (writer?.isAlive == true) return
+        writer = Thread {
+            while (!Thread.currentThread().isInterrupted) {
+                val pcm = runCatching { outbound.take() }.getOrNull() ?: break
+                session?.sendAudio(pcm)
+            }
+        }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-audio-out"; start() }
+    }
     @Volatile private var aaAutoLaunched = false
+    @Volatile private var resumedMedia = false
     @Volatile private var askedForShare = false
     private var savedVolume = -1
     private val app get() = application as FTApp
@@ -437,7 +456,16 @@ class CarLifeService : Service() {
         aaWatch?.cancel()
         aaWatch = scope.launch {
             var shown = false
+            resumedMedia = false
             AaHeadUnitService.state.collect { s ->
+                if (s.phase == AaSession.Phase.STREAMING && !resumedMedia) {
+                    resumedMedia = true
+                    scope.launch {
+                        delay(2500)
+                        DiagLog.i(tag, "asking Android Auto to pick up where it left off")
+                        AaHeadUnitService.current?.sendKey(126)
+                    }
+                }
                 if (s.connected && !_state.value.aaOverlay) {
                     DiagLog.i(tag, "Android Auto is projecting, showing it on the car")
                     shown = true
@@ -509,9 +537,23 @@ class CarLifeService : Service() {
         }
     }
 
+    private fun keyName(code: Int) = when (code) {
+        87 -> "next track"
+        88 -> "previous track"
+        85 -> "play or pause"
+        84 -> "voice"
+        3 -> "home"
+        4 -> "back"
+        else -> "key $code"
+    }
+
     private fun onHardKey(key: Int) {
         val st = _state.value
+        val swap = app.prefs.swapTrackKeys
         val mapped = when (key) {
+            15 -> if (swap) 87 else 88
+            16 -> if (swap) 88 else 87
+            14 -> 85
             231, 219 -> 84
             79 -> 85
             else -> key
@@ -522,7 +564,7 @@ class CarLifeService : Service() {
                 when {
                     aa == null -> Unit
                     mapped in AA_KEYS -> {
-                        DiagLog.i(tag, "steering wheel key $key sent to Android Auto as $mapped")
+                        DiagLog.i(tag, "steering wheel key $key sent to Android Auto as ${keyName(mapped)}")
                         aa.sendKey(mapped)
                     }
                     else -> DiagLog.w(tag, "steering wheel key $key has no Android Auto action yet")
@@ -831,6 +873,9 @@ class CarLifeService : Service() {
     override fun onDestroy() {
         teardown()
         scope.cancel()
+        writer?.interrupt()
+        writer = null
+        outbound.clear()
         btAudio.close()
         CarAudioBus.sink = null
         instance = null

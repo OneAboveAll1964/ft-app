@@ -72,6 +72,7 @@ object AaProtocol {
     const val FPS_60 = 1
     const val FPS_30 = 2
     const val SETUP_READY = 2
+    const val MAX_UNACKED = 16
     const val VIDEO_FOCUS_PROJECTED = 1
     const val VIDEO_FOCUS_NATIVE = 2
     const val AUDIO_FOCUS_GAIN = 1

@@ -114,7 +114,8 @@ object AaMessages {
     }
 
     fun channelOpenResponse(): ByteArray = ProtoWriter().enum(1, AaProtocol.STATUS_OK).toByteArray()
-    fun avSetupResponse(): ByteArray = ProtoWriter().enum(1, AaProtocol.SETUP_READY).uint32(2, 1).uint32(3, 0).toByteArray()
+    fun avSetupResponse(maxUnacked: Int = AaProtocol.MAX_UNACKED): ByteArray =
+        ProtoWriter().enum(1, AaProtocol.SETUP_READY).uint32(2, maxUnacked).uint32(3, 0).toByteArray()
     fun mediaAck(session: Int): ByteArray = ProtoWriter().int32(1, session).uint32(2, 1).toByteArray()
     fun videoFocusIndication(mode: Int, unrequested: Boolean): ByteArray = ProtoWriter().enum(1, mode).bool(2, unrequested).toByteArray()
     fun bindingResponse(): ByteArray = ProtoWriter().enum(1, AaProtocol.STATUS_OK).toByteArray()

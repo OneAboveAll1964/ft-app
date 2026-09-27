@@ -248,8 +248,8 @@ class AaSession(
                 } else {
                     val rate = if (channel == AaProtocol.CH_MEDIA_AUDIO) 48000 else 16000
                     val ch = if (channel == AaProtocol.CH_MEDIA_AUDIO) 2 else 1
-                    CarAudioBus.write(channel, CarAudioBus.toCarFormat(pcm, rate, ch))
                     sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(0))
+                    CarAudioBus.write(channel, CarAudioBus.toCarFormat(pcm, rate, ch))
                 }
             }
             else -> Unit
