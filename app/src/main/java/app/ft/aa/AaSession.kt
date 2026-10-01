@@ -251,6 +251,9 @@ class AaSession(
 
     private fun startMicrophone() {
         if (mic.active) return
+        if (!AaHeadUnitService.micReady) {
+            DiagLog.w(tag, "Android Auto asked to listen, but FT was started in the background so android will not give it the microphone; open FT and start Android Auto from there")
+        }
         if (System.nanoTime() - carMicAt < 2_000_000_000L) {
             DiagLog.i(tag, "using the car's microphone for Android Auto")
             return

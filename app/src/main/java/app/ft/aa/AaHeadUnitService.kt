@@ -50,6 +50,8 @@ class AaHeadUnitService : Service() {
         val state: StateFlow<AaState> = _state
         @Volatile var current: AaSession? = null
             private set
+        @Volatile var micReady = false
+            private set
 
         fun start(context: Context, bluetooth: Boolean) {
             context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth))
@@ -95,7 +97,19 @@ class AaHeadUnitService : Service() {
     }
 
     private fun foreground(text: String) {
-        runCatching { startForeground(NOTIFICATION_ID, notification(text), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
+        val note = notification(text)
+        val canRecord = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (canRecord) {
+            val withMic = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            if (runCatching { startForeground(NOTIFICATION_ID, note, withMic) }.isSuccess) {
+                micReady = true
+                return
+            }
+        }
+        micReady = false
+        runCatching { startForeground(NOTIFICATION_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
             .onFailure { DiagLog.w(tag, "could not keep the head unit in the foreground: ${it.message}") }
     }
 

@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
 import app.ft.FTTouchService
+import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaInstaller
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
@@ -230,7 +231,12 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                 }
                 Actions {
                     FilledTonalButton(
-                        onClick = { if (aaStep == AaInstaller.Step.DONE) CarLifeService.startAa() else onTakeOverAa() },
+                        onClick = {
+                            if (aaStep == AaInstaller.Step.DONE) {
+                                AaHeadUnitService.start(context, app.prefs.aaBluetooth)
+                                CarLifeService.startAa()
+                            } else onTakeOverAa()
+                        },
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
