@@ -1,22 +1,30 @@
 package app.ft.ui.home
 
 import android.provider.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,19 +32,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,9 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,63 +72,72 @@ import app.ft.aa.AaInstaller
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
-import app.ft.core.DiagLog
 
-private data class Hero(val headline: String, val detail: String, val level: Int)
+private data class StepItem(
+    val title: String,
+    val done: Boolean,
+    val hint: String? = null,
+    val action: String? = null,
+    val onAction: (() -> Unit)? = null
+)
 
-private fun hero(car: CarState, autoConnect: Boolean, direct: Boolean): Hero {
-    val s = car.session
-    return when {
-        s is CarLifeSession.State.Projecting -> Hero("Projecting to the car", "${s.width}×${s.height} at ${s.fps} fps over ${s.via}", 3)
-        s is CarLifeSession.State.Negotiated -> Hero("Head unit connected", "Negotiated ${s.width}×${s.height}, starting video", 3)
-        s is CarLifeSession.State.Linked -> Hero("Head unit connected", "Handshake in progress", 2)
-        car.carIp != null -> Hero("On the car network", "Car at ${car.carIp}, waiting for the head unit", 2)
-        car.p2p.startsWith("connecting") -> Hero("Joining the car", car.p2p.replaceFirstChar { it.uppercase() }, 1)
-        car.running && direct && car.p2p == "searching" -> Hero("Looking for the car", "Over WiFi Direct and bluetooth", 1)
-        car.running && direct -> Hero("Waiting for the car", "Over WiFi Direct and bluetooth", 1)
-        car.running -> Hero("Waiting for the car", car.ip?.let { "Ready on $it, connect the car to this phone" } ?: "Turn on the hotspot so the car can join", 1)
-        autoConnect -> Hero("Starting", "FT is turning on", 1)
-        else -> Hero("Off", "Turn this on to let FT connect to the car", 0)
-    }
-}
+private enum class StepState { DONE, NOW, LATER }
+
+private data class Status(val title: String, val detail: String, val level: Int)
 
 @Composable
-fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
+fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
     val aa by AaHeadUnitService.state.collectAsState()
-    val log by DiagLog.entries.collectAsState()
-    val mirrorGranted by app.mirrorGranted.collectAsState()
     var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
     LaunchedEffect(car.running) { if (car.running) autoConnect = true }
+    var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
     var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
     var aaCorner by remember { mutableIntStateOf(app.prefs.aaCorner) }
-    var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
         onPauseOrDispose { }
     }
+    val radios = rememberRadios(context, resumed)
     val touchOn = remember(resumed) { FTTouchService.enabled }
-    val aaStep = remember(resumed) { AaInstaller.step(context) }
-    val aaSays = remember(resumed) { AaInstaller.explain(context) }
-    val aaHasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
-    val h = hero(car, autoConnect, linkMode == 1)
-    val scheme = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        when (h.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
-        label = "hero"
-    )
-    val onContainer by animateColorAsState(
-        when (h.level) { 3 -> scheme.onPrimaryContainer; 2 -> scheme.onSecondaryContainer; 1 -> scheme.onTertiaryContainer; else -> scheme.onSurface },
-        label = "heroText"
-    )
-    val dot by animateColorAsState(
-        when (h.level) { 3 -> scheme.primary; 2 -> scheme.secondary; 1 -> scheme.tertiary; else -> scheme.outline },
-        label = "dot"
-    )
+    val aaStep = remember(resumed) { AaInstaller.step(context) }
+    val aaInstalled = remember(resumed) { AaInstaller.installed(context) }
+    val aaHasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
+
+    val on = car.running || autoConnect
+    val direct = linkMode == 1
+    val running = car.running && car.direct == direct
+    val session = car.session
+    val connected = session !is CarLifeSession.State.Idle
+    val projecting = session is CarLifeSession.State.Projecting
+    val steps = if (direct) directSteps(context, radios, car, running, connected, projecting)
+    else hotspotSteps(context, radios, running, connected, projecting)
+    val status = when {
+        projecting -> Status(
+            "Connected",
+            when {
+                car.aaOverlay -> "Android Auto is on the car"
+                car.mirroring -> "Your app is on the car"
+                else -> "FT is on the car screen"
+            },
+            3
+        )
+        connected -> Status("Connecting", "Starting the car screen", 2)
+        car.running -> Status("Waiting for your car", if (car.direct) "Using WiFi + BL" else "Using Hotspot", 1)
+        on -> Status("Starting", if (direct) "Using WiFi + BL" else "Using Hotspot", 1)
+        else -> Status("Off", "Turn on to connect to your car", 0)
+    }
+
+    fun pickMode(value: Int) {
+        if (value == linkMode) return
+        linkMode = value
+        app.prefs.linkMode = value
+        if (car.running) CarLifeService.startAuto(context)
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -130,168 +145,323 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = container, contentColor = onContainer)) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(12.dp).clip(CircleShape).background(dot))
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(h.headline, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(h.detail, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            StatusCard(status, on) { want ->
+                autoConnect = want
+                app.prefs.autoConnect = want
+                if (want) CarLifeService.startAuto(context) else CarLifeService.stop(context)
+            }
+        }
+
+        item {
+            Section("Connection") {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    listOf(0 to "Hotspot", 1 to "WiFi + BL").forEachIndexed { i, (value, label) ->
+                        SegmentedButton(
+                            selected = linkMode == value,
+                            onClick = { pickMode(value) },
+                            shape = SegmentedButtonDefaults.itemShape(i, 2)
+                        ) { Text(label, maxLines = 1) }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(checked = car.running || autoConnect, onCheckedChange = { on ->
-                        autoConnect = on
-                        app.prefs.autoConnect = on
-                        if (on) CarLifeService.startAuto(context) else CarLifeService.stop(context)
-                    })
+                }
+                Spacer(Modifier.height(16.dp))
+                AnimatedContent(targetState = direct, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "steps") { _ ->
+                    Stepper(steps, running)
+                }
+                val refused = car.refused
+                AnimatedVisibility(visible = refused.isNotBlank() && !connected) {
+                    Notice(refused, if (direct) "Use Hotspot" else "Use WiFi + BL") { pickMode(if (direct) 0 else 1) }
+                }
+                if (direct && running && !connected) {
+                    TextButton(onClick = { CarLifeService.tryAgain() }, modifier = Modifier.align(Alignment.End)) { Text("Try again") }
+                }
+            }
+        }
+
+        if (!touchOn || !overlayOn) {
+            item {
+                Section("Finish setup") {
+                    Text("Needed to use phone apps on the car", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Check("Touch control", touchOn, onOpenAccessibility)
+                    Check("Open apps from the car", overlayOn, onOpenOverlay)
                 }
             }
         }
 
         item {
-            Section("Car link", Icons.Filled.Place) {
-                Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0 to "Hotspot", 1 to "WiFi + BL").forEach { (value, label) ->
-                        if (linkMode == value) {
-                            FilledTonalButton(onClick = {}, modifier = Modifier.weight(1f)) {
-                                Text(label, maxLines = 1, textAlign = TextAlign.Center)
-                            }
-                        } else {
-                            OutlinedButton(
-                                onClick = {
-                                    linkMode = value
-                                    app.prefs.linkMode = value
-                                    CarLifeService.startAuto(context)
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(label, maxLines = 1, textAlign = TextAlign.Center)
-                            }
-                        }
+            Section("Android Auto") {
+                if (aaStep != AaInstaller.Step.DONE) {
+                    Stepper(aaSetupSteps(aaStep, aaHasCopy, onTakeOverAa), running = false)
+                    if (aaInstalled) Spacer(Modifier.height(12.dp))
+                }
+                if (aaInstalled) {
+                    val serverOn = if (aa.listening) aa.selfServer else app.prefs.aaServerOn
+                    ServerRow(serverOn) { AaInstaller.openSettings(context) }
+                    SwitchRow("Start with the car", aaAuto) {
+                        aaAuto = it
+                        app.prefs.aaAutoStart = it
                     }
-                }
-                Text(
-                    if (linkMode == 1) "FT asks the car over bluetooth to raise its own WiFi Direct group, then joins it."
-                    else "The car joins the network this phone is sharing, and reaches FT on it.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 10.dp)
-                )
-                HorizontalDivider(color = scheme.outlineVariant)
-                Spacer(Modifier.height(10.dp))
-                val missing = remember(resumed, linkMode, car.ip) { whatIsMissing(context, linkMode == 1, car.ip) }
-                missing.forEach { need ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(need.title, style = MaterialTheme.typography.bodyLarge, color = scheme.error)
-                            Text(need.detail, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        FilledTonalButton(onClick = { runCatching { context.startActivity(need.fix) } }) { Text("Turn on") }
+                    Text(
+                        "FT button on the car",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                    )
+                    CornerPicker(aaCorner, app.prefs.aaWidth, app.prefs.aaHeight) {
+                        aaCorner = it
+                        app.prefs.aaCorner = it
                     }
-                }
-                if (missing.isNotEmpty()) Spacer(Modifier.height(6.dp))
-                if (car.step.isNotBlank()) InfoRow("Now", car.step)
-                InfoRow("Phone address", (car.ip ?: "Not on a network yet") + (if (car.beacon) " · calling the head unit" else ""))
-                if (linkMode == 1) {
-                    InfoRow("WiFi Direct", car.p2p.replaceFirstChar { it.uppercase() })
-                    InfoRow("Bluetooth", "FT needs bluetooth on and the car paired")
-                    if (car.peers.isNotEmpty()) {
-                        Text("Nearby", style = MaterialTheme.typography.labelLarge, color = scheme.primary, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
-                        car.peers.forEach { name ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        if (name == app.prefs.carP2pName) "Remembered as your car" else "Tap Use to pick this one",
-                                        style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                FilledTonalButton(onClick = { CarLifeService.pickCar(name) }) { Text("Use") }
-                            }
-                        }
-                    }
-                } else {
-                    InfoRow("Head unit ports", "${app.prefs.cmdPort} · ${app.prefs.videoPort} · ${app.prefs.touchPort}")
-                }
-                Actions {
-                    FilledTonalButton(onClick = { if (car.running) CarLifeService.searchAgain() else CarLifeService.startAuto(context) }, modifier = Modifier.weight(1f)) { Text("Search", maxLines = 1) }
-                    OutlinedButton(onClick = { CarLifeService.startWifi(context) }, modifier = Modifier.weight(1f)) { Text("Listen", maxLines = 1) }
-                    OutlinedButton(onClick = { CarLifeService.forgetCar() }, modifier = Modifier.weight(1f)) { Text("Forget", maxLines = 1) }
-                }
-            }
-        }
-
-        item {
-            Section("Android Auto", Icons.Filled.PlayArrow) {
-                InfoRow(
-                    if (car.aaOverlay) "Showing on the car" else "Your phone's Android Auto, on the car",
-                    "FT pretends to be a car, so Android Auto projects onto it and FT passes it to your car"
-                )
-                InfoRow(aaSays.first, aaSays.second)
-                InfoRow(
-                    if (aa.selfServer) "Head unit server is on" else "Head unit server is off",
-                    if (aa.selfServer) "FT is connected to it by itself"
-                    else "Turn it on once in Android Auto: Open Android Auto settings, three-dot menu, Start head unit server. FT connects within three seconds"
-                )
-                SwitchRow("Start automatically", "Opens Android Auto as soon as the car is projecting", aaAuto) {
-                    aaAuto = it
-                    app.prefs.aaAutoStart = it
-                }
-                Text("Where the FT button sits on the car", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
-                CornerPicker(aaCorner, app.prefs.aaWidth, app.prefs.aaHeight) { aaCorner = it; app.prefs.aaCorner = it }
-                Actions {
-                    FilledTonalButton(
-                        onClick = {
-                            if (aaStep == AaInstaller.Step.DONE) {
+                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(
+                            onClick = {
                                 AaHeadUnitService.start(context, app.prefs.aaBluetooth)
                                 CarLifeService.startAa()
-                            } else onTakeOverAa()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            when (aaStep) {
-                                AaInstaller.Step.DONE -> "Start Android Auto"
-                                AaInstaller.Step.REMOVE_UPDATES -> "Remove the Android Auto update"
-                                AaInstaller.Step.UNINSTALL -> "Remove Android Auto"
-                                AaInstaller.Step.INSTALL -> if (aaHasCopy) "Put Android Auto back" else "Install Android Auto"
                             },
-                            maxLines = 1,
-                            textAlign = TextAlign.Center,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-                if (AaInstaller.installed(context)) {
-                    OutlinedButton(
-                        onClick = { AaInstaller.openSettings(context) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    ) {
-                        Text("Open Android Auto settings", maxLines = 1, textAlign = TextAlign.Center)
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Start", maxLines = 1) }
+                        OutlinedButton(onClick = { AaInstaller.openSettings(context) }, modifier = Modifier.weight(1f)) {
+                            Text("Settings", maxLines = 1)
+                        }
                     }
                 }
             }
         }
+    }
+}
 
-        item {
-            Section("Phone apps on the car", Icons.Filled.Share) {
-                Permission("Screen mirror", "Shows the app you open on the car display", mirrorGranted, onAllowMirror)
-                Permission("Touch control", "The car touchscreen drives the mirrored app", touchOn, onOpenAccessibility)
-                Permission("Display over apps", "Lets tiles open apps while FT is in the background", overlayOn, onOpenOverlay)
+private fun hotspotSteps(
+    context: android.content.Context,
+    radios: Radios,
+    running: Boolean,
+    connected: Boolean,
+    projecting: Boolean
+) = listOf(
+    StepItem("Hotspot on", radios.hotspot, action = "Turn on", onAction = { Fixes.open(context, Fixes.hotspot(context)) }),
+    StepItem("Car connected", connected, hint = if (running) "Waiting for the car to join the hotspot" else null),
+    StepItem("On the car screen", projecting, hint = if (connected) "Starting the picture" else null)
+)
+
+private fun directSteps(
+    context: android.content.Context,
+    radios: Radios,
+    car: CarState,
+    running: Boolean,
+    connected: Boolean,
+    projecting: Boolean
+): List<StepItem> {
+    val bluetooth = when {
+        !radios.nearby -> StepItem("Bluetooth on", false, hint = "Allow nearby devices", action = "Allow", onAction = { Fixes.open(context, Fixes.appSettings(context)) })
+        else -> StepItem("Bluetooth on", radios.bluetooth, action = "Turn on", onAction = { Fixes.open(context, Fixes.bluetooth(context)) })
+    }
+    val wifi = when {
+        !radios.wifi -> StepItem("WiFi on", false, action = "Turn on", onAction = { Fixes.open(context, Fixes.wifi()) })
+        !radios.wifiAllowed -> StepItem("WiFi on", false, hint = "Allow nearby devices", action = "Allow", onAction = { Fixes.open(context, Fixes.appSettings(context)) })
+        !radios.location -> StepItem("WiFi on", false, hint = "WiFi Direct needs location on", action = "Turn on", onAction = { Fixes.open(context, Fixes.location()) })
+        else -> StepItem("WiFi on", true)
+    }
+    return listOf(
+        bluetooth,
+        wifi,
+        StepItem("Car found", car.btCar != null || car.carWifi != null, hint = if (running) "Waiting for the car over Bluetooth" else null),
+        StepItem(
+            "WiFi Direct connected",
+            car.wifiDirect,
+            hint = if (running) car.carWifi?.let { "Joining $it" } ?: "Asking the car to turn it on" else null
+        ),
+        StepItem(
+            "On the car screen",
+            projecting,
+            hint = when {
+                connected -> "Starting the picture"
+                running && car.wifiDirect -> "Waiting for the car to connect"
+                else -> null
+            }
+        )
+    )
+}
+
+private fun aaSetupSteps(step: AaInstaller.Step, hasCopy: Boolean, run: () -> Unit): List<StepItem> {
+    val remove = when (step) {
+        AaInstaller.Step.REMOVE_UPDATES -> StepItem("Remove the Android Auto update", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
+        AaInstaller.Step.UNINSTALL -> StepItem("Remove Android Auto", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
+        else -> if (hasCopy) StepItem("Remove the Play Store copy", true) else null
+    }
+    val install = if (hasCopy || remove != null) StepItem("Put Android Auto back", step == AaInstaller.Step.DONE, action = "Put back", onAction = run)
+    else StepItem("Install Android Auto", step == AaInstaller.Step.DONE, hint = "Pick the Android Auto file", action = "Pick file", onAction = run)
+    return listOfNotNull(remove, install)
+}
+
+@Composable
+private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        when (status.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
+        label = "status"
+    )
+    val content by animateColorAsState(
+        when (status.level) { 3 -> scheme.onPrimaryContainer; 2 -> scheme.onSecondaryContainer; 1 -> scheme.onTertiaryContainer; else -> scheme.onSurface },
+        label = "statusText"
+    )
+    val dot by animateColorAsState(
+        when (status.level) { 3 -> scheme.primary; 2 -> scheme.secondary; 1 -> scheme.tertiary; else -> scheme.outline },
+        label = "dot"
+    )
+    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = container, contentColor = content)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(12.dp).clip(CircleShape).background(dot))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(status.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(status.detail, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = checked, onCheckedChange = onToggle)
+        }
+    }
+}
+
+@Composable
+private fun Stepper(steps: List<StepItem>, running: Boolean) {
+    val reached = steps.indexOfLast { it.done }
+    val done = steps.mapIndexed { i, s -> s.done || i < reached }
+    val now = done.indexOfFirst { !it }
+    Column(Modifier.fillMaxWidth().animateContentSize()) {
+        steps.forEachIndexed { i, step ->
+            val state = when {
+                done[i] -> StepState.DONE
+                i == now -> StepState.NOW
+                else -> StepState.LATER
+            }
+            StepRow(i + 1, step, state, last = i == steps.lastIndex, working = running && state == StepState.NOW && step.action == null)
+        }
+    }
+}
+
+@Composable
+private fun StepRow(number: Int, step: StepItem, state: StepState, last: Boolean, working: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Column(Modifier.width(28.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+            StepMark(number, state, working)
+            if (!last) {
+                Box(
+                    Modifier
+                        .padding(vertical = 4.dp)
+                        .width(2.dp)
+                        .weight(1f)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(if (state == StepState.DONE) scheme.primary else scheme.outlineVariant)
+                )
             }
         }
-
-        item {
-            Section("Activity", Icons.Filled.Build) {
-                Column(Modifier.fillMaxWidth().height(96.dp).padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    log.takeLast(5).forEach { e ->
-                        Text("${e.tag}  ${e.text}", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis, color = scheme.onSurfaceVariant)
-                    }
-                }
-                TextButton(onClick = onOpenLog, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Open the full log") }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f).padding(bottom = if (last) 0.dp else 16.dp)) {
+            Box(Modifier.heightIn(min = 28.dp), contentAlignment = Alignment.CenterStart) {
+                Text(
+                    step.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (state == StepState.NOW) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (state == StepState.LATER) scheme.onSurfaceVariant else scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+            if (state == StepState.NOW && step.hint != null) {
+                Text(step.hint, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+            }
+            if (state == StepState.NOW && step.action != null && step.onAction != null) {
+                FilledTonalButton(onClick = step.onAction, modifier = Modifier.padding(top = 8.dp)) { Text(step.action) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepMark(number: Int, state: StepState, working: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+        when {
+            state == StepState.DONE -> Box(
+                Modifier.fillMaxSize().clip(CircleShape).background(scheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Check, contentDescription = "Done", tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
+            }
+            working -> CircularProgressIndicator(Modifier.fillMaxSize().padding(2.dp), strokeWidth = 3.dp, color = scheme.primary)
+            state == StepState.NOW -> Box(
+                Modifier.fillMaxSize().border(2.dp, scheme.primary, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("$number", style = MaterialTheme.typography.labelLarge, color = scheme.primary, fontWeight = FontWeight.Bold)
+            }
+            else -> Box(
+                Modifier.fillMaxSize().border(1.5.dp, scheme.outlineVariant, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (number > 0) Text("$number", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Notice(text: String, action: String, onAction: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(color = scheme.errorContainer, contentColor = scheme.onErrorContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = onAction) { Text(action, color = scheme.onErrorContainer) }
+        }
+    }
+}
+
+@Composable
+private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+        StepMark(0, if (granted) StepState.DONE else StepState.LATER, working = false)
+        Spacer(Modifier.width(14.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!granted) FilledTonalButton(onClick = onGrant) { Text("Allow") }
+        else Text("Done", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+    }
+}
+
+@Composable
+private fun ServerRow(on: Boolean, onOpen: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Head unit server", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                if (on) "On" else "Off · start it from Android Auto's menu",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (on) scheme.primary else scheme.onSurfaceVariant
+            )
+        }
+        if (!on) {
+            Spacer(Modifier.width(8.dp))
+            FilledTonalButton(onClick = onOpen) { Text("Open") }
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
+            content()
         }
     }
 }
@@ -312,13 +482,10 @@ private fun CornerPicker(selected: Int, carWidth: Int, carHeight: Int, onPick: (
             "Car screen",
             style = MaterialTheme.typography.labelSmall,
             color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.Center)
         )
-        val corners = listOf(
-            0 to Alignment.TopStart, 1 to Alignment.TopEnd,
-            2 to Alignment.BottomStart, 3 to Alignment.BottomEnd
-        )
-        corners.forEach { (value, align) ->
+        listOf(0 to Alignment.TopStart, 1 to Alignment.TopEnd, 2 to Alignment.BottomStart, 3 to Alignment.BottomEnd).forEach { (value, align) ->
             val chosen = selected == value
             Box(
                 Modifier
@@ -340,115 +507,4 @@ private fun CornerPicker(selected: Int, carWidth: Int, carHeight: Int, onPick: (
             }
         }
     }
-}
-
-@Composable
-private fun Section(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
-    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Row(Modifier.padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(title, style = MaterialTheme.typography.titleMedium)
-            }
-            content()
-        }
-    }
-}
-
-@Composable
-private fun InfoRow(headline: String, supporting: String) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text(headline, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(supporting, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
-private fun SwitchRow(title: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-@Composable
-private fun Permission(title: String, detail: String, granted: Boolean, onGrant: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            if (granted) Icons.Filled.CheckCircle else Icons.Filled.Lock,
-            contentDescription = null,
-            tint = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(22.dp)
-        )
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        Spacer(Modifier.width(12.dp))
-        if (granted) Text("On", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        else FilledTonalButton(onClick = onGrant) { Text("Allow") }
-    }
-}
-
-@Composable
-private fun Actions(content: @Composable RowScope.() -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        content = content
-    )
-}
-
-private data class Need(val title: String, val detail: String, val fix: android.content.Intent)
-
-private fun whatIsMissing(context: android.content.Context, direct: Boolean, ip: String?): List<Need> {
-    val needs = ArrayList<Need>()
-    if (direct) {
-        if (android.os.Build.VERSION.SDK_INT >= 31 &&
-            context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            needs += Need(
-                "FT cannot see nearby devices",
-                "Allow nearby devices so FT can find the car",
-                android.content.Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName))
-            )
-        }
-        val lm = context.getSystemService(android.content.Context.LOCATION_SERVICE) as? android.location.LocationManager
-        if (lm != null && !lm.isLocationEnabled) {
-            needs += Need(
-                "Location is off",
-                "Android hides nearby devices until location is on",
-                android.content.Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-            )
-        }
-        val bt = (context.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
-        if (bt != null && !bt.isEnabled) {
-            needs += Need(
-                "Bluetooth is off",
-                "The car calls this phone over bluetooth to start WiFi Direct",
-                android.content.Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-            )
-        }
-        val wifi = context.applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
-        if (wifi != null && !wifi.isWifiEnabled) {
-            needs += Need(
-                "WiFi is off",
-                "WiFi Direct needs WiFi switched on",
-                android.content.Intent(Settings.ACTION_WIFI_SETTINGS)
-            )
-        }
-    } else if (ip == null) {
-        val tether = android.content.Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings")
-        val fix = if (context.packageManager.resolveActivity(tether, 0) != null) tether
-        else android.content.Intent(Settings.ACTION_WIRELESS_SETTINGS)
-        needs += Need("The hotspot is off", "The car joins the network this phone shares", fix)
-    }
-    return needs
 }

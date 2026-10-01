@@ -121,13 +121,11 @@ class MainActivity : ComponentActivity() {
         registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
-        if (app.prefs.autoConnect) CarLifeService.startAuto(this)
-        if (app.prefs.autoStartWifi) CarLifeService.startWifi(this)
+        if (app.prefs.autoConnect || app.prefs.autoStartWifi) CarLifeService.startAuto(this)
         if (app.prefs.autoStartAa) AaHeadUnitService.start(this, app.prefs.aaBluetooth)
         setContent {
             FTTheme {
                 FTRoot(
-                    onAllowMirror = { requestMirror() },
                     onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                     onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
                     onTakeOverAa = { takeOverAndroidAuto() }
@@ -205,6 +203,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
         if (Build.VERSION.SDK_INT >= 31) {
             wanted += Manifest.permission.BLUETOOTH_CONNECT
+            wanted += Manifest.permission.BLUETOOTH_SCAN
             wanted += Manifest.permission.BLUETOOTH_ADVERTISE
         }
         if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.NEARBY_WIFI_DEVICES
@@ -223,7 +222,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
+fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
     val barState = rememberTopAppBarState()
@@ -269,8 +268,6 @@ fun FTRoot(onAllowMirror: () -> Unit, onOpenAccessibility: () -> Unit, onOpenOve
             when (s) {
                 Screen.HOME -> HomeScreen(
                     pad = pad,
-                    onOpenLog = { screen = Screen.LOG },
-                    onAllowMirror = onAllowMirror,
                     onOpenAccessibility = onOpenAccessibility,
                     onOpenOverlay = onOpenOverlay,
                     onTakeOverAa = onTakeOverAa

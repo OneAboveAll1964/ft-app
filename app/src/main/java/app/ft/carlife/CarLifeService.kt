@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 
 data class CarState(
     val running: Boolean = false,
+    val direct: Boolean = false,
     val link: String = "",
     val session: CarLifeSession.State = CarLifeSession.State.Idle,
     val listening: Boolean = false,
@@ -52,11 +53,12 @@ data class CarState(
     val mirroring: Boolean = false,
     val mirrorPackage: String = "",
     val ip: String? = null,
-    val p2p: String = "off",
-    val peers: List<String> = emptyList(),
-    val carIp: String? = null,
+    val btCar: String? = null,
+    val carWifi: String? = null,
+    val wifiDirect: Boolean = false,
     val beacon: Boolean = false,
     val step: String = "",
+    val refused: String = "",
     val waitingForShare: Boolean = false
 )
 
@@ -67,7 +69,6 @@ class CarLifeService : Service() {
         const val ACTION_STOP = "app.ft.carlife.STOP"
         const val ACTION_AUDIO = "app.ft.carlife.AUDIO"
         const val ACTION_SHARE_DECLINED = "app.ft.carlife.SHARE_DECLINED"
-        const val EXTRA_BT_ADDR = "btAddr"
         const val CORNER = 96
         private val AA_KEYS = setOf(3, 4, 19, 20, 21, 22, 23, 84, 85, 86, 87, 88, 126, 127)
         private const val CHANNEL = "ft_carlife"
@@ -77,12 +78,10 @@ class CarLifeService : Service() {
         val state: StateFlow<CarState> = _state
         @Volatile private var instance: CarLifeService? = null
 
-        fun startWifi(context: Context) {
-            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_WIFI))
-        }
+        fun startWifi(context: Context) = startAuto(context)
 
-        fun startAuto(context: Context, btAddress: String? = null) {
-            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO).putExtra(EXTRA_BT_ADDR, btAddress))
+        fun startAuto(context: Context) {
+            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO))
         }
 
         fun stop(context: Context) {
@@ -105,9 +104,7 @@ class CarLifeService : Service() {
 
         fun btSend(hex: String) = instance?.sendBluetooth(hex)
         fun btEcho(on: Boolean) = instance?.echoBluetooth(on)
-        fun pickCar(name: String) = instance?.finder?.connectByName(name)
-        fun forgetCar() = instance?.forget()
-        fun searchAgain() = instance?.restartFinder()
+        fun tryAgain() = instance?.retry()
         fun startAa() = instance?.startAndroidAuto()
         fun startAaWireless() = instance?.triggerAaWireless()
         fun volumeUp() = instance?.volume(true)
@@ -128,9 +125,11 @@ class CarLifeService : Service() {
     private var finder: CarFinder? = null
     private var stateJob: Job? = null
     private var mirrorJob: Job? = null
-    private var finderFallback: Job? = null
+    private var ipJob: Job? = null
     private var aaWatch: Job? = null
-    private var listenOnly = false
+    @Volatile private var mode = -1
+    @Volatile private var noteText = "FT"
+    @Volatile private var carNetworkIface: String? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var projection: MediaProjection? = null
@@ -201,15 +200,9 @@ class CarLifeService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_WIFI -> {
-                foreground("Waiting for the head unit")
-                listenOnly = true
-                startWifiLink()
-                updateBeacon()
-            }
             ACTION_AUDIO -> {
                 audio.stop()
-                foreground("Sending sound to the car", projection = true, microphone = canRecord())
+                foreground(noteText, projection = true, microphone = canRecord())
                 startAudioToCar()
                 _state.update { it.copy(waitingForShare = false) }
                 pendingLaunch?.let { (i, p) ->
@@ -222,27 +215,29 @@ class CarLifeService : Service() {
                 _state.update { it.copy(waitingForShare = false, mirrorPackage = "") }
                 DiagLog.i(tag, "screen sharing was declined on the phone")
             }
-            ACTION_AUTO -> {
-                val direct = app.prefs.linkMode == 1
-                foreground(if (direct) "Asking the car for WiFi Direct" else "Waiting for the car on this network")
+            ACTION_AUTO, ACTION_WIFI -> {
+                val wanted = if (app.prefs.linkMode == 1) 1 else 0
+                if (mode != -1 && mode != wanted) {
+                    DiagLog.i(tag, "switching to ${if (wanted == 1) "WiFi + BL" else "Hotspot"}, the other way is closed")
+                    stopLink()
+                }
+                val fresh = mode != wanted || wifiLink == null
+                mode = wanted
+                foreground(if (fresh) waitingText() else noteText)
+                _state.update { it.copy(direct = wanted == 1) }
                 startWifiLink()
-                beacon.onlyTarget = direct
-                if (direct) {
-                    startWirelessSetup()
-                    bt.start()
-                    ble.start(null)
-                    wakeCarBluetooth()
-                    startFinder()
-                } else {
-                    step("Waiting for the car to reach this phone")
-                    _state.update { it.copy(p2p = "off, the car joins this phone instead") }
+                if (fresh) {
+                    if (wanted == 1) startDirect() else startHotspot()
                 }
             }
         }
         return START_STICKY
     }
 
+    private fun waitingText() = if (mode == 1) "Waiting for the car over bluetooth" else "Waiting for the car on the hotspot"
+
     private fun foreground(text: String, projection: Boolean = false, microphone: Boolean = false) {
+        noteText = text
         val keepProjection = projection || this.projection != null
         val keepMicrophone = microphone || audio.active
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
@@ -300,11 +295,63 @@ class CarLifeService : Service() {
                 CarLifeProtocol.CH_TTS to p.ttsPort,
                 CarLifeProtocol.CH_VR to p.vrPort,
                 CarLifeProtocol.CH_CTRL to p.touchPort
-            )
+            ),
+            refuse = { socket -> wrongWay(socket) }
         )
         wifiLink = l
         _state.update { it.copy(listening = true) }
         attachSession(l)
+    }
+
+    private fun startHotspot() {
+        step("Waiting for the car to join the hotspot")
+        updateBeacon()
+    }
+
+    private fun startDirect() {
+        wireless.reset()
+        bt.onFrame = { frame -> wireless.feed(frame) }
+        bt.onStep = { text -> step(text) }
+        bt.onCar = { name ->
+            if (name != null) {
+                _state.update { it.copy(btCar = name) }
+                step("'$name' called over bluetooth")
+                wireless.reset()
+                wireless.begin()
+            }
+        }
+        step("Waiting for the car to call over bluetooth")
+        bt.start()
+        ble.start(null)
+        wakeCarBluetooth()
+    }
+
+    private fun stopLink() {
+        stopAndroidAuto("the car link closed")
+        mirrorClose()
+        beacon.stop()
+        bt.stop()
+        bt.onCar = null
+        bt.onFrame = null
+        ble.stop()
+        wireless.reset()
+        stopFinder()
+        leaveCarNetwork()
+        session?.stop()
+        session = null
+        stateJob?.cancel()
+        stateJob = null
+        wifiLink?.stop()
+        wifiLink = null
+        pendingLaunch = null
+        carDisplay.stop()
+        _state.update {
+            it.copy(
+                link = "", session = CarLifeSession.State.Idle, listening = false, aaOverlay = false,
+                mirroring = false, mirrorPackage = "", btCar = null, carWifi = null, wifiDirect = false,
+                beacon = false, step = "", refused = "", waitingForShare = false
+            )
+        }
     }
 
     private fun startFinder() {
@@ -312,73 +359,72 @@ class CarLifeService : Service() {
         val f = CarFinder(this, app.prefs, scope)
         finder = f
         f.onJoined = { l ->
-            _state.update { it.copy(carIp = l.groupOwnerIp, ip = NetUtil.localIpv4()) }
-            scope.launch {
+            DiagLog.i(tag, "on the car's WiFi Direct group ${l.name.ifBlank { l.groupOwnerIp }}")
+            step("WiFi Direct connected")
+            ipJob?.cancel()
+            ipJob = scope.launch {
                 var ip: String? = null
                 var tries = 0
                 while (ip == null && tries++ < 40) {
                     ip = NetUtil.wifiDirectIpv4(l.iface)
                     if (ip == null) delay(500)
                 }
-                wireless.wifiDirectReady(ip)
+                val got = ip
+                if (got == null) {
+                    DiagLog.w(tag, "WiFi Direct is up but this phone has no address on it yet")
+                    return@launch
+                }
+                _state.update { it.copy(wifiDirect = true, ip = got) }
+                wireless.wifiDirectReady(got)
             }
-            val p = app.prefs
-            f.registerService(mapOf("cmd" to p.cmdPort, "video" to p.videoPort, "media" to p.mediaPort, "touch" to p.touchPort))
-            beacon.target = l.groupOwnerIp
-            updateBeacon()
-            updateNotification("On the car network, calling the head unit")
         }
         f.onLeft = {
+            ipJob?.cancel()
             wireless.wifiDirectReady(null)
-            _state.update { it.copy(carIp = null) }
-            beacon.target = null
-            updateBeacon()
-            updateNotification("Looking for the car")
+            _state.update { it.copy(wifiDirect = false) }
+            step("WiFi Direct dropped, looking for the car again")
         }
-        scope.launch { f.state.collect { s -> _state.update { it.copy(p2p = s) } } }
-        scope.launch { f.peers.collect { ps -> _state.update { it.copy(peers = ps.map { p -> p.name }) } } }
         f.start()
     }
 
-    private fun scheduleFinderFallback() {
-        finderFallback?.cancel()
-        _state.update { it.copy(p2p = "waiting") }
-        finderFallback = scope.launch {
-            delay(25_000)
-            if (wifiLink?.connected != true && finder == null) {
-                step("The car has not reached FT, looking for its WiFi Direct group")
-                startFinder()
-            }
-        }
-    }
-
-    private fun stopFinder(reason: String) {
-        finderFallback?.cancel()
-        finderFallback = null
-        if (finder != null) {
-            DiagLog.i(tag, "WiFi Direct search stopped: $reason")
-            finder?.stop()
-            finder = null
-        }
-        _state.update { it.copy(p2p = reason, peers = emptyList()) }
-    }
-
-    private fun restartFinder() {
+    private fun stopFinder() {
+        ipJob?.cancel()
+        ipJob = null
         finder?.stop()
         finder = null
-        _state.update { it.copy(peers = emptyList(), carIp = null) }
-        startFinder()
     }
 
-    private fun forget() {
-        app.prefs.carP2pName = ""
-        finder?.disconnect()
-        restartFinder()
+    private fun retry() {
+        if (mode != 1) return
+        DiagLog.i(tag, "trying the car again")
+        stopFinder()
+        bt.stop()
+        wireless.reset()
+        _state.update { it.copy(btCar = null, carWifi = null, wifiDirect = false) }
+        startDirect()
+    }
+
+    private fun wrongWay(socket: java.net.Socket): String? {
+        val local = socket.localAddress ?: return null
+        if (local.isLoopbackAddress) return null
+        val iface = runCatching { java.net.NetworkInterface.getByInetAddress(local)?.name }.getOrNull().orEmpty()
+        val p2p = iface.startsWith("p2p")
+        val why = if (mode == 1) {
+            if (p2p || (carNetworkIface != null && iface == carNetworkIface)) null
+            else "The car tried the hotspot, but FT is set to WiFi + BL"
+        } else {
+            if (!p2p) null else "The car tried WiFi Direct, but FT is set to Hotspot"
+        }
+        if (why != null && _state.value.refused != why) {
+            DiagLog.w(tag, "$why ($iface), refused")
+            _state.update { it.copy(refused = why) }
+        }
+        return why
     }
 
     private fun updateBeacon() {
         val busy = wifiLink?.connected == true
-        val want = wifiLink != null && !busy
+        val want = mode == 0 && wifiLink != null && !busy
         if (want) beacon.start() else beacon.stop()
         _state.update { it.copy(beacon = want) }
     }
@@ -408,10 +454,8 @@ class CarLifeService : Service() {
         stateJob?.cancel()
         stateJob = scope.launch {
             s.state.collect { st ->
-                _state.update { it.copy(link = l.name, session = st) }
+                _state.update { it.copy(link = l.name, session = st, refused = if (st !is CarLifeSession.State.Idle) "" else it.refused) }
                 updateBeacon()
-                if (st !is CarLifeSession.State.Idle) stopFinder("car is on this network, WiFi Direct not needed")
-                else if (app.prefs.linkMode == 1 && finder == null && finderFallback?.isActive != true) scheduleFinderFallback()
                 if (st is CarLifeSession.State.Projecting && app.prefs.aaAutoStart && !aaAutoLaunched) {
                     aaAutoLaunched = true
                     DiagLog.i(tag, "auto-starting Android Auto after connection")
@@ -446,7 +490,7 @@ class CarLifeService : Service() {
         carDisplay.stop()
         aaAutoLaunched = false
         _state.update { it.copy(aaOverlay = false) }
-        updateNotification(if (finder != null) "Looking for the car" else "Waiting for the head unit")
+        updateNotification(waitingText())
     }
 
     private fun sendBluetooth(hex: String) {
@@ -603,19 +647,6 @@ class CarLifeService : Service() {
         carDisplay.dispatchTouch(action, x, y)
     }
 
-    private fun startWirelessSetup() {
-        step("Looking for the car over bluetooth")
-        wireless.reset()
-        bt.onFrame = { frame -> wireless.feed(frame) }
-        bt.onCar = { name ->
-            if (name != null) {
-                wireless.reset()
-                wireless.begin()
-            }
-        }
-        bt.onStep = { text -> step(text) }
-    }
-
     @SuppressLint("MissingPermission")
     private fun carBtDevice(): android.bluetooth.BluetoothDevice? {
         val a = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter ?: return null
@@ -649,10 +680,10 @@ class CarLifeService : Service() {
     }
 
     private fun onCarOfferedNetwork(offer: CarWifiOffer) {
+        if (mode != 1) return
         DiagLog.i(tag, "car network '${offer.ssid}' at ${offer.ip}:${offer.port}")
-        app.prefs.carP2pName = offer.ssid
-        if (offer.ip.isNotBlank()) _state.update { it.copy(carIp = offer.ip) }
-        step("Joining the car's network '${offer.ssid}'")
+        _state.update { it.copy(carWifi = offer.ssid) }
+        step("Joining the car's WiFi '${offer.ssid}'")
         joinCarNetwork(offer)
     }
 
@@ -671,7 +702,9 @@ class CarLifeService : Service() {
         val cb = object : android.net.ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: android.net.Network) {
                 DiagLog.i(tag, "joined the car's network '${offer.ssid}'")
-                step("On the car's network, waiting for the head unit")
+                carNetworkIface = runCatching { cm.getLinkProperties(network)?.interfaceName }.getOrNull()
+                _state.update { it.copy(wifiDirect = true) }
+                step("On the car's WiFi, waiting for the car")
                 runCatching { cm.bindProcessToNetwork(network) }
             }
 
@@ -682,6 +715,8 @@ class CarLifeService : Service() {
 
             override fun onLost(network: android.net.Network) {
                 DiagLog.i(tag, "left the car's network")
+                carNetworkIface = null
+                _state.update { it.copy(wifiDirect = false) }
                 runCatching { cm.bindProcessToNetwork(null) }
             }
         }
@@ -690,21 +725,27 @@ class CarLifeService : Service() {
             .onFailure { DiagLog.e(tag, "could not ask to join the car's network", it) }
     }
 
+    private fun leaveCarNetwork() {
+        carNetwork?.let { cb ->
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            runCatching { cm.unregisterNetworkCallback(cb) }
+            runCatching { cm.bindProcessToNetwork(null) }
+        }
+        carNetwork = null
+        carNetworkIface = null
+    }
+
     private fun onCarRaisedWifiDirect(name: String) {
+        if (mode != 1) return
         app.prefs.carP2pName = name
-        _state.update { it.copy(p2p = "car raised $name") }
+        _state.update { it.copy(carWifi = name) }
         if (wifiLink?.connected == true) {
             DiagLog.i(tag, "already connected to the car, leaving WiFi Direct alone")
             return
         }
-        step("Joining the car's WiFi Direct group '$name'")
-        finder?.connectByName(name) ?: run {
-            startFinder()
-            scope.launch {
-                delay(1200)
-                finder?.connectByName(name)
-            }
-        }
+        step("Joining the car's WiFi Direct '$name'")
+        startFinder()
+        finder?.connectByName(name)
     }
 
     private fun keyName(code: Int) = when (code) {
@@ -1005,26 +1046,14 @@ class CarLifeService : Service() {
     }
 
     private fun teardown() {
-        mirrorClose()
-        beacon.stop()
-        bt.stop()
+        stopLink()
         aaAutoLaunched = false
-        finderFallback?.cancel()
-        finderFallback = null
         aaWatch?.cancel()
         aaWatch = null
-        finder?.stop()
-        finder = null
-        session?.stop()
-        session = null
-        stateJob?.cancel()
-        wifiLink?.stop()
-        wifiLink = null
-        listenOnly = false
-        pendingLaunch = null
-        carDisplay.stop()
+        mode = -1
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null
+        releaseWifi()
         _state.value = CarState()
     }
 
@@ -1039,18 +1068,14 @@ class CarLifeService : Service() {
             .build()
     }
 
-    private fun updateNotification(text: String) =
+    private fun updateNotification(text: String) {
+        noteText = text
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text))
+    }
 
     override fun onDestroy() {
         teardown()
         scope.cancel()
-        ble.stop()
-        releaseWifi()
-        carNetwork?.let { cb ->
-            runCatching { (getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).unregisterNetworkCallback(cb) }
-        }
-        carNetwork = null
         writer?.interrupt()
         writer = null
         outbound.clear()

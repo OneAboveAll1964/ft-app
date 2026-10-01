@@ -14,8 +14,6 @@ import java.net.InetAddress
 class CarBeacon(private val scope: CoroutineScope, private val name: () -> String) {
     private val tag = "Beacon"
     private var job: Job? = null
-    @Volatile var target: String? = null
-    @Volatile var onlyTarget = false
     private var sent = 0
 
     val running: Boolean get() = job?.isActive == true
@@ -38,9 +36,7 @@ class CarBeacon(private val scope: CoroutineScope, private val name: () -> Strin
 
     private fun tick() {
         run {
-            val targets = LinkedHashSet<InetAddress>()
-            target?.let { t -> runCatching { InetAddress.getByName(t) }.getOrNull()?.let(targets::add) }
-            if (!onlyTarget) targets += NetUtil.broadcastAddresses()
+            val targets = LinkedHashSet<InetAddress>(NetUtil.broadcastAddresses())
             val payload = name().toByteArray()
             var ok = 0
             if (targets.isNotEmpty()) {

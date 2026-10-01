@@ -45,7 +45,7 @@ PY
 }
 grant_mirror(){
   local before
-  before=$(grep -c 'screen mirror permitted' "$OUT/logcat.txt" 2>/dev/null || echo 0)
+  before=$(grep -c 'screen mirror permitted' "$OUT/logcat.txt" 2>/dev/null); before=${before:-0}
   $ADB shell am start -n $PKG/.MainActivity --ez mirror true --es pkgMaps com.android.settings >/dev/null 2>&1
   sleep 3
   for round in 1 2 3 4; do
@@ -59,7 +59,7 @@ grant_mirror(){
       if xy=$(findnode "$label" eq); then $ADB shell input tap $xy; tapped=1; sleep 2; break; fi
     done
     local now
-    now=$(grep -c 'screen mirror permitted' "$OUT/logcat.txt" 2>/dev/null || echo 0)
+    now=$(grep -c 'screen mirror permitted' "$OUT/logcat.txt" 2>/dev/null); now=${now:-0}
     [ "$now" -gt "$before" ] && break
     [ $tapped = 0 ] && break
   done
@@ -68,7 +68,8 @@ grant_mirror(){
 grant_mirror
 check "mirror consent granted" "grep -q 'screen mirror permitted' '$OUT/logcat.txt'"
 sleep 1; $ADB shell input swipe 700 2200 700 900 250 >/dev/null 2>&1; sleep 2; dump; cp "$OUT/consent_ui.xml" "$OUT/home_after_consent.xml"
-check "consent reflected on Home (no Allow button left)" "grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
+check "Home shows the connection steps and no setup left to do" "grep -q 'text=\"Hotspot on\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
+check "Home no longer asks for screen sharing up front" "! grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect, Android Auto auto-start on) =="
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings >/dev/null 2>&1
@@ -175,6 +176,34 @@ for f in "$OUT"/carlife/*.h264; do
   echo "   $b  $( [ -s "$png" ] && echo png-ok || echo no-png )"
 done
 check "launcher frame decoded to PNG" "[ -s '$OUT/frames/launcher.png' ]"
+
+BUMBLE_PY="${BUMBLE_PY:-}"
+PHONE_BT="${PHONE_BT:-$($ADB shell settings get secure bluetooth_address 2>/dev/null | tr -d '\r')}"
+if [ -n "$BUMBLE_PY" ] && [ -x "$BUMBLE_PY" ] && [ -n "$PHONE_BT" ] && [ "$PHONE_BT" != "null" ]; then
+  echo "== bluetooth car (WiFi + BL) =="
+  $ADB logcat -c
+  $ADB logcat -v time > "$OUT/bt_logcat.txt" 2>&1 &
+  BTLOG=$!
+  $ADB shell am start -n $PKG/.MainActivity --ei linkMode 1 --ez auto true >/dev/null 2>&1
+  sleep 4
+  "$BUMBLE_PY" "$SIMDIR/carlife_bt_car.py" --phone-address "$PHONE_BT" --seconds 6 --out "$OUT/bt1" > "$OUT/bt1.log" 2>&1
+  "$BUMBLE_PY" "$SIMDIR/carlife_bt_car.py" --phone-address "$PHONE_BT" --seconds 4 --out "$OUT/bt2" > "$OUT/bt2.log" 2>&1
+  $ADB shell "echo hello | nc -w 2 \$(ip -4 -o addr show | grep -v ' lo ' | head -1 | sed -E 's/.*inet ([0-9.]+).*/\\1/') ${CMD_PORT:-7240}" >/dev/null 2>&1
+  sleep 2
+  check "the car's first word from FT is the wireless info request" "python3 -c \"import json;d=json.load(open('$OUT/bt1/car_bt.json'));assert d['first_from_phone']=='MD_WIRELESS_INFO_REQUEST'\" 2>/dev/null"
+  check "FT asks for the car's WiFi Direct name after the wireless info" "grep -q 'MD_TARGET_INFO_REQUEST' '$OUT/bt1.log'"
+  check "FT reads the name and starts looking for it" "grep -q \"Joining the car's WiFi Direct 'DIRECT-COROLLA'\" '$OUT/bt_logcat.txt'"
+  check "no address is sent before WiFi Direct is up" "python3 -c \"import json;d=json.load(open('$OUT/bt1/car_bt.json'));assert d['phone_ip'] is None\" 2>/dev/null"
+  check "a second call from the car is answered too" "python3 -c \"import json;d=json.load(open('$OUT/bt2/car_bt.json'));assert d['first_from_phone']=='MD_WIRELESS_INFO_REQUEST'\" 2>/dev/null"
+  check "WiFi + BL refuses a car that is not on WiFi Direct" "grep -q 'but FT is set to WiFi + BL' '$OUT/bt_logcat.txt'"
+  echo "== bluetooth car (Hotspot) =="
+  $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true >/dev/null 2>&1
+  sleep 3
+  "$BUMBLE_PY" "$SIMDIR/carlife_bt_car.py" --phone-address "$PHONE_BT" --seconds 3 --out "$OUT/bt3" > "$OUT/bt3.log" 2>&1
+  kill $BTLOG 2>/dev/null
+  check "Hotspot offers no CarLife bluetooth record" "python3 -c \"import json;d=json.load(open('$OUT/bt3/car_bt.json'));assert d.get('reason')=='no channel'\" 2>/dev/null"
+  check "switching to Hotspot closes the bluetooth side" "grep -q 'switching to Hotspot, the other way is closed' '$OUT/bt_logcat.txt'"
+fi
 
 echo "== crashes =="
 check "no FT crash in logcat" "! grep -A3 'FATAL EXCEPTION' '$OUT/logcat.txt' | grep -q 'app.ft'"

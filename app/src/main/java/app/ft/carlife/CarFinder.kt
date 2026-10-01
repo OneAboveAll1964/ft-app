@@ -10,7 +10,6 @@ import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
-import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
 import android.os.Build
 import android.os.Looper
 import app.ft.core.DiagLog
@@ -20,11 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.net.InetSocketAddress
-import java.net.Socket
 
 @SuppressLint("MissingPermission")
 class CarFinder(private val context: Context, private val prefs: Prefs, private val scope: CoroutineScope) {
@@ -38,11 +34,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var loop: Job? = null
     @Volatile private var connecting: String? = null
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
-    val peers: StateFlow<List<Peer>> = _peers
     private val _state = MutableStateFlow("off")
-    val state: StateFlow<String> = _state
     private val _link = MutableStateFlow<Link?>(null)
-    val link: StateFlow<Link?> = _link
     var onJoined: ((Link) -> Unit)? = null
     var onLeft: (() -> Unit)? = null
 
@@ -207,32 +200,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 DiagLog.w(tag, "connect to ${p.name} failed reason=$reason")
             }
         })
-    }
-
-    fun registerService(ports: Map<String, Int>) {
-        val m = manager ?: return
-        val ch = channel ?: return
-        val info = WifiP2pDnsSdServiceInfo.newInstance("carlife", "_carlife._tcp", ports.mapValues { it.value.toString() })
-        m.addLocalService(ch, info, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() = DiagLog.i(tag, "advertising _carlife._tcp on the car link")
-            override fun onFailure(reason: Int) = DiagLog.d(tag, "service advert failed $reason")
-        })
-    }
-
-    fun probe(ip: String, ports: List<Int>) {
-        scope.launch(Dispatchers.IO) {
-            for (port in ports) {
-                val open = runCatching { Socket().use { it.connect(InetSocketAddress(ip, port), 700); true } }.getOrDefault(false)
-                DiagLog.i(tag, "head unit $ip:$port ${if (open) "open" else "closed"}")
-            }
-        }
-    }
-
-    fun disconnect() {
-        val m = manager ?: return
-        val ch = channel ?: return
-        runCatching { m.removeGroup(ch, null) }
-        _link.value = null
     }
 
     fun stop() {

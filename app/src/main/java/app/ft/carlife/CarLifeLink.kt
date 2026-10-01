@@ -25,7 +25,10 @@ interface CarLifeLink {
     fun stop()
 }
 
-class WifiChannelLink(private val ports: Map<Int, Int>) : CarLifeLink {
+class WifiChannelLink(
+    private val ports: Map<Int, Int>,
+    private val refuse: (Socket) -> String? = { null }
+) : CarLifeLink {
     override val name = "WiFi"
     private val tag = "Link"
     private val running = AtomicBoolean(false)
@@ -48,6 +51,10 @@ class WifiChannelLink(private val ports: Map<Int, Int>) : CarLifeLink {
                     onEvent("WIFI ${CarLifeProtocol.channelName(channel)} listening on $port")
                     while (isActive && running.get()) {
                         val s = ss.accept()
+                        if (refuse(s) != null) {
+                            runCatching { s.close() }
+                            continue
+                        }
                         s.tcpNoDelay = true
                         synchronized(sockets) {
                             sockets[channel]?.let { runCatching { it.close() } }
@@ -135,9 +142,19 @@ object NetUtil {
         null
     }
 
+    fun hotspotIpv4(): String? = try {
+        NetworkInterface.getNetworkInterfaces().toList()
+            .filter { n -> n.isUp && listOf("swlan", "ap", "softap").any { n.name.startsWith(it) } }
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { it is Inet4Address }
+            ?.hostAddress
+    } catch (_: Throwable) {
+        null
+    }
+
     fun broadcastAddresses(): List<InetAddress> = try {
         NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.isUp && !it.isLoopback }
+            .filter { it.isUp && !it.isLoopback && !it.name.startsWith("p2p") }
             .flatMap { it.interfaceAddresses }
             .mapNotNull { it.broadcast }
             .filter { it is Inet4Address }
