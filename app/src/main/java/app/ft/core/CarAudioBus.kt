@@ -10,15 +10,11 @@ object CarAudioBus {
 
     private const val RATE = 48000
     private const val REAL_TIME = RATE * 4
-    private const val CEILING = REAL_TIME * 102 / 100
-    private const val WINDOW_NS = 1_000_000_000L
     private const val MAIN_ALIVE_NS = 400_000_000L
     private const val HOLD_NS = 40_000_000L
     private const val HOLD_CAP = REAL_TIME / 4
 
     private val lock = Any()
-    private val recent = ArrayDeque<LongArray>()
-    private var inWindow = 0L
     private var sent = 0L
     private var dropped = 0L
     private val perLane = HashMap<Int, Long>()
@@ -40,8 +36,6 @@ object CarAudioBus {
         set(value) {
             out = value
             synchronized(lock) {
-                recent.clear()
-                inWindow = 0
                 perLane.clear()
                 waiting.clear()
                 held = 0
@@ -56,10 +50,6 @@ object CarAudioBus {
     fun clear(lane: Int) {
         synchronized(lock) { perLane.remove(lane) }
     }
-
-    fun hasRoom(lane: Int): Boolean = true
-
-    fun onRoom(lane: Int, callback: (() -> Unit)?) = Unit
 
     fun write(lane: Int, pcm: ByteArray) {
         val target = out ?: return

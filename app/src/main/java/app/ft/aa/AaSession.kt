@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 class AaSession(
     context: Context,
@@ -42,8 +41,6 @@ class AaSession(
     val deviceName: StateFlow<String> = _deviceName
     private val openChannels = HashSet<Int>()
     private val mic = AaMicrophone { pcm -> sendMicrophone(pcm) }
-    private val owed = HashMap<Int, AtomicInteger>()
-    private val watched = HashSet<Int>()
     @Volatile private var micWanted = false
     @Volatile private var carMicAt = 0L
 
@@ -68,10 +65,6 @@ class AaSession(
 
     fun close(reason: String) {
         if (!running.getAndSet(false)) return
-        synchronized(watched) {
-            watched.forEach { CarAudioBus.onRoom(it, null) }
-            watched.clear()
-        }
         mic.stop()
         runCatching { input.close() }
         runCatching { output.close() }
@@ -254,19 +247,6 @@ class AaSession(
             }
             else -> Unit
         }
-    }
-
-    private fun watchRoom(channel: Int) {
-        synchronized(watched) {
-            if (!watched.add(channel)) return
-        }
-        CarAudioBus.onRoom(channel) { payAcks(channel) }
-    }
-
-    private fun payAcks(channel: Int) {
-        if (!running.get()) return
-        val n = synchronized(owed) { owed[channel]?.getAndSet(0) ?: 0 }
-        repeat(n) { sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(0)) }
     }
 
     private fun startMicrophone() {

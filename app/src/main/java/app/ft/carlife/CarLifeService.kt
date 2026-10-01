@@ -13,6 +13,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -119,6 +120,7 @@ class CarLifeService : Service() {
     private var aaWatch: Job? = null
     private var listenOnly = false
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> CarAudioBus.write(CarAudioBus.LANE_PHONE, pcm) }
     private val outbound = java.util.concurrent.ArrayBlockingQueue<ByteArray>(24)
@@ -143,6 +145,7 @@ class CarLifeService : Service() {
     @Volatile private var aaAutoLaunched = false
     @Volatile private var resumedMedia = false
     private var carNetwork: android.net.ConnectivityManager.NetworkCallback? = null
+    private var aaReturn: Job? = null
     @Volatile private var askedForShare = false
     private var savedVolume = -1
     private val app get() = application as FTApp
@@ -236,7 +239,25 @@ class CarLifeService : Service() {
         _state.update { it.copy(running = true, ip = NetUtil.localIpv4()) }
     }
 
+    private fun holdWifiSteady() {
+        if (wifiLock?.isHeld == true) return
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager ?: return
+        val mode = if (Build.VERSION.SDK_INT >= 29) android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+        else @Suppress("DEPRECATION") android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        wifiLock = runCatching { wm.createWifiLock(mode, "FT:car") }.getOrNull()?.also {
+            it.setReferenceCounted(false)
+            runCatching { it.acquire() }
+                .onSuccess { _ -> DiagLog.i(tag, "holding the wifi radio at low latency for the car") }
+        }
+    }
+
+    private fun releaseWifi() {
+        runCatching { wifiLock?.takeIf { it.isHeld }?.release() }
+        wifiLock = null
+    }
+
     private fun awake() {
+        holdWifiSteady()
         if (wakeLock?.isHeld == true) return
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "FT:carlife").apply {
@@ -340,7 +361,9 @@ class CarLifeService : Service() {
         s.onStartVideo = { carDisplay.requestKeyFrame() }
         s.onFrameRate = { fps ->
             carDisplay.setFrameRate(fps)
-            carDisplay.setBitrate((carDisplay.width * carDisplay.height * fps / 12).coerceAtLeast(400_000))
+            val wanted = carDisplay.width.toLong() * carDisplay.height * fps / 12
+            val capped = wanted.coerceIn(400_000L, app.prefs.maxBitrate.toLong().coerceAtLeast(400_000L))
+            carDisplay.setBitrate(capped.toInt())
         }
         s.onStopVideo = { onStopVideo() }
         s.onKeyFrameRequest = { carDisplay.requestKeyFrame() }
@@ -491,13 +514,30 @@ class CarLifeService : Service() {
                         AaHeadUnitService.current?.sendKey(126)
                     }
                 }
-                if (s.connected && !_state.value.aaOverlay) {
-                    DiagLog.i(tag, "Android Auto is projecting, showing it on the car")
-                    shown = true
-                    aaOverlay(true)
-                } else if (!s.connected && shown) {
-                    shown = false
-                    stopAndroidAuto("Android Auto closed on the phone")
+                if (s.connected) {
+                    aaReturn?.cancel()
+                    aaReturn = null
+                    if (!_state.value.aaOverlay) {
+                        DiagLog.i(tag, "Android Auto is projecting, showing it on the car")
+                        shown = true
+                        aaOverlay(true)
+                    }
+                } else if (shown && aaReturn?.isActive != true) {
+                    aaReturn = scope.launch {
+                        DiagLog.i(tag, "Android Auto went quiet, waiting for it to come back")
+                        step("Android Auto went quiet, waiting for it")
+                        var wait = 1200L
+                        repeat(6) {
+                            delay(wait)
+                            if (AaHeadUnitService.state.value.connected) return@launch
+                            askAndroidAutoToConnect()
+                            wait = (wait * 2).coerceAtMost(8000L)
+                        }
+                        if (!AaHeadUnitService.state.value.connected) {
+                            shown = false
+                            stopAndroidAuto("Android Auto did not come back")
+                        }
+                    }
                 }
             }
         }
@@ -913,6 +953,8 @@ class CarLifeService : Service() {
     }
 
     private fun stopAndroidAuto(reason: String) {
+        aaReturn?.cancel()
+        aaReturn = null
         val wasOn = _state.value.aaOverlay
         val wasRunning = AaHeadUnitService.current != null || AaHeadUnitService.state.value.listening
         if (!wasOn && !wasRunning) return
@@ -969,6 +1011,7 @@ class CarLifeService : Service() {
         teardown()
         scope.cancel()
         ble.stop()
+        releaseWifi()
         carNetwork?.let { cb ->
             runCatching { (getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).unregisterNetworkCallback(cb) }
         }

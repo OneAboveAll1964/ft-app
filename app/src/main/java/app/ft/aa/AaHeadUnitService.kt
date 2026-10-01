@@ -95,15 +95,8 @@ class AaHeadUnitService : Service() {
     }
 
     private fun foreground(text: String) {
-        val note = notification(text)
-        val canRecord = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        val full = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-            (if (canRecord) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
-        runCatching { startForeground(NOTIFICATION_ID, note, full) }
-            .onFailure {
-                DiagLog.w(tag, "keeping the head unit running without microphone access (${it.message})")
-                runCatching { startForeground(NOTIFICATION_ID, note, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
-            }
+        runCatching { startForeground(NOTIFICATION_ID, notification(text), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE) }
+            .onFailure { DiagLog.w(tag, "could not keep the head unit in the foreground: ${it.message}") }
     }
 
     private fun listen(bluetooth: Boolean) {
