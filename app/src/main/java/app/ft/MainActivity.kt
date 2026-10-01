@@ -79,7 +79,10 @@ class MainActivity : ComponentActivity() {
             app.mirrorGranted.value = true
             DiagLog.i("App", "screen mirror permitted")
             CarLifeService.startAudio(this)
-        } else DiagLog.w("App", "screen mirror declined")
+        } else {
+            DiagLog.w("App", "screen mirror declined")
+            CarLifeService.shareDeclined(this)
+        }
     }
 
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
@@ -140,6 +143,8 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
+        if (intent.hasExtra("aaCorner")) app.prefs.aaCorner = intent.getIntExtra("aaCorner", 0)
+        if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
         if (intent.getBooleanExtra("wifi", false)) CarLifeService.startWifi(this)
         if (intent.getBooleanExtra("auto", false)) CarLifeService.startAuto(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)

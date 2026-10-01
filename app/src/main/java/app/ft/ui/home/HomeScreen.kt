@@ -3,6 +3,9 @@ package app.ft.ui.home
 import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,11 +91,13 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
+    val aa by AaHeadUnitService.state.collectAsState()
     val log by DiagLog.entries.collectAsState()
     val mirrorGranted by app.mirrorGranted.collectAsState()
     var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
     LaunchedEffect(car.running) { if (car.running) autoConnect = true }
     var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
+    var aaCorner by remember { mutableIntStateOf(app.prefs.aaCorner) }
     var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
@@ -225,10 +230,17 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                     "FT pretends to be a car, so Android Auto projects onto it and FT passes it to your car"
                 )
                 InfoRow(aaSays.first, aaSays.second)
+                InfoRow(
+                    if (aa.selfServer) "Head unit server is on" else "Head unit server is off",
+                    if (aa.selfServer) "FT is connected to it by itself"
+                    else "Turn it on once in Android Auto: Open Android Auto settings, three-dot menu, Start head unit server. FT connects within three seconds"
+                )
                 SwitchRow("Start automatically", "Opens Android Auto as soon as the car is projecting", aaAuto) {
                     aaAuto = it
                     app.prefs.aaAutoStart = it
                 }
+                Text("Where the FT button sits on the car", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
+                CornerPicker(aaCorner, app.prefs.aaWidth, app.prefs.aaHeight) { aaCorner = it; app.prefs.aaCorner = it }
                 Actions {
                     FilledTonalButton(
                         onClick = {
@@ -279,6 +291,52 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                     }
                 }
                 TextButton(onClick = onOpenLog, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Open the full log") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CornerPicker(selected: Int, carWidth: Int, carHeight: Int, onPick: (Int) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val shape = if (carHeight > 0) (carWidth.toFloat() / carHeight).coerceIn(1.6f, 3f) else 16f / 9f
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(shape)
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.surfaceContainerHighest)
+            .border(2.dp, scheme.outlineVariant, RoundedCornerShape(14.dp))
+    ) {
+        Text(
+            "Car screen",
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.Center)
+        )
+        val corners = listOf(
+            0 to Alignment.TopStart, 1 to Alignment.TopEnd,
+            2 to Alignment.BottomStart, 3 to Alignment.BottomEnd
+        )
+        corners.forEach { (value, align) ->
+            val chosen = selected == value
+            Box(
+                Modifier
+                    .align(align)
+                    .padding(8.dp)
+                    .size(width = 46.dp, height = 26.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(if (chosen) scheme.primary else scheme.surfaceContainer)
+                    .border(1.dp, if (chosen) scheme.primary else scheme.outline, RoundedCornerShape(50))
+                    .clickable { onPick(value) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "FT",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Black,
+                    color = if (chosen) scheme.onPrimary else scheme.onSurfaceVariant
+                )
             }
         }
     }

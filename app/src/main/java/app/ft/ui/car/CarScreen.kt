@@ -95,6 +95,7 @@ fun CarScreen() {
             .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.surface)))
     ) {
         when {
+            state.waitingForShare -> ShareWait(state.mirrorPackage)
             state.aaOverlay -> AaOverlay(aa)
             state.mirroring -> MirrorOverlay(state.mirrorPackage)
             view == CarView.DRAWER -> AppDrawer(drawerGrid, onClose = { view = CarView.LAUNCHER })
@@ -110,13 +111,42 @@ fun CarScreen() {
 }
 
 @Composable
+private fun ShareWait(pkg: String) {
+    val context = LocalContext.current
+    val label = remember(pkg) {
+        runCatching {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        }.getOrDefault("")
+    }
+    Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            LoadingIndicator()
+            Text(
+                "Allow screen sharing on your phone",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White
+            )
+            Text(
+                if (label.isNotBlank()) "$label will open here as soon as you allow it" else "The app will open here as soon as you allow it",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+            Button(onClick = { CarLifeService.cancelShareWait() }) { Text("Cancel") }
+        }
+    }
+}
+
+@Composable
 private fun CornerPill(onClick: () -> Unit) {
-    Box(
-        Modifier
-            .size(96.dp)
-            .padding(14.dp),
-        contentAlignment = Alignment.TopStart
-    ) {
+    val corner = remember { FTApp.instance.prefs.aaCorner }
+    val align = when (corner) {
+        1 -> Alignment.TopEnd
+        2 -> Alignment.BottomStart
+        3 -> Alignment.BottomEnd
+        else -> Alignment.TopStart
+    }
+    Box(Modifier.fillMaxSize().padding(14.dp), contentAlignment = align) {
         Surface(
             onClick = onClick,
             shape = RoundedCornerShape(50),

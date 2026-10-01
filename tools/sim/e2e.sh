@@ -71,11 +71,11 @@ sleep 1; $ADB shell input swipe 700 2200 700 900 250 >/dev/null 2>&1; sleep 2; d
 check "consent reflected on Home (no Allow button left)" "grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect, Android Auto auto-start on) =="
-$ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings >/dev/null 2>&1
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings >/dev/null 2>&1
 sleep 7
 check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt'"
 check "no WiFi Direct nagging while the car is reachable on this network" "! grep -q 'discoverPeers failed' '$OUT/logcat.txt'"
-check "bluetooth trigger runs to raise the car's WiFi Direct" "grep -q 'FT/CarBT' '$OUT/logcat.txt'"
+check "hotspot route leaves bluetooth alone" "! grep -q 'FT/CarBT' '$OUT/logcat.txt'"
 check "discovery beacon keeps calling on udp 7999 (4th tick seen)" "grep -q 'discovery beacon #4 to .*udp 7999 ([1-9]' '$OUT/logcat.txt'"
 check "not marked connected before any head unit dialled in" "! grep -q 'head unit connected over' '$OUT/logcat.txt'"
 

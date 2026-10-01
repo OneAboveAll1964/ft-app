@@ -56,7 +56,8 @@ data class CarState(
     val peers: List<String> = emptyList(),
     val carIp: String? = null,
     val beacon: Boolean = false,
-    val step: String = ""
+    val step: String = "",
+    val waitingForShare: Boolean = false
 )
 
 class CarLifeService : Service() {
@@ -65,6 +66,7 @@ class CarLifeService : Service() {
         const val ACTION_AUTO = "app.ft.carlife.AUTO"
         const val ACTION_STOP = "app.ft.carlife.STOP"
         const val ACTION_AUDIO = "app.ft.carlife.AUDIO"
+        const val ACTION_SHARE_DECLINED = "app.ft.carlife.SHARE_DECLINED"
         const val EXTRA_BT_ADDR = "btAddr"
         const val CORNER = 96
         private val AA_KEYS = setOf(3, 4, 19, 20, 21, 22, 23, 84, 85, 86, 87, 88, 126, 127)
@@ -89,6 +91,16 @@ class CarLifeService : Service() {
 
         fun startAudio(context: Context) {
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUDIO))
+        }
+
+        fun shareDeclined(context: Context) {
+            if (instance == null) return
+            context.startService(Intent(context, CarLifeService::class.java).setAction(ACTION_SHARE_DECLINED))
+        }
+
+        fun cancelShareWait() = instance?.let { svc ->
+            svc.pendingLaunch = null
+            _state.update { it.copy(waitingForShare = false) }
         }
 
         fun btSend(hex: String) = instance?.sendBluetooth(hex)
@@ -146,7 +158,7 @@ class CarLifeService : Service() {
     @Volatile private var resumedMedia = false
     private var carNetwork: android.net.ConnectivityManager.NetworkCallback? = null
     private var aaReturn: Job? = null
-    @Volatile private var askedForShare = false
+    @Volatile private var pendingLaunch: Pair<Intent, String>? = null
     private var savedVolume = -1
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
@@ -197,10 +209,19 @@ class CarLifeService : Service() {
                 updateBeacon()
             }
             ACTION_AUDIO -> {
-                askedForShare = true
                 audio.stop()
                 foreground("Sending sound to the car", projection = true, microphone = canRecord())
                 startAudioToCar()
+                _state.update { it.copy(waitingForShare = false) }
+                pendingLaunch?.let { (i, p) ->
+                    pendingLaunch = null
+                    launchIntent(i, p)
+                }
+            }
+            ACTION_SHARE_DECLINED -> {
+                pendingLaunch = null
+                _state.update { it.copy(waitingForShare = false, mirrorPackage = "") }
+                DiagLog.i(tag, "screen sharing was declined on the phone")
             }
             ACTION_AUTO -> {
                 val direct = app.prefs.linkMode == 1
@@ -732,6 +753,12 @@ class CarLifeService : Service() {
 
     private fun launchIntent(intent: Intent, pkg: String) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        if (!mirror.ready && projection == null && (app.mirrorResultCode == 0 || app.mirrorData == null)) {
+            pendingLaunch = intent to pkg
+            _state.update { it.copy(mirroring = false, mirrorPackage = pkg, waitingForShare = true) }
+            askForScreenShare()
+            return
+        }
         if (!mirror.ready && !mirrorOpen(pkg, ownDisplay = true)) {
             _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
             return
@@ -776,12 +803,12 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun ensureProjection(reason: String): MediaProjection? {
+    private fun ensureProjection(reason: String, quiet: Boolean = false): MediaProjection? {
         projection?.let { return it }
         val code = app.mirrorResultCode
         val data = app.mirrorData
         if (code == 0 || data == null) {
-            DiagLog.w(tag, "screen sharing not permitted yet, open FT on the phone and tap Allow")
+            if (!quiet) DiagLog.i(tag, "screen sharing has not been allowed yet")
             return null
         }
         return try {
@@ -832,11 +859,7 @@ class CarLifeService : Service() {
             DiagLog.w(tag, "no microphone permission, the car will get picture without sound")
             return
         }
-        val mp = ensureProjection("Sending sound to the car")
-        if (mp == null) {
-            askForScreenShare()
-            return
-        }
+        val mp = ensureProjection("Sending sound to the car", quiet = true) ?: return
         if (audio.start(mp)) silencePhone()
     }
 
@@ -880,9 +903,7 @@ class CarLifeService : Service() {
     }
 
     private fun askForScreenShare() {
-        if (askedForShare) return
-        askedForShare = true
-        DiagLog.i(tag, "asking for screen sharing so the car can have sound")
+        DiagLog.i(tag, "asking on the phone for screen sharing, the car is waiting")
         runCatching {
             startActivity(
                 Intent(this, MainActivity::class.java)
@@ -986,7 +1007,7 @@ class CarLifeService : Service() {
         wifiLink?.stop()
         wifiLink = null
         listenOnly = false
-        askedForShare = false
+        pendingLaunch = null
         carDisplay.stop()
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         wakeLock = null

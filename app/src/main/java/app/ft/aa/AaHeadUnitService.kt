@@ -35,6 +35,7 @@ data class AaState(
     val phase: AaSession.Phase? = null,
     val deviceName: String = "",
     val bluetooth: String = "idle",
+    val selfServer: Boolean = false,
     val hotspot: HotspotInfo? = null
 )
 
@@ -158,11 +159,15 @@ class AaHeadUnitService : Service() {
                         }
                     }.getOrNull()
                     if (s != null) {
-                        DiagLog.i(tag, "Android Auto is serving on ${app.prefs.aaSelfPort}, connected to it")
+                        _state.update { it.copy(selfServer = true) }
+                        DiagLog.i(tag, "Android Auto's head unit server is on, connected to it")
                         onPhone(s, dec)
-                    } else if (!moaned) {
-                        DiagLog.d(tag, "Android Auto is not serving on ${app.prefs.aaSelfPort}; waiting for it to dial tcp:$port instead")
-                        moaned = true
+                    } else {
+                        if (_state.value.selfServer) _state.update { it.copy(selfServer = false) }
+                        if (!moaned) {
+                            DiagLog.d(tag, "Android Auto's head unit server is off; FT will connect as soon as it is switched on")
+                            moaned = true
+                        }
                     }
                 }
                 delay(3000)
