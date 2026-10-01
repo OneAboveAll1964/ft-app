@@ -7,3 +7,4 @@ local.properties
 captures/
 .cxx/
 .kotlin/
+tools/sim/.car_bt_keys.json
