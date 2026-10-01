@@ -123,7 +123,7 @@ class AaHeadUnitService : Service() {
         surfaceJob = scope.launch {
             AaVideoSink.surface.collect { s -> dec.setSurface(s) }
         }
-        if (bt == null) {
+        if (bluetooth && bt == null) {
             DiagLog.i(tag, "advertising the Android Auto wireless service so it can find this head unit")
             bt = AaBluetoothAdvertiser(this, port).also { it.start(scope) }
             scope.launch { bt?.status?.collect { s -> _state.update { it.copy(bluetooth = s) } } }
@@ -160,10 +160,12 @@ class AaHeadUnitService : Service() {
                     }.getOrNull()
                     if (s != null) {
                         _state.update { it.copy(selfServer = true) }
+                        app.prefs.aaServerOn = true
                         DiagLog.i(tag, "Android Auto's head unit server is on, connected to it")
                         onPhone(s, dec)
                     } else {
                         if (_state.value.selfServer) _state.update { it.copy(selfServer = false) }
+                        app.prefs.aaServerOn = false
                         if (!moaned) {
                             DiagLog.d(tag, "Android Auto's head unit server is off; FT will connect as soon as it is switched on")
                             moaned = true
