@@ -36,6 +36,20 @@ object AaInstaller {
 
     fun installed(context: Context) = info(context) != null
 
+    fun openSettings(context: Context) {
+        val settings = Intent()
+            .setClassName(GEARHEAD, "com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(settings) }.isSuccess) return
+        DiagLog.w(TAG, "Android Auto would not open its settings, showing its app page instead")
+        runCatching {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$GEARHEAD"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
     fun installerOfAndroidAuto(context: Context): String? = runCatching {
         context.packageManager.getInstallSourceInfo(GEARHEAD).installingPackageName
     }.getOrNull()

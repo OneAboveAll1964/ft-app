@@ -252,6 +252,14 @@ fun HomeScreen(pad: PaddingValues, onOpenLog: () -> Unit, onAllowMirror: () -> U
                         )
                     }
                 }
+                if (AaInstaller.installed(context)) {
+                    OutlinedButton(
+                        onClick = { AaInstaller.openSettings(context) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        Text("Open Android Auto settings", maxLines = 1, textAlign = TextAlign.Center)
+                    }
+                }
             }
         }
 
