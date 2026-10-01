@@ -11,9 +11,8 @@ class CarWirelessSetupTest {
     private val sent = ArrayList<ByteArray>()
     private val names = ArrayList<String>()
 
-    private fun setup(ip: String? = "192.168.43.1") = CarWirelessSetup(
+    private fun setup() = CarWirelessSetup(
         send = { sent.add(it) },
-        localIp = { ip },
         onCarWifiName = { names.add(it) }
     )
 
@@ -22,48 +21,90 @@ class CarWirelessSetupTest {
     private fun frame(serviceId: Int, payload: ByteArray = ByteArray(0)) =
         CarLifeFraming.cmd(serviceId, payload)
 
+    private fun target(name: String) =
+        frame(CarWirelessSetup.HU_TARGET_INFO, ProtoWriter().string(1, name).toByteArray())
+
     @Test
-    fun aReadyHeadUnitIsAskedWhatWirelessItOffers() {
+    fun theFirstThingTheCarHearsIsTheWirelessInfoRequest() {
         val w = setup()
-        w.feed(frame(CarWirelessSetup.HU_READY))
-        assertEquals(listOf(CarWirelessSetup.MD_READY, CarWirelessSetup.MD_WIRELESS_INFO_REQUEST), ids())
+        w.begin()
+        assertEquals(listOf(CarWirelessSetup.MD_WIRELESS_INFO_REQUEST), ids())
+        assertEquals(8, sent[0].size)
     }
 
     @Test
-    fun theWirelessInfoReplyMakesFtAskForWifiDirect() {
+    fun theWirelessInfoReplyMakesFtAskForTheTarget() {
         val w = setup()
-        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO))
-        assertEquals(listOf(CarWirelessSetup.MD_WIFI_DIRECT_NAME_REQUEST), ids())
+        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO, ProtoWriter().int32(1, 2).int32(2, 5745).toByteArray()))
+        assertEquals(listOf(CarWirelessSetup.MD_TARGET_INFO_REQUEST), ids())
     }
 
     @Test
     fun theCarsWifiDirectNameIsRead() {
         val w = setup()
-        val body = ProtoWriter().string(1, "DIRECT-zO-Android_f4ec").toByteArray()
-        w.feed(frame(CarWirelessSetup.HU_WIFI_DIRECT_NAME, body))
+        w.feed(target("DIRECT-zO-Android_f4ec"))
         assertEquals(listOf("DIRECT-zO-Android_f4ec"), names)
+        assertEquals("DIRECT-zO-Android_f4ec", w.carWifiName)
     }
 
     @Test
-    fun theCarIsToldThisPhonesAddressWhenItAsks() {
-        val w = setup("10.55.95.206")
+    fun aRepeatedTargetIsIgnored() {
+        val w = setup()
+        w.feed(target("DIRECT-ab-COROLLA"))
+        w.feed(target("DIRECT-ab-COROLLA"))
+        assertEquals(listOf("DIRECT-ab-COROLLA"), names)
+    }
+
+    @Test
+    fun noMoreTargetRequestsOnceTheNameIsKnown() {
+        val w = setup()
+        w.feed(target("DIRECT-ab-COROLLA"))
+        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO))
+        assertTrue("asked again after the name was known", sent.isEmpty())
+    }
+
+    @Test
+    fun theAddressWaitsForWifiDirect() {
+        val w = setup()
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        assertTrue("sent an address before WiFi Direct was up", sent.isEmpty())
+        w.wifiDirectReady("192.168.49.23")
+        assertEquals(listOf(CarWirelessSetup.MD_WIFI_IP), ids())
+        assertEquals("192.168.49.23", ProtoReader(sent[0].copyOfRange(8, sent[0].size)).string(1))
+    }
+
+    @Test
+    fun theAddressGoesStraightAwayWhenWifiDirectIsAlreadyUp() {
+        val w = setup()
+        w.wifiDirectReady("192.168.49.23")
+        assertTrue("sent an address nobody asked for", sent.isEmpty())
         w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
         assertEquals(listOf(CarWirelessSetup.MD_WIFI_IP), ids())
-        val payload = sent[0].copyOfRange(8, sent[0].size)
-        assertEquals("10.55.95.206", ProtoReader(payload).string(1))
     }
 
     @Test
-    fun nothingIsSentWhenThePhoneHasNoAddressYet() {
-        val w = setup(null)
+    fun theAddressIsOnlySentOnce() {
+        val w = setup()
+        w.wifiDirectReady("192.168.49.23")
         w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
-        assertTrue("replied with no address to give", sent.isEmpty())
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        w.wifiDirectReady("192.168.49.23")
+        assertEquals(listOf(CarWirelessSetup.MD_WIFI_IP), ids())
+    }
+
+    @Test
+    fun aNewCallStartsOver() {
+        val w = setup()
+        w.feed(target("DIRECT-ab-COROLLA"))
+        w.reset()
+        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO))
+        assertEquals(listOf(CarWirelessSetup.MD_TARGET_INFO_REQUEST), ids())
     }
 
     @Test
     fun aFrameSplitAcrossReadsIsStillUnderstood() {
         val w = setup()
-        val f = frame(CarWirelessSetup.HU_WIFI_DIRECT_NAME, ProtoWriter().string(1, "DIRECT-ab-COROLLA").toByteArray())
+        val f = target("DIRECT-ab-COROLLA")
         w.feed(f.copyOfRange(0, 3))
         assertTrue("acted on half a frame", names.isEmpty())
         w.feed(f.copyOfRange(3, f.size))
@@ -73,31 +114,16 @@ class CarWirelessSetupTest {
     @Test
     fun twoFramesInOneReadAreBothHandled() {
         val w = setup()
-        val both = frame(CarWirelessSetup.HU_READY) + frame(CarWirelessSetup.HU_WIRELESS_INFO)
-        w.feed(both)
-        assertEquals(
-            listOf(
-                CarWirelessSetup.MD_READY,
-                CarWirelessSetup.MD_WIRELESS_INFO_REQUEST,
-                CarWirelessSetup.MD_WIFI_DIRECT_NAME_REQUEST
-            ),
-            ids()
-        )
+        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO) + target("DIRECT-ab-COROLLA"))
+        assertEquals(listOf(CarWirelessSetup.MD_TARGET_INFO_REQUEST), ids())
+        assertEquals(listOf("DIRECT-ab-COROLLA"), names)
     }
 
     @Test
     fun rubbishOnTheLineDoesNotStopLaterFrames() {
         val w = setup()
         w.feed(byteArrayOf(0xFF.toByte(), 0x55, 0x02, 0x00, 0xEE.toByte(), 0x10))
-        w.feed(frame(CarWirelessSetup.HU_WIFI_DIRECT_NAME, ProtoWriter().string(1, "DIRECT-zz-CAR").toByteArray()))
+        w.feed(target("DIRECT-zz-CAR"))
         assertEquals(listOf("DIRECT-zz-CAR"), names)
-    }
-
-    @Test
-    fun theNameIsOnlyAskedForOnce() {
-        val w = setup()
-        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO))
-        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO))
-        assertEquals(listOf(CarWirelessSetup.MD_WIFI_DIRECT_NAME_REQUEST), ids())
     }
 }

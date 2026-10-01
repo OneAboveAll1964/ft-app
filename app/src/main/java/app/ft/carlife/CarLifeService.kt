@@ -178,8 +178,7 @@ class CarLifeService : Service() {
 
     private val wireless by lazy {
         CarWirelessSetup(
-            send = { bytes -> bt.write(bytes) },
-            localIp = { NetUtil.localIpv4() },
+            send = { bytes -> bt.send(bytes) },
             onCarWifiName = { name -> onCarRaisedWifiDirect(name) },
             progress = { text -> step(text) }
         )
@@ -230,7 +229,7 @@ class CarLifeService : Service() {
                 beacon.onlyTarget = direct
                 if (direct) {
                     startWirelessSetup()
-                    bt.start(intent.getStringExtra(EXTRA_BT_ADDR))
+                    bt.start()
                     ble.start(null)
                     wakeCarBluetooth()
                     startFinder()
@@ -314,6 +313,15 @@ class CarLifeService : Service() {
         finder = f
         f.onJoined = { l ->
             _state.update { it.copy(carIp = l.groupOwnerIp, ip = NetUtil.localIpv4()) }
+            scope.launch {
+                var ip: String? = null
+                var tries = 0
+                while (ip == null && tries++ < 40) {
+                    ip = NetUtil.wifiDirectIpv4(l.iface)
+                    if (ip == null) delay(500)
+                }
+                wireless.wifiDirectReady(ip)
+            }
             val p = app.prefs
             f.registerService(mapOf("cmd" to p.cmdPort, "video" to p.videoPort, "media" to p.mediaPort, "touch" to p.touchPort))
             beacon.target = l.groupOwnerIp
@@ -321,6 +329,7 @@ class CarLifeService : Service() {
             updateNotification("On the car network, calling the head unit")
         }
         f.onLeft = {
+            wireless.wifiDirectReady(null)
             _state.update { it.copy(carIp = null) }
             beacon.target = null
             updateBeacon()
@@ -598,7 +607,12 @@ class CarLifeService : Service() {
         step("Looking for the car over bluetooth")
         wireless.reset()
         bt.onFrame = { frame -> wireless.feed(frame) }
-        bt.onProbe = { wireless.reset(); wireless.hello() }
+        bt.onCar = { name ->
+            if (name != null) {
+                wireless.reset()
+                wireless.begin()
+            }
+        }
         bt.onStep = { text -> step(text) }
     }
 

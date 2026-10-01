@@ -124,6 +124,17 @@ object NetUtil {
         null
     }
 
+    fun wifiDirectIpv4(iface: String?): String? = try {
+        NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && (it.name == iface || it.name.startsWith("p2p")) }
+            .sortedByDescending { it.name == iface }
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { it is Inet4Address }
+            ?.hostAddress
+    } catch (_: Throwable) {
+        null
+    }
+
     fun broadcastAddresses(): List<InetAddress> = try {
         NetworkInterface.getNetworkInterfaces().toList()
             .filter { it.isUp && !it.isLoopback }
