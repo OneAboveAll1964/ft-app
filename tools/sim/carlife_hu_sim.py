@@ -42,6 +42,13 @@ MD_ENCRYPT_READY = 0x0001006E
 VIDEO_DATA = 0x00020001
 VIDEO_HEARTBEAT = 0x00020002
 MEDIA_INIT = 0x00030001
+MEDIA_STOP = 0x00030002
+MEDIA_PAUSE = 0x00030003
+MEDIA_RESUME = 0x00030004
+MEDIA_DATA = 0x00030006
+TTS_INIT = 0x00040001
+TTS_END = 0x00040002
+TTS_DATA = 0x00040003
 TOUCH_ACTION = 0x00068001
 CAR_HARD_KEY_CODE = 0x00068008
 
@@ -104,6 +111,7 @@ class WifiLink:
         self.q = queue.Queue()
         self.aes = None
         self.plain_after_key = 0
+        self.audio = []
         for ch, port in ports.items():
             s = socket.create_connection((host, port), timeout=10)
             s.settimeout(None)
@@ -128,6 +136,10 @@ class WifiLink:
                 ln = struct.unpack(">H", head[:2])[0] if hl == 8 else struct.unpack(">I", head[:4])[0]
                 body = read_exact(s, ln) if ln else b""
                 sid, payload = parse_inner(ch, head, body)
+                if ch in (CH_MEDIA, CH_TTS):
+                    self.audio.append((time.time(), ch, sid, payload))
+                    if sid in (MEDIA_DATA, TTS_DATA):
+                        continue
                 self.q.put((ch, sid, self._unwrap(ch, payload)))
         except Exception as e:
             self.q.put((ch, -1, str(e).encode()))
@@ -229,6 +241,82 @@ def write_h264(path, frames):
             f.write(fr)
 
 
+def play_model(packets, rate_bytes, prebuffer):
+    if not packets:
+        return None
+    start = packets[0][0] + prebuffer
+    clock = start
+    level = 0.0
+    last = packets[0][0]
+    gaps = []
+    delays = []
+    for t, n in packets:
+        if t > clock:
+            played = (t - clock) * rate_bytes
+            if played > level:
+                short = (played - level) / rate_bytes
+                if t > start:
+                    gaps.append((round(clock - start + level / rate_bytes, 3), round(short, 3)))
+                level = 0.0
+            else:
+                level -= played
+            clock = t
+        level += n
+        delays.append((round(t - packets[0][0], 3), round(level / rate_bytes, 3)))
+        last = t
+    total = sum(n for _, n in packets)
+    span = packets[-1][0] - packets[0][0]
+    return {
+        "packets": len(packets),
+        "bytes": total,
+        "audio_seconds": round(total / rate_bytes, 3),
+        "wall_seconds": round(span, 3),
+        "extra_seconds": round(total / rate_bytes - span, 3),
+        "gaps": gaps,
+        "gap_seconds": round(sum(g for _, g in gaps), 3),
+        "max_delay": max(d for _, d in delays),
+        "end_delay": delays[-1][1],
+        "delay_track": delays[::max(1, len(delays) // 40)],
+    }
+
+
+def write_wav(path, pcm, rate, channels):
+    import wave
+    with wave.open(path, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm)
+
+
+def analyse_audio(audio, out):
+    if not audio:
+        return None
+    t0 = audio[0][0]
+    media = [(t, len(p)) for t, ch, sid, p in audio if ch == CH_MEDIA and sid == MEDIA_DATA]
+    tts = [(t, len(p)) for t, ch, sid, p in audio if ch == CH_TTS and sid == TTS_DATA]
+    events = [{"t": round(t - t0, 3), "ch": "media" if ch == CH_MEDIA else "tts", "msg": name(sid), "body": decode(p) if p else {}}
+              for t, ch, sid, p in audio if sid not in (MEDIA_DATA, TTS_DATA)]
+    tts_rate = 16000
+    tts_channels = 1
+    for e in events:
+        if e["msg"] == "TTS_INIT":
+            tts_rate = first(e["body"], 1, 16000)
+            tts_channels = first(e["body"], 2, 1)
+    for e in events:
+        e["body"] = {k: v[0] if not isinstance(v[0], bytes) else v[0].hex() for k, v in e["body"].items()}
+    write_wav(os.path.join(out, "media.wav"), b"".join(p for _, ch, sid, p in audio if ch == CH_MEDIA and sid == MEDIA_DATA), 48000, 2)
+    if tts:
+        write_wav(os.path.join(out, "tts.wav"), b"".join(p for _, ch, sid, p in audio if ch == CH_TTS and sid == TTS_DATA), tts_rate, tts_channels)
+    return {
+        "events": events,
+        "media": play_model(media, 192000.0, 0.3),
+        "tts": play_model(tts, tts_rate * tts_channels * 2.0, 0.15),
+        "first_media_at": round(media[0][0] - t0, 3) if media else None,
+        "first_tts_at": round(tts[0][0] - t0, 3) if tts else None,
+    }
+
+
 def feature_list(encrypt):
     items = [("CONTENT_ENCRYPTION", 1 if encrypt else 0), ("BLUETOOTH_AUTO_PAIR", 1), ("FOCUS_UI", 0)]
     out = f_varint(1, len(items))
@@ -251,6 +339,7 @@ def main():
     ap.add_argument("--encrypt", type=int, default=1)
     ap.add_argument("--hold-init", type=float, default=3.0)
     ap.add_argument("--out", default="/tmp/ft_carlife")
+    ap.add_argument("--listen-seconds", type=float, default=0.0)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -354,6 +443,10 @@ def main():
                 result["checks"]["video_after_tap%d" % (i + 1)] = st["frames"] >= 5
                 log("after tap %d (%d,%d): %s" % (i + 1, x, y, st))
 
+        if a.listen_seconds > 0:
+            log("listening to the phone's sound for %.0fs" % a.listen_seconds)
+            sim.drain(a.listen_seconds)
+
         if a.hardkey >= 0:
             sim.send_ctrl(CAR_HARD_KEY_CODE, f_varint(1, a.hardkey))
             sim.drain(1.0)
@@ -372,6 +465,12 @@ def main():
         result["error"] = "%s: %s" % (type(e).__name__, e)
     finally:
         link.close()
+    try:
+        heard = analyse_audio(link.audio, a.out)
+        if heard is not None:
+            result["audio"] = heard
+    except Exception as e:
+        result["audio_error"] = "%s: %s" % (type(e).__name__, e)
     with open(os.path.join(a.out, "result.json"), "w") as f:
         json.dump(result, f, indent=2)
     print(json.dumps(result, indent=2))

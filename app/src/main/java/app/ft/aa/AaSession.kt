@@ -34,6 +34,8 @@ class AaSession(
     private val running = AtomicBoolean(false)
     private var job: Job? = null
     private var videoSession = 0
+    private val audioSessions = HashMap<Int, Int>()
+    private val audioMeasured = HashSet<Int>()
     private var mediaFrames = 0L
     private val _phase = MutableStateFlow(Phase.CONNECTED)
     val phase: StateFlow<Phase> = _phase
@@ -66,6 +68,8 @@ class AaSession(
     fun close(reason: String) {
         if (!running.getAndSet(false)) return
         mic.stop()
+        CarAudioBus.end(AaProtocol.CH_SPEECH_AUDIO)
+        CarAudioBus.end(AaProtocol.CH_SYSTEM_AUDIO)
         runCatching { input.close() }
         runCatching { output.close() }
         decoder.stop()
@@ -233,16 +237,26 @@ class AaSession(
     private fun handleAudioSink(channel: Int, id: Int, body: ByteArray) {
         when (id) {
             AaProtocol.AV_SETUP_REQUEST -> sendEnc(channel, AaProtocol.AV_SETUP_RESPONSE, AaMessages.avSetupResponse())
-            AaProtocol.AV_START_INDICATION, AaProtocol.AV_STOP_INDICATION -> Unit
+            AaProtocol.AV_START_INDICATION -> {
+                audioSessions[channel] = AaMessages.startSession(body)
+                audioMeasured -= channel
+                CarAudioBus.begin(channel)
+                DiagLog.i(tag, "${AaProtocol.channelName(channel)} started")
+            }
+            AaProtocol.AV_STOP_INDICATION -> {
+                CarAudioBus.end(channel)
+                DiagLog.i(tag, "${AaProtocol.channelName(channel)} stopped")
+            }
             AaProtocol.AV_MEDIA_WITH_TIMESTAMP, AaProtocol.AV_MEDIA_INDICATION -> {
                 val pcm = if (id == AaProtocol.AV_MEDIA_WITH_TIMESTAMP && body.size > 8) body.copyOfRange(8, body.size) else body
-                if (pcm.isEmpty()) {
-                    sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(0))
-                } else {
+                sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(audioSessions[channel] ?: 0))
+                if (pcm.isNotEmpty()) {
                     val rate = if (channel == AaProtocol.CH_MEDIA_AUDIO) 48000 else 16000
                     val ch = if (channel == AaProtocol.CH_MEDIA_AUDIO) 2 else 1
-                    sendEnc(channel, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(0))
-                    CarAudioBus.write(channel, CarAudioBus.toCarFormat(pcm, rate, ch))
+                    if (audioMeasured.add(channel)) {
+                        DiagLog.i(tag, "${AaProtocol.channelName(channel)} sends ${pcm.size} byte packets, ${pcm.size * 1000 / (rate * ch * 2)} ms each")
+                    }
+                    CarAudioBus.play(channel, pcm, rate, ch)
                 }
             }
             else -> Unit

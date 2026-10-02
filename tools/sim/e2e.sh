@@ -177,6 +177,45 @@ for f in "$OUT"/carlife/*.h264; do
 done
 check "launcher frame decoded to PNG" "[ -s '$OUT/frames/launcher.png' ]"
 
+echo "== sound: music with a voice prompt on top =="
+$ADB forward tcp:5288 tcp:5288 >/dev/null
+$ADB shell am force-stop $PKG
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/sound_logcat.txt" 2>&1 &
+SNDLOG=$!
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
+sleep 5
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 16 --out "$OUT/sound_car" > "$OUT/sound_car.log" 2>&1 &
+SNDCAR=$!
+sleep 6
+python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 8 --speech-at 2 --speech-seconds 2.5 --out "$OUT/sound_phone" > "$OUT/sound_phone.log" 2>&1
+wait $SNDCAR
+kill $SNDLOG 2>/dev/null
+sound(){ python3 - "$OUT/sound_car/result.json" "$1" <<'PY2'
+import json, sys
+a = json.load(open(sys.argv[1]))["audio"]
+m, t = a["media"], a.get("tts")
+tr = m["delay_track"]
+def avg(lo, hi):
+    v = [d for x, d in tr if lo <= x < hi]
+    return sum(v) / len(v) if v else 0.0
+want = sys.argv[2]
+if want == "music":
+    assert abs(m["audio_seconds"] - 8.0) < 0.05, m["audio_seconds"]
+elif want == "voice":
+    names = [e["msg"] for e in a["events"]]
+    assert "TTS_INIT" in names and "TTS_END" in names, names
+    assert t and abs(t["audio_seconds"] - 2.5) < 0.05, t
+elif want == "delay":
+    grow = avg(5.0, 8.0) - avg(0.5, 2.0)
+    print("   car delay before %.3fs, after %.3fs" % (avg(0.5, 2.0), avg(5.0, 8.0)))
+    assert grow < 0.08, grow
+PY2
+}
+check "the car gets exactly the music that played, nothing extra" "sound music"
+check "the prompt goes to the car's voice channel, start to end" "sound voice"
+check "the car's sound does not fall behind after a prompt" "sound delay"
+
 BUMBLE_PY="${BUMBLE_PY:-}"
 PHONE_BT="${PHONE_BT:-$($ADB shell settings get secure bluetooth_address 2>/dev/null | tr -d '\r')}"
 if [ -n "$BUMBLE_PY" ] && [ -x "$BUMBLE_PY" ] && [ -n "$PHONE_BT" ] && [ "$PHONE_BT" != "null" ]; then

@@ -53,7 +53,7 @@ class Prefs(context: Context) {
     var carBtName: String get() = str("carBtName", ""); set(v) = set("carBtName", v)
     var carBtAddress: String get() = str("carBtAddress", ""); set(v) = set("carBtAddress", v)
     var swapTrackKeys: Boolean get() = bool("swapTrackKeys", false); set(v) = set("swapTrackKeys", v)
-    var mixGuidance: Boolean get() = bool("mixGuidance", true); set(v) = set("mixGuidance", v)
+    var blendGuidance: Boolean get() = bool("blendGuidance", false); set(v) = set("blendGuidance", v)
     var linkMode: Int get() = int("linkMode", 0); set(v) = set("linkMode", v)
     var carWpsPin: String get() = str("carWpsPin", ""); set(v) = set("carWpsPin", v)
 

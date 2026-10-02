@@ -73,6 +73,10 @@ class CarLifeService : Service() {
         private val AA_KEYS = setOf(3, 4, 19, 20, 21, 22, 23, 84, 85, 86, 87, 88, 126, 127)
         private const val CHANNEL = "ft_carlife"
         private const val NOTIFICATION_ID = 41
+        private const val VOICE_START = 0
+        private const val VOICE_DATA = 1
+        private const val VOICE_END = 2
+        private const val VOICE_BACKLOG = 250
 
         private val _state = MutableStateFlow(CarState())
         val state: StateFlow<CarState> = _state
@@ -153,6 +157,50 @@ class CarLifeService : Service() {
             }
         }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-audio-out"; start() }
     }
+
+    private class VoiceCmd(val kind: Int, val rate: Int = 0, val channels: Int = 0, val pcm: ByteArray? = null)
+    private val voiceOut = java.util.concurrent.LinkedBlockingQueue<VoiceCmd>()
+    @Volatile private var voiceWriter: Thread? = null
+    private val carVoice = object : CarAudioBus.Voice {
+        override fun begin(rate: Int, channels: Int) = queueVoice(VoiceCmd(VOICE_START, rate, channels))
+        override fun data(pcm: ByteArray) {
+            if (voiceOut.size < VOICE_BACKLOG) queueVoice(VoiceCmd(VOICE_DATA, pcm = pcm))
+        }
+        override fun end() = queueVoice(VoiceCmd(VOICE_END))
+    }
+
+    private fun queueVoice(c: VoiceCmd) {
+        startVoiceWriter()
+        voiceOut.offer(c)
+    }
+
+    private fun startVoiceWriter() {
+        if (voiceWriter?.isAlive == true) return
+        voiceWriter = Thread {
+            try {
+                while (true) {
+                    val c = voiceOut.poll(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    if (c == null) {
+                        CarAudioBus.tick()
+                        continue
+                    }
+                    val s = session ?: continue
+                    when (c.kind) {
+                        VOICE_START -> {
+                            s.sendVoiceStart(c.rate, c.channels)
+                            DiagLog.i(tag, "voice on the car's own voice channel, ${c.rate} Hz")
+                        }
+                        VOICE_DATA -> c.pcm?.let { s.sendVoice(it) }
+                        else -> {
+                            s.sendVoiceEnd()
+                            DiagLog.i(tag, "voice finished")
+                        }
+                    }
+                }
+            } catch (_: InterruptedException) {
+            }
+        }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-voice-out"; start() }
+    }
     @Volatile private var aaAutoLaunched = false
     @Volatile private var resumedMedia = false
     private var carNetwork: android.net.ConnectivityManager.NetworkCallback? = null
@@ -186,7 +234,9 @@ class CarLifeService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        CarAudioBus.mixTogether = app.prefs.mixGuidance
+        CarAudioBus.mixTogether = true
+        CarAudioBus.voiceChannel = !app.prefs.blendGuidance
+        CarAudioBus.voice = carVoice
         CarAudioBus.sink = carAudio
         carDisplay = CarDisplay(this)
         getSystemService(NotificationManager::class.java)
@@ -1079,6 +1129,10 @@ class CarLifeService : Service() {
         writer?.interrupt()
         writer = null
         outbound.clear()
+        CarAudioBus.voice = null
+        voiceWriter?.interrupt()
+        voiceWriter = null
+        voiceOut.clear()
         btAudio.close()
         CarAudioBus.sink = null
         instance = null

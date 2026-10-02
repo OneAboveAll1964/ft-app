@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from proto import decode, f_sint32, f_str, f_varint, first, split_nals
 
 CH_CONTROL, CH_INPUT, CH_SENSOR, CH_VIDEO = 0, 1, 2, 3
+CH_MEDIA_AUDIO, CH_SPEECH_AUDIO, CH_SYSTEM_AUDIO = 4, 5, 6
 VERSION_REQUEST, VERSION_RESPONSE, SSL_HANDSHAKE, AUTH_COMPLETE = 1, 2, 3, 4
 SERVICE_DISCOVERY_REQUEST, SERVICE_DISCOVERY_RESPONSE = 5, 6
 CHANNEL_OPEN_REQUEST, CHANNEL_OPEN_RESPONSE = 7, 8
@@ -179,6 +180,93 @@ def make_h264(path, width, height, fps, seconds):
     ])
 
 
+def tone(freq, rate, channels, seconds, amp, start=0.0):
+    import math
+    n = int(rate * seconds)
+    out = bytearray()
+    for i in range(n):
+        v = int(amp * math.sin(2 * math.pi * freq * (start + i / rate)))
+        out += struct.pack("<h", v) * channels
+    return bytes(out)
+
+
+def play_audio(ph, a, log, result):
+    for c in (CH_MEDIA_AUDIO, CH_SPEECH_AUDIO):
+        ph.send(c, CHANNEL_OPEN_REQUEST, f_sint32(1, 0) + f_varint(2, c), control=True)
+        ph.expect(c, CHANNEL_OPEN_RESPONSE)
+        ph.send(c, AV_SETUP_REQUEST, f_varint(1, 1))
+        body = ph.expect(c, AV_SETUP_RESPONSE)
+        result["max_unacked_ch%d" % c] = first(decode(body), 2)
+    ph.send(CH_CONTROL, AUDIO_FOCUS_REQUEST, f_varint(1, 1))
+    ph.expect(CH_CONTROL, AUDIO_FOCUS_NOTIFICATION)
+    ph.send(CH_MEDIA_AUDIO, AV_START, f_varint(1, 1) + f_varint(2, 0))
+    m_bytes = int(48000 * a.media_ms / 1000) * 4
+    s_bytes = int(16000 * a.speech_ms / 1000) * 2
+    m_step = a.media_ms / 1000.0
+    s_step = a.speech_ms / 1000.0
+    sent = {"media": 0, "speech": 0}
+    events = []
+    t0 = time.time()
+    next_m = t0
+    next_s = None
+    speech_left = 0.0
+    speech_on = False
+    m_clock = 0.0
+    s_clock = 0.0
+    end = t0 + a.audio_seconds
+    while True:
+        now = time.time()
+        if not speech_on and next_s is None and now - t0 >= a.speech_at:
+            ph.send(CH_CONTROL, AUDIO_FOCUS_REQUEST, f_varint(1, 3))
+            ph.send(CH_SPEECH_AUDIO, AV_START, f_varint(1, 2) + f_varint(2, 0))
+            events.append({"t": round(now - t0, 3), "event": "speech start"})
+            speech_on = True
+            speech_left = a.speech_seconds
+            next_s = now
+        if now >= end and not speech_on:
+            break
+        due = [x for x in (next_m if now < end else None, next_s if speech_on else None) if x is not None]
+        if not due:
+            break
+        wake = min(due)
+        if wake > now:
+            time.sleep(wake - now)
+            continue
+        if now < end and next_m <= now:
+            duck = a.duck if speech_on else 1.0
+            pcm = tone(440, 48000, 2, m_step, int(8000 * duck), m_clock)
+            m_clock += m_step
+            ph.send(CH_MEDIA_AUDIO, AV_MEDIA_TS, struct.pack(">Q", int(m_clock * 1e6)) + pcm[:m_bytes])
+            sent["media"] += m_bytes
+            next_m += m_step
+        if speech_on and next_s is not None and next_s <= time.time():
+            pcm = tone(1000, 16000, 1, s_step, 12000, s_clock)
+            s_clock += s_step
+            ph.send(CH_SPEECH_AUDIO, AV_MEDIA_TS, struct.pack(">Q", int(s_clock * 1e6)) + pcm[:s_bytes])
+            sent["speech"] += s_bytes
+            speech_left -= s_step
+            next_s += s_step
+            if speech_left <= 1e-6:
+                ph.send(CH_SPEECH_AUDIO, AV_STOP, b"")
+                ph.send(CH_CONTROL, AUDIO_FOCUS_REQUEST, f_varint(1, 4))
+                events.append({"t": round(time.time() - t0, 3), "event": "speech stop"})
+                speech_on = False
+                next_s = None
+                a.speech_at = 10 ** 9
+    ph.send(CH_MEDIA_AUDIO, AV_STOP, b"")
+    events.append({"t": round(time.time() - t0, 3), "event": "media stop"})
+    acks = 0
+    while True:
+        try:
+            ch, control, mid, body = ph.recv(timeout=0.5)
+        except Exception:
+            break
+        if mid == AV_MEDIA_ACK:
+            acks += 1
+    result["audio"] = {"sent": sent, "events": events, "late_acks_seen": acks}
+    log("audio sent: media %d bytes, speech %d bytes" % (sent["media"], sent["speech"]))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -193,6 +281,12 @@ def main():
     ap.add_argument("--seconds", type=float, default=3.0)
     ap.add_argument("--wait-touch", type=float, default=12.0)
     ap.add_argument("--out", default="/tmp/ft_aa")
+    ap.add_argument("--audio-seconds", type=float, default=0.0)
+    ap.add_argument("--media-ms", type=float, default=20.0)
+    ap.add_argument("--speech-ms", type=float, default=20.0)
+    ap.add_argument("--speech-at", type=float, default=2.0)
+    ap.add_argument("--speech-seconds", type=float, default=2.5)
+    ap.add_argument("--duck", type=float, default=0.3)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     lines = []
@@ -292,6 +386,9 @@ def main():
         ph.send(CH_CONTROL, NAV_FOCUS_REQUEST, f_varint(1, 2))
         body = ph.expect(CH_CONTROL, NAV_FOCUS_NOTIFICATION)
         result["checks"]["nav_focus"] = first(decode(body), 1) == 2
+
+        if a.audio_seconds > 0:
+            play_audio(ph, a, log, result)
 
         if a.wait_touch > 0:
             log("waiting up to %.0fs for a touch from the car..." % a.wait_touch)

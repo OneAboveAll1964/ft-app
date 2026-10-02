@@ -104,6 +104,10 @@ object CarLifeProtocol {
     const val MEDIA_INIT = 0x00030001
     const val MEDIA_DATA = 0x00030006
 
+    const val TTS_INIT = 0x00040001
+    const val TTS_END = 0x00040002
+    const val TTS_DATA = 0x00040003
+
     const val TOUCH_ACTION = 0x00068001
     const val CAR_HARD_KEY_CODE = 0x00068008
 
@@ -161,6 +165,9 @@ object CarLifeProtocol {
         VIDEO_HEARTBEAT -> "VIDEO_HEARTBEAT"
         MEDIA_INIT -> "MEDIA_INIT"
         MEDIA_DATA -> "MEDIA_DATA"
+        TTS_INIT -> "TTS_INIT"
+        TTS_END -> "TTS_END"
+        TTS_DATA -> "TTS_DATA"
         TOUCH_ACTION -> "TOUCH_ACTION"
         CAR_HARD_KEY_CODE -> "CAR_HARD_KEY_CODE"
         else -> String.format("0x%08X", id)

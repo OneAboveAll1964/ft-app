@@ -84,6 +84,18 @@ class CarLifeSession(
         link.send(CarLifeProtocol.CH_MEDIA, CarLifeFraming.stream(CarLifeProtocol.MEDIA_DATA, pcm))
     }
 
+    fun sendVoiceStart(rate: Int, channels: Int) {
+        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_INIT, ProtoWriter().int32(1, rate).int32(2, channels).int32(3, 16).toByteArray()))
+    }
+
+    fun sendVoice(pcm: ByteArray) {
+        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_DATA, pcm))
+    }
+
+    fun sendVoiceEnd() {
+        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_END, ByteArray(0)))
+    }
+
     private fun cmd(serviceId: Int, payload: ByteArray = ByteArray(0)) {
         val inner = CarLifeFraming.cmd(serviceId, crypto.encryptOut(payload))
         DiagLog.tx(tag, CarLifeProtocol.name(serviceId), inner)
