@@ -24,6 +24,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     @Volatile private var socket: BluetoothSocket? = null
     @Volatile private var servers: List<BluetoothServerSocket> = emptyList()
     private var serverJob: Job? = null
+    @Volatile private var listening = false
     var onFrame: ((ByteArray) -> Unit)? = null
     var onCar: ((String?) -> Unit)? = null
     var onStep: ((String) -> Unit)? = null
@@ -31,10 +32,13 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     val open: Boolean get() = socket?.isConnected == true
 
     fun start() {
-        if (serverJob?.isActive != true) serverJob = scope.launch(Dispatchers.IO) { listen() }
+        if (listening && serverJob?.isActive == true) return
+        listening = true
+        serverJob = scope.launch(Dispatchers.IO) { listen() }
     }
 
     fun stop() {
+        listening = false
         serverJob?.cancel()
         serverJob = null
         closeServers()
@@ -63,7 +67,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private suspend fun listen() {
         val a = adapter ?: return
         var moaned = false
-        while (serverJob?.isActive == true) {
+        while (listening) {
             if (!a.isEnabled) {
                 if (!moaned) {
                     moaned = true
@@ -74,18 +78,18 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             }
             moaned = false
             val offers = listOf(CARLIFE_UUID to "CarLife", SPP_UUID to "SPP")
-            val listening = offers.mapNotNull { (uuid, label) ->
+            val offered = offers.mapNotNull { (uuid, label) ->
                 runCatching { a.listenUsingRfcommWithServiceRecord(SERVICE_NAME, uuid) }.getOrNull()?.let { it to label }
             }
-            if (listening.isEmpty()) {
+            if (offered.isEmpty()) {
                 delay(3000)
                 continue
             }
-            servers = listening.map { it.first }
-            DiagLog.i(tag, "offering '$SERVICE_NAME' on ${listening.joinToString(" and ") { it.second }}, waiting for the car to call")
+            servers = offered.map { it.first }
+            DiagLog.i(tag, "offering '$SERVICE_NAME' on ${offered.joinToString(" and ") { it.second }}, waiting for the car to call")
             onStep?.invoke("Waiting for the car to call over bluetooth")
             val winner = CompletableDeferred<Pair<BluetoothSocket, String>?>()
-            val waits = listening.map { (ss, label) ->
+            val waits = offered.map { (ss, label) ->
                 scope.launch(Dispatchers.IO) {
                     val s = runCatching { ss.accept() }.getOrNull() ?: return@launch
                     if (!winner.complete(s to label)) runCatching { s.close() }
@@ -112,7 +116,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         val input = runCatching { s.inputStream }.getOrNull()
         val buf = ByteArray(512)
         var seen = 0
-        while (serverJob?.isActive == true) {
+        while (listening) {
             val n = runCatching { input?.read(buf) ?: -1 }.getOrElse { -1 }
             if (n < 0) break
             if (n == 0) continue

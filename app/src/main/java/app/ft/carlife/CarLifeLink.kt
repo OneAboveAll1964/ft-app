@@ -152,14 +152,39 @@ object NetUtil {
         null
     }
 
-    fun broadcastAddresses(): List<InetAddress> = try {
+    fun broadcastAddresses(include: (String) -> Boolean): List<InetAddress> = try {
         NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.isUp && !it.isLoopback && !it.name.startsWith("p2p") }
+            .filter { it.isUp && !it.isLoopback && include(it.name) }
             .flatMap { it.interfaceAddresses }
             .mapNotNull { it.broadcast }
             .filter { it is Inet4Address }
             .distinct()
     } catch (_: Throwable) {
         emptyList()
+    }
+
+    fun interfaceFor(remote: InetAddress): String? = try {
+        if (remote.isLoopbackAddress) "lo"
+        else NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp }
+            .firstOrNull { n -> n.interfaceAddresses.any { a -> sameSubnet(a.address, remote, a.networkPrefixLength.toInt()) } }
+            ?.name
+    } catch (_: Throwable) {
+        null
+    }
+
+    private fun sameSubnet(a: InetAddress, b: InetAddress, prefix: Int): Boolean {
+        val x = a.address
+        val y = b.address
+        if (x.size != y.size || prefix <= 0) return false
+        var bits = prefix.coerceAtMost(x.size * 8)
+        var i = 0
+        while (bits > 0) {
+            val mask = if (bits >= 8) 0xFF else (0xFF shl (8 - bits)) and 0xFF
+            if ((x[i].toInt() and mask) != (y[i].toInt() and mask)) return false
+            bits -= 8
+            i++
+        }
+        return true
     }
 }

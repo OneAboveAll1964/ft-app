@@ -33,6 +33,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var receiver: BroadcastReceiver? = null
     private var loop: Job? = null
     @Volatile private var connecting: String? = null
+    @Volatile private var searching = false
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
     private val _state = MutableStateFlow("off")
     private val _link = MutableStateFlow<Link?>(null)
@@ -65,12 +66,33 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             addAction(WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION)
         }
         if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(r, f, Context.RECEIVER_EXPORTED) else context.registerReceiver(r, f)
-        _state.value = "searching"
-        DiagLog.i(tag, "WiFi Direct search started")
+        _state.value = "ready"
         loop = scope.launch(Dispatchers.Main) {
             while (isActive) {
-                if (_link.value == null && connecting == null) discover()
+                if (searching && _link.value == null && connecting == null) discover()
                 delay(12_000)
+            }
+        }
+        checkExisting()
+    }
+
+    fun search() {
+        if (searching) return
+        searching = true
+        _state.value = "searching"
+        DiagLog.i(tag, "WiFi Direct search started")
+        scope.launch(Dispatchers.Main) { if (_link.value == null && connecting == null) discover() }
+    }
+
+    fun checkExisting() {
+        val m = manager ?: return
+        val ch = channel ?: return
+        runCatching {
+            m.requestConnectionInfo(ch) { info ->
+                if (info != null && info.groupFormed) {
+                    DiagLog.i(tag, "already on a WiFi Direct group, picking it up")
+                    onGroup(info)
+                }
             }
         }
     }

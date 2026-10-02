@@ -68,7 +68,7 @@ grant_mirror(){
 grant_mirror
 check "mirror consent granted" "grep -q 'screen mirror permitted' '$OUT/logcat.txt'"
 sleep 1; $ADB shell input swipe 700 2200 700 900 250 >/dev/null 2>&1; sleep 2; dump; cp "$OUT/consent_ui.xml" "$OUT/home_after_consent.xml"
-check "Home shows the connection steps and no setup left to do" "grep -q 'text=\"Hotspot on\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
+check "Home shows the connection steps and no setup left to do" "grep -q 'text=\"On the car screen\"' '$OUT/home_after_consent.xml' && ! grep -q 'text=\"Allow\"' '$OUT/home_after_consent.xml'"
 check "Home no longer asks for screen sharing up front" "! grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect, Android Auto auto-start on) =="
@@ -79,6 +79,20 @@ check "no WiFi Direct nagging while the car is reachable on this network" "! gre
 check "hotspot route leaves bluetooth alone" "! grep -q 'FT/CarBT' '$OUT/logcat.txt'"
 check "discovery beacon keeps calling on udp 7999 (4th tick seen)" "grep -q 'discovery beacon #4 to .*udp 7999 ([1-9]' '$OUT/logcat.txt'"
 check "not marked connected before any head unit dialled in" "! grep -q 'head unit connected over' '$OUT/logcat.txt'"
+udpcall(){ python3 - <<'PY2'
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(("127.0.0.1", 0))
+s.settimeout(3)
+s.sendto(b"carlifehost probe", ("127.0.0.1", 18999))
+try:
+    print(s.recvfrom(1024)[0].decode(errors="replace"))
+except socket.timeout:
+    print("no answer")
+PY2
+}
+$ADB emu redir add udp:18999:8999 >/dev/null 2>&1
+check "a car looking for FT on udp 8999 gets the ready answer" "udpcall | grep -q '\"status\":\"ready\"'"
 
 echo "== plain head unit (no content encryption, 1024x600) =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 2 --width 1024 --height 600 --fps 25 --seconds 2 --tail-seconds 1 --out "$OUT/plain" > "$OUT/plain_sim.log" 2>&1
@@ -235,6 +249,9 @@ if [ -n "$BUMBLE_PY" ] && [ -x "$BUMBLE_PY" ] && [ -n "$PHONE_BT" ] && [ "$PHONE
   check "no address is sent before WiFi Direct is up" "python3 -c \"import json;d=json.load(open('$OUT/bt1/car_bt.json'));assert d['phone_ip'] is None\" 2>/dev/null"
   check "a second call from the car is answered too" "python3 -c \"import json;d=json.load(open('$OUT/bt2/car_bt.json'));assert d['first_from_phone']=='MD_WIRELESS_INFO_REQUEST'\" 2>/dev/null"
   check "WiFi + BL refuses a car that is not on WiFi Direct" "grep -q 'but FT is set to WiFi + BL' '$OUT/bt_logcat.txt'"
+  check "WiFi + BL ignores discovery from the plain network" "udpcall | grep -q 'no answer'"
+  cp "$OUT/bt_logcat.txt" "$OUT/bt_direct_only.txt"
+  check "WiFi + BL sends no beacon until WiFi Direct is up" "! grep -q 'discovery beacon' '$OUT/bt_direct_only.txt'"
   echo "== bluetooth car (Hotspot) =="
   $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true >/dev/null 2>&1
   sleep 3

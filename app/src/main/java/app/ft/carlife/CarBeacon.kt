@@ -11,7 +11,11 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 
-class CarBeacon(private val scope: CoroutineScope, private val name: () -> String) {
+class CarBeacon(
+    private val scope: CoroutineScope,
+    private val name: () -> String,
+    private val targets: () -> Collection<InetAddress>
+) {
     private val tag = "Beacon"
     private var job: Job? = null
     private var sent = 0
@@ -36,7 +40,7 @@ class CarBeacon(private val scope: CoroutineScope, private val name: () -> Strin
 
     private fun tick() {
         run {
-            val targets = LinkedHashSet<InetAddress>(NetUtil.broadcastAddresses())
+            val targets = LinkedHashSet<InetAddress>(targets())
             val payload = name().toByteArray()
             var ok = 0
             if (targets.isNotEmpty()) {

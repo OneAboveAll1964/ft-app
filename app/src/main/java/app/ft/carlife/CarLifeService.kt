@@ -208,7 +208,10 @@ class CarLifeService : Service() {
     @Volatile private var pendingLaunch: Pair<Intent, String>? = null
     private var savedVolume = -1
     private val app get() = application as FTApp
-    private val beacon by lazy { CarBeacon(scope) { app.prefs.carName } }
+    private val beacon by lazy { CarBeacon(scope, { app.prefs.carName }, { beaconTargets() }) }
+    private val discovery by lazy { CarDiscovery(scope) { from -> sameWay(from) } }
+    @Volatile private var p2pIface: String? = null
+    @Volatile private var carP2pIp: String? = null
     private val bt by lazy { CarBluetooth(this, app.prefs, scope) }
     private val btAudio by lazy { CarBtAudio(this) }
     private val ble by lazy {
@@ -351,6 +354,7 @@ class CarLifeService : Service() {
         wifiLink = l
         _state.update { it.copy(listening = true) }
         attachSession(l)
+        discovery.start()
     }
 
     private fun startHotspot() {
@@ -374,18 +378,22 @@ class CarLifeService : Service() {
         bt.start()
         ble.start(null)
         wakeCarBluetooth()
+        startFinder()
     }
 
     private fun stopLink() {
         stopAndroidAuto("the car link closed")
         mirrorClose()
         beacon.stop()
+        discovery.stop()
         bt.stop()
         bt.onCar = null
         bt.onFrame = null
         ble.stop()
         wireless.reset()
         stopFinder()
+        p2pIface = null
+        carP2pIp = null
         leaveCarNetwork()
         session?.stop()
         session = null
@@ -409,8 +417,10 @@ class CarLifeService : Service() {
         val f = CarFinder(this, app.prefs, scope)
         finder = f
         f.onJoined = { l ->
-            DiagLog.i(tag, "on the car's WiFi Direct group ${l.name.ifBlank { l.groupOwnerIp }}")
+            DiagLog.i(tag, "on the car's WiFi Direct group ${l.name.ifBlank { l.groupOwnerIp }} (${l.iface ?: "?"}, car ${if (l.weAreOwner) "joined this phone" else "at " + l.groupOwnerIp})")
             step("WiFi Direct connected")
+            p2pIface = l.iface
+            carP2pIp = if (l.weAreOwner) null else l.groupOwnerIp
             ipJob?.cancel()
             ipJob = scope.launch {
                 var ip: String? = null
@@ -424,14 +434,19 @@ class CarLifeService : Service() {
                     DiagLog.w(tag, "WiFi Direct is up but this phone has no address on it yet")
                     return@launch
                 }
+                DiagLog.i(tag, "this phone is $got on WiFi Direct, calling the car there")
                 _state.update { it.copy(wifiDirect = true, ip = got) }
                 wireless.wifiDirectReady(got)
+                updateBeacon()
             }
         }
         f.onLeft = {
             ipJob?.cancel()
+            p2pIface = null
+            carP2pIp = null
             wireless.wifiDirectReady(null)
             _state.update { it.copy(wifiDirect = false) }
+            updateBeacon()
             step("WiFi Direct dropped, looking for the car again")
         }
         f.start()
@@ -446,24 +461,45 @@ class CarLifeService : Service() {
 
     private fun retry() {
         if (mode != 1) return
-        DiagLog.i(tag, "trying the car again")
-        stopFinder()
-        bt.stop()
-        wireless.reset()
-        _state.update { it.copy(btCar = null, carWifi = null, wifiDirect = false) }
-        startDirect()
+        DiagLog.i(tag, "trying the car again, keeping whatever is already connected")
+        if (bt.open) {
+            step("Asking the car again over bluetooth")
+            wireless.reset()
+            wireless.begin()
+        } else {
+            bt.start()
+            wakeCarBluetooth()
+        }
+        startFinder()
+        finder?.checkExisting()
+        updateBeacon()
+    }
+
+    private fun onWifiDirectSide(iface: String): Boolean =
+        iface.startsWith("p2p") || iface == p2pIface || (carNetworkIface != null && iface == carNetworkIface)
+
+    private fun beaconTargets(): Collection<java.net.InetAddress> {
+        if (mode != 1) return NetUtil.broadcastAddresses { !onWifiDirectSide(it) }
+        val out = LinkedHashSet<java.net.InetAddress>(NetUtil.broadcastAddresses { onWifiDirectSide(it) })
+        carP2pIp?.let { ip -> runCatching { java.net.InetAddress.getByName(ip) }.getOrNull()?.let(out::add) }
+        return out
+    }
+
+    private fun sameWay(from: java.net.InetAddress): Boolean {
+        val iface = NetUtil.interfaceFor(from) ?: return false
+        if (iface == "lo") return true
+        return if (mode == 1) onWifiDirectSide(iface) else !onWifiDirectSide(iface)
     }
 
     private fun wrongWay(socket: java.net.Socket): String? {
         val local = socket.localAddress ?: return null
         if (local.isLoopbackAddress) return null
         val iface = runCatching { java.net.NetworkInterface.getByInetAddress(local)?.name }.getOrNull().orEmpty()
-        val p2p = iface.startsWith("p2p")
+        val side = onWifiDirectSide(iface)
         val why = if (mode == 1) {
-            if (p2p || (carNetworkIface != null && iface == carNetworkIface)) null
-            else "The car tried the hotspot, but FT is set to WiFi + BL"
+            if (side) null else "The car tried the hotspot, but FT is set to WiFi + BL"
         } else {
-            if (!p2p) null else "The car tried WiFi Direct, but FT is set to Hotspot"
+            if (!side) null else "The car tried WiFi Direct, but FT is set to Hotspot"
         }
         if (why != null && _state.value.refused != why) {
             DiagLog.w(tag, "$why ($iface), refused")
@@ -474,7 +510,12 @@ class CarLifeService : Service() {
 
     private fun updateBeacon() {
         val busy = wifiLink?.connected == true
-        val want = mode == 0 && wifiLink != null && !busy
+        val ready = when (mode) {
+            0 -> true
+            1 -> _state.value.wifiDirect
+            else -> false
+        }
+        val want = wifiLink != null && !busy && ready
         if (want) beacon.start() else beacon.stop()
         _state.update { it.copy(beacon = want) }
     }
@@ -754,6 +795,7 @@ class CarLifeService : Service() {
                 DiagLog.i(tag, "joined the car's network '${offer.ssid}'")
                 carNetworkIface = runCatching { cm.getLinkProperties(network)?.interfaceName }.getOrNull()
                 _state.update { it.copy(wifiDirect = true) }
+                updateBeacon()
                 step("On the car's WiFi, waiting for the car")
                 runCatching { cm.bindProcessToNetwork(network) }
             }
@@ -767,6 +809,7 @@ class CarLifeService : Service() {
                 DiagLog.i(tag, "left the car's network")
                 carNetworkIface = null
                 _state.update { it.copy(wifiDirect = false) }
+                updateBeacon()
                 runCatching { cm.bindProcessToNetwork(null) }
             }
         }
@@ -795,6 +838,7 @@ class CarLifeService : Service() {
         }
         step("Joining the car's WiFi Direct '$name'")
         startFinder()
+        finder?.search()
         finder?.connectByName(name)
     }
 
