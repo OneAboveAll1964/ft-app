@@ -162,7 +162,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             connecting = null
             _link.value = l
             _state.value = "joined ${l.name.ifBlank { ip }}"
-            DiagLog.i(tag, "joined group owner=$ip iface=${l.iface} weAreOwner=${l.weAreOwner} network=${g?.networkName}")
+            DiagLog.i(tag, "joined group owner=$ip iface=${l.iface} weAreOwner=${l.weAreOwner} network=${g?.networkName} ${g?.frequency ?: 0} MHz")
             onJoined?.invoke(l)
         }
     }
@@ -203,7 +203,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         connecting = p.name
         _state.value = "connecting to ${p.name}"
         DiagLog.i(tag, "connecting to ${p.name} (${p.address})")
-        val cfg = WifiP2pConfig().apply {
+        val fresh = runCatching {
+            WifiP2pConfig.Builder()
+                .setDeviceAddress(android.net.MacAddress.fromString(p.address))
+                .enablePersistentMode(false)
+                .build()
+        }.getOrNull()
+        val cfg = (fresh ?: WifiP2pConfig()).apply {
             deviceAddress = p.address
             val pin = prefs.carWpsPin.trim()
             if (pin.isNotEmpty()) {

@@ -132,6 +132,7 @@ class CarLifeService : Service() {
     private var ipJob: Job? = null
     private var aaWatch: Job? = null
     @Volatile private var mode = -1
+    private var p2pWatch: Job? = null
     @Volatile private var noteText = "FT"
     @Volatile private var carNetworkIface: String? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -379,11 +380,38 @@ class CarLifeService : Service() {
         ble.start(null)
         wakeCarBluetooth()
         startFinder()
+        watchWifiDirect()
+    }
+
+    private fun watchWifiDirect() {
+        p2pWatch?.cancel()
+        p2pWatch = scope.launch {
+            while (mode == 1) {
+                delay(2000)
+                if (wifiLink?.connected == true) continue
+                val ip = NetUtil.wifiDirectIpv4(p2pIface)
+                val up = _state.value.wifiDirect
+                if (ip != null && !up) {
+                    DiagLog.i(tag, "WiFi Direct is up at $ip, picking it up")
+                    finder?.checkExisting()
+                    _state.update { it.copy(wifiDirect = true, ip = ip) }
+                    wireless.wifiDirectReady(ip)
+                    updateBeacon()
+                } else if (ip == null && up && carNetworkIface == null) {
+                    DiagLog.i(tag, "WiFi Direct is gone")
+                    _state.update { it.copy(wifiDirect = false) }
+                    wireless.wifiDirectReady(null)
+                    updateBeacon()
+                }
+            }
+        }
     }
 
     private fun stopLink() {
         stopAndroidAuto("the car link closed")
         mirrorClose()
+        p2pWatch?.cancel()
+        p2pWatch = null
         beacon.stop()
         discovery.stop()
         bt.stop()
