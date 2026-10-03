@@ -21,7 +21,8 @@ class FTApp : Application() {
         super.onCreate()
         instance = this
         prefs = Prefs(this)
-        DiagLog.i("App", "FT ready")
+        DiagLog.attach(getExternalFilesDir("logs"))
+        DiagLog.i("App", "FT ${runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""} ready")
     }
 
     companion object {
