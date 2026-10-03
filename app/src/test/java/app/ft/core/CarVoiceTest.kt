@@ -39,6 +39,7 @@ class CarVoiceTest {
         CarAudioBus.sink = null
         CarAudioBus.voice = null
         CarAudioBus.voiceChannel = false
+        CarAudioBus.inCall = false
         music.clear()
         said.clear()
         spoken.clear()
@@ -184,5 +185,32 @@ class CarVoiceTest {
         CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
         repeat(5) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
         assertEquals(8000, peakOf(music.last()))
+    }
+
+    @Test
+    fun nothingGoesToTheVoiceChannelDuringACall() {
+        CarAudioBus.inCall = true
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        repeat(5) { CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1) }
+        assertTrue("voice was sent to the car during a call", said.isEmpty())
+    }
+
+    @Test
+    fun aCallClosesVoiceThatIsAlreadyPlaying() {
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
+        CarAudioBus.inCall = true
+        assertEquals(listOf("begin 16000/1", "data 640", "end"), said)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
+        assertEquals("voice came back during the call", 3, said.size)
+    }
+
+    @Test
+    fun voiceWorksAgainAfterTheCall() {
+        CarAudioBus.inCall = true
+        CarAudioBus.inCall = false
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
+        assertEquals(listOf("begin 16000/1", "data 640"), said)
     }
 }

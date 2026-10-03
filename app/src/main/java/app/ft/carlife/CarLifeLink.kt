@@ -56,6 +56,7 @@ class WifiChannelLink(
                             continue
                         }
                         s.tcpNoDelay = true
+                        sendBuffer(channel)?.let { size -> runCatching { s.sendBufferSize = size } }
                         synchronized(sockets) {
                             sockets[channel]?.let { runCatching { it.close() } }
                             sockets[channel] = s
@@ -73,6 +74,8 @@ class WifiChannelLink(
             }
         }
     }
+
+    private fun sendBuffer(channel: Int): Int? = if (channel == CarLifeProtocol.CH_TTS) 8 * 1024 else null
 
     private fun readLoop(channel: Int, s: Socket, onMessage: LinkMessage) {
         try {

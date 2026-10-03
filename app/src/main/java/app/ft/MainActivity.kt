@@ -149,6 +149,10 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("mirror", false)) requestMirror()
         intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }
         if (intent.hasExtra("aaAuto")) app.prefs.aaAutoStart = intent.getBooleanExtra("aaAuto", false)
+        if (intent.hasExtra("fakeCall")) {
+            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            am.mode = if (intent.getBooleanExtra("fakeCall", false)) android.media.AudioManager.MODE_IN_COMMUNICATION else android.media.AudioManager.MODE_NORMAL
+        }
         if (intent.getBooleanExtra("aaSetup", false)) takeOverAndroidAuto()
         if (intent.getBooleanExtra("aaStash", false)) AaInstaller.stash(this)
         if (intent.getBooleanExtra("startAa", false)) CarLifeService.startAa()

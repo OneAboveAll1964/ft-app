@@ -55,6 +55,14 @@ object CarAudioBus {
     var voice: Voice? = null
 
     @Volatile
+    var inCall = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (value) synchronized(lock) { if (voiceOpen) closeVoice() }
+        }
+
+    @Volatile
     private var out: ((ByteArray) -> Unit)? = null
 
     var sink: ((ByteArray) -> Unit)?
@@ -122,6 +130,10 @@ object CarAudioBus {
         val loud = top > SILENT
         synchronized(lock) {
             perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
+            if (inCall) {
+                if (voiceOpen) closeVoice()
+                return
+            }
             if (lane == LANE_SYSTEM && speaking && voiceLane == LANE_SPEECH) return
             if (loud) voiceLoudAt = now
             val want = (VOICE_TARGET.toFloat() / maxOf(top, 1)).coerceIn(1f, VOICE_MAX_GAIN)

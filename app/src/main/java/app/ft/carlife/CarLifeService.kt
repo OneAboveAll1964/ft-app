@@ -76,7 +76,7 @@ class CarLifeService : Service() {
         private const val VOICE_START = 0
         private const val VOICE_DATA = 1
         private const val VOICE_END = 2
-        private const val VOICE_BACKLOG = 250
+        private const val VOICE_BACKLOG_BYTES = 64_000L
 
         private val _state = MutableStateFlow(CarState())
         val state: StateFlow<CarState> = _state
@@ -132,6 +132,8 @@ class CarLifeService : Service() {
     private var ipJob: Job? = null
     private var aaWatch: Job? = null
     @Volatile private var mode = -1
+    private var callWatch: Any? = null
+    private var callPoll: Job? = null
     private var p2pWatch: Job? = null
     @Volatile private var noteText = "FT"
     @Volatile private var carNetworkIface: String? = null
@@ -160,12 +162,15 @@ class CarLifeService : Service() {
     }
 
     private class VoiceCmd(val kind: Int, val rate: Int = 0, val channels: Int = 0, val pcm: ByteArray? = null)
+    private val voiceQueued = java.util.concurrent.atomic.AtomicLong(0)
     private val voiceOut = java.util.concurrent.LinkedBlockingQueue<VoiceCmd>()
     @Volatile private var voiceWriter: Thread? = null
     private val carVoice = object : CarAudioBus.Voice {
         override fun begin(rate: Int, channels: Int) = queueVoice(VoiceCmd(VOICE_START, rate, channels))
         override fun data(pcm: ByteArray) {
-            if (voiceOut.size < VOICE_BACKLOG) queueVoice(VoiceCmd(VOICE_DATA, pcm = pcm))
+            if (voiceQueued.get() >= VOICE_BACKLOG_BYTES) return
+            voiceQueued.addAndGet(pcm.size.toLong())
+            queueVoice(VoiceCmd(VOICE_DATA, pcm = pcm))
         }
         override fun end() = queueVoice(VoiceCmd(VOICE_END))
     }
@@ -185,6 +190,7 @@ class CarLifeService : Service() {
                         CarAudioBus.tick()
                         continue
                     }
+                    c.pcm?.let { voiceQueued.addAndGet(-it.size.toLong()) }
                     val s = session ?: continue
                     when (c.kind) {
                         VOICE_START -> {
@@ -242,6 +248,7 @@ class CarLifeService : Service() {
         CarAudioBus.voiceChannel = !app.prefs.blendGuidance
         CarAudioBus.voice = carVoice
         CarAudioBus.sink = carAudio
+        watchCalls()
         carDisplay = CarDisplay(this)
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel(CHANNEL, "FT projection", NotificationManager.IMPORTANCE_LOW))
@@ -583,6 +590,43 @@ class CarLifeService : Service() {
             }
         }
         s.start()
+    }
+
+    private fun onAudioMode(m: Int) {
+        val calling = m == android.media.AudioManager.MODE_RINGTONE ||
+            m == android.media.AudioManager.MODE_IN_CALL ||
+            m == android.media.AudioManager.MODE_IN_COMMUNICATION
+        if (calling == CarAudioBus.inCall) return
+        CarAudioBus.inCall = calling
+        DiagLog.i(tag, if (calling) "phone call started, the car's voice channel stays closed until it ends" else "phone call ended")
+    }
+
+    private fun watchCalls() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        onAudioMode(am.mode)
+        if (Build.VERSION.SDK_INT >= 31) {
+            val l = android.media.AudioManager.OnModeChangedListener { m -> onAudioMode(m) }
+            runCatching { am.addOnModeChangedListener(mainExecutor, l) }
+                .onSuccess { callWatch = l }
+        } else {
+            callPoll = scope.launch {
+                while (true) {
+                    delay(1000)
+                    onAudioMode(am.mode)
+                }
+            }
+        }
+    }
+
+    private fun stopWatchingCalls() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        if (Build.VERSION.SDK_INT >= 31) {
+            (callWatch as? android.media.AudioManager.OnModeChangedListener)?.let { runCatching { am.removeOnModeChangedListener(it) } }
+        }
+        callWatch = null
+        callPoll?.cancel()
+        callPoll = null
+        CarAudioBus.inCall = false
     }
 
     private fun onVideoConfig(w: Int, h: Int, fps: Int) {
@@ -1202,9 +1246,11 @@ class CarLifeService : Service() {
         writer = null
         outbound.clear()
         CarAudioBus.voice = null
+        stopWatchingCalls()
         voiceWriter?.interrupt()
         voiceWriter = null
         voiceOut.clear()
+        voiceQueued.set(0)
         btAudio.close()
         CarAudioBus.sink = null
         instance = null
