@@ -288,6 +288,7 @@ class CarLifeService : Service() {
         watchCalls()
         CarPlayer.onTrack = { t -> if (!t.video) scope.launch { tellCarTheSong(t) } }
         MirrorSink.onGone = { surface -> if (mirror.isShowing(surface)) mirror.hide() }
+        watchCarBluetoothAudio()
         progressJob = scope.launch {
             CarPlayer.state.collect { st -> songPosition(st) }
         }
@@ -1528,6 +1529,46 @@ class CarLifeService : Service() {
         }
     }
 
+    private var btWatch: android.content.BroadcastReceiver? = null
+
+    @SuppressLint("MissingPermission")
+    private fun watchCarBluetoothAudio() {
+        val r = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                val device: android.bluetooth.BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) {
+                    i.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, android.bluetooth.BluetoothDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION") i.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE)
+                }
+                val who = runCatching { device?.name }.getOrNull() ?: device?.address ?: "a device"
+                val what = if (i.action == android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED) "audio" else "calls"
+                val state = when (i.getIntExtra(android.bluetooth.BluetoothProfile.EXTRA_STATE, -1)) {
+                    android.bluetooth.BluetoothProfile.STATE_CONNECTED -> "connected"
+                    android.bluetooth.BluetoothProfile.STATE_CONNECTING -> "connecting"
+                    android.bluetooth.BluetoothProfile.STATE_DISCONNECTING -> "disconnecting"
+                    android.bluetooth.BluetoothProfile.STATE_DISCONNECTED -> "disconnected"
+                    else -> return
+                }
+                val st = _state.value
+                val carLife = when (st.session) {
+                    is CarLifeSession.State.Projecting -> "on screen"
+                    is CarLifeSession.State.Idle -> "off"
+                    else -> "connecting"
+                }
+                val aa = if (st.aaOverlay) "on the car" else if (AaHeadUnitService.current != null) "starting" else "off"
+                DiagLog.i("CarBT", "bluetooth $what for '$who' $state (CarLife $carLife, Android Auto $aa)")
+            }
+        }
+        val f = android.content.IntentFilter().apply {
+            addAction(android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+            addAction(android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+        }
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED) else registerReceiver(r, f)
+            btWatch = r
+        }.onFailure { DiagLog.w(tag, "cannot watch the car's bluetooth audio: ${it.message}") }
+    }
+
     private fun notification(text: String): Notification {
         val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL)
@@ -1546,6 +1587,8 @@ class CarLifeService : Service() {
 
     override fun onDestroy() {
         teardown()
+        btWatch?.let { runCatching { unregisterReceiver(it) } }
+        btWatch = null
         progressJob?.cancel()
         CarPlayer.onTrack = null
         scope.cancel()
