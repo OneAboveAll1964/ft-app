@@ -264,7 +264,7 @@ elif want == "pace":
     taps = d.get("tap_clock", [])
     video = [i for i, (x, y, t) in enumerate(taps) if (x, y) == (334, 224)]
     start = d["songs"][0]["t"]
-    end = taps[video[0] + 1][2] - d["audio_t0"]
+    end = taps[video[0]][2] - d["audio_t0"]
     window = [q for t, q in m["delay_track"] if start <= t <= end]
     steady = window[1:]
     print("   car queue while FT's player plays: %.2f to %.2f s over %d samples" % (min(window), max(window), len(window)))
