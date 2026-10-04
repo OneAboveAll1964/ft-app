@@ -5,9 +5,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
 import android.view.SurfaceView
 import android.view.SurfaceHolder
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.content.pm.ResolveInfo
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
 import android.view.Surface
@@ -81,6 +78,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -136,6 +134,14 @@ private fun CarRoot(style: CarStyle) {
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
     val drawerGrid = rememberLazyGridState()
+    val browser = remember { WebPage("https://duckduckgo.com") }
+    val youtube = remember { WebPage("https://m.youtube.com", "https://m.youtube.com/results?search_query=%s") }
+    DisposableEffect(Unit) {
+        onDispose {
+            browser.destroy()
+            youtube.destroy()
+        }
+    }
     val pad = sidePadding(style.corner)
     LaunchedEffect(view) { DiagLog.i("Car", "car screen: ${view.name}") }
     LaunchedEffect(nowPlaying) { if (view == CarView.MUSIC) DiagLog.i("Car", if (nowPlaying) "music: now playing" else "music: song list") }
@@ -144,6 +150,8 @@ private fun CarRoot(style: CarStyle) {
             when {
                 key == 3 -> { view = CarView.LAUNCHER; nowPlaying = false }
                 view == CarView.MUSIC && nowPlaying -> nowPlaying = false
+                view == CarView.BROWSER && browser.back() -> Unit
+                view == CarView.YOUTUBE && youtube.back() -> Unit
                 else -> view = CarView.LAUNCHER
             }
         }
@@ -155,8 +163,8 @@ private fun CarRoot(style: CarStyle) {
             state.aaOverlay -> AaOverlay(aa)
             state.mirroring -> MirrorOverlay(style.corner)
             view == CarView.DRAWER -> AppDrawer(drawerGrid, pad) { view = CarView.LAUNCHER }
-            view == CarView.BROWSER -> CarBrowser("https://duckduckgo.com") { view = CarView.LAUNCHER }
-            view == CarView.YOUTUBE -> CarBrowser("https://m.youtube.com", "https://m.youtube.com/results?search_query=%s") { view = CarView.LAUNCHER }
+            view == CarView.BROWSER -> CarBrowser(browser) { view = CarView.LAUNCHER }
+            view == CarView.YOUTUBE -> CarBrowser(youtube) { view = CarView.LAUNCHER }
             view == CarView.MUSIC -> CarMusic(pad, nowPlaying) { nowPlaying = it }
             view == CarView.VIDEOS -> CarVideos(pad)
             else -> Launcher(state, style) { v, playing ->
@@ -328,7 +336,7 @@ private fun NowPlayingCard(player: CarPlayer.State, onOpen: () -> Unit, interact
         Column {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (t != null) {
-                    Artwork(t.uri, if (t.video) null else albumUri(t.albumId), 72.dp, 16.dp, if (t.video) CarIcons.Movie else CarIcons.Music)
+                    Artwork(MediaLibrary.artUri(t), t.uri, 72.dp, 16.dp, if (t.video) CarIcons.Movie else CarIcons.Music)
                 } else {
                     Box(
                         Modifier.size(72.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primaryContainer),
@@ -658,43 +666,48 @@ private fun PhoneKey(icon: ImageVector, label: String, onClick: () -> Unit) {
 @Composable
 private fun AppDrawer(gridState: LazyGridState, pad: PaddingValues, onClose: () -> Unit) {
     val context = LocalContext.current
-    val apps = remember {
-        val pm = context.packageManager
-        pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), PackageManager.MATCH_ALL)
-            .filter { it.activityInfo.packageName != context.packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .sortedBy { it.loadLabel(pm).toString().lowercase() }
+    val apps by AppCatalog.apps.collectAsState()
+    val px = with(LocalDensity.current) { 44.dp.roundToPx() }
+    LaunchedEffect(Unit) {
+        AppCatalog.refresh(context)
+        AppCatalog.apps.value?.let { AppCatalog.warm(context, it.take(30), px) }
     }
     Column(Modifier.fillMaxSize().padding(pad)) {
         Text("All apps", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
+        val list = apps
+        if (list == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
+            return@Column
+        }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(150.dp),
             state = gridState,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(apps, key = { it.activityInfo.packageName }) { info -> AppCell(info, onClose) }
+            items(list, key = { it.pkg }) { app -> AppCell(app, px, onClose) }
         }
     }
 }
 
 @Composable
-private fun AppCell(info: ResolveInfo, onClose: () -> Unit) {
+private fun AppCell(app: AppCatalog.App, px: Int, onClose: () -> Unit) {
     val context = LocalContext.current
-    val pm = context.packageManager
-    val label = remember(info) { info.loadLabel(pm).toString() }
-    val icon = remember(info) { runCatching { info.loadIcon(pm).toBitmap(132, 132).asImageBitmap() }.getOrNull() }
+    val icon by produceState(AppCatalog.cachedIcon(app, px), app, px) {
+        if (value == null) value = AppCatalog.icon(context, app, px)
+    }
     Surface(
-        onClick = { onClose(); CarLifeService.launchApp(info.activityInfo.packageName) },
+        onClick = { onClose(); CarLifeService.launchApp(app.pkg) },
         shape = RoundedCornerShape(22.dp),
         color = Color.Black.copy(alpha = 0.3f),
         contentColor = Color.White,
         modifier = Modifier.height(120.dp)
     ) {
         Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(44.dp))
+            val i = icon
+            if (i != null) Image(i, contentDescription = null, modifier = Modifier.size(44.dp))
             else Icon(CarIcons.Apps, contentDescription = null, modifier = Modifier.size(44.dp))
-            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(app.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

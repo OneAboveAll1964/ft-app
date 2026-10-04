@@ -30,6 +30,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,7 +62,16 @@ import kotlinx.coroutines.delay
 fun CarVideos(pad: PaddingValues) {
     val context = LocalContext.current
     val allowed = remember { canReadVideos(context) }
-    val videos by produceState<List<Track>?>(null) { value = MediaLibrary.videos(context) }
+    val videos by produceState(MediaLibrary.lastVideos) { value = MediaLibrary.videos(context) }
+    val grid = rememberLazyGridState()
+    LaunchedEffect(videos, grid) {
+        val list = videos ?: return@LaunchedEffect
+        snapshotFlow { grid.isScrollInProgress to (grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) }
+            .collect { (moving, last) ->
+                if (moving || last < 0 || last + 1 >= list.size) return@collect
+                MediaLibrary.prefetch(context, list.subList(last + 1, minOf(list.size, last + 9)).map { it.uri }, 384)
+            }
+    }
     var watching by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) { onDispose { CarPlayer.stopVideo() } }
@@ -79,6 +90,7 @@ fun CarVideos(pad: PaddingValues) {
             list.isEmpty() -> Empty("No videos on this phone", CarIcons.Movie)
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(220.dp),
+                state = grid,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
