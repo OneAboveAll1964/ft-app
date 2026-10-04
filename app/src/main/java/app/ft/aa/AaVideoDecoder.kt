@@ -21,7 +21,9 @@ object AaVideoSink {
         _surface.value = surface
     }
 
-    fun detach() { _surface.value = null }
+    fun detach(surface: Surface?) {
+        if (surface != null) _surface.compareAndSet(surface, null)
+    }
 }
 
 class AaVideoDecoder(private val width: Int, private val height: Int) {
@@ -35,7 +37,19 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
     @Volatile private var surface: Surface? = null
 
     fun setSurface(s: Surface?) {
+        if (s === surface) return
+        val had = surface != null
         surface = s
+        if (s != null) DiagLog.i(tag, "Android Auto's picture is drawn on the car screen")
+        else if (had) DiagLog.i(tag, "Android Auto's picture has nowhere to be drawn")
+        val c = codec
+        if (s != null && running.get() && c != null) {
+            if (runCatching { c.setOutputSurface(s) }.isSuccess) {
+                DiagLog.i(tag, "decoder moved onto the new car screen surface")
+                return
+            }
+            stop()
+        }
         if (s != null && !running.get() && config != null) start()
         if (s == null) stop()
     }

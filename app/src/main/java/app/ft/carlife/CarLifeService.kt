@@ -1331,7 +1331,6 @@ class CarLifeService : Service() {
         if (!wasOn && !wasRunning) return
         aaWatch?.cancel()
         aaWatch = null
-        aaAutoLaunched = false
         if (wasOn) aaOverlay(false)
         CarAudioBus.clear(CarAudioBus.LANE_MEDIA)
         CarAudioBus.clear(CarAudioBus.LANE_SPEECH)

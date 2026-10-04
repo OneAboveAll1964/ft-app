@@ -195,7 +195,7 @@ class AaSession(
                 if (body.size > 8) {
                     val ts = Bytes.u64(body, 0)
                     mediaFrames++
-                    if (mediaFrames <= 3 || mediaFrames % 300 == 0L) DiagLog.d(tag, "video frame #$mediaFrames ${body.size - 8} bytes")
+                    if (mediaFrames <= 3 || mediaFrames % 300 == 0L) DiagLog.d(tag, "video frame #$mediaFrames ${body.size - 8} bytes, ${decoder.frames.value} drawn on the car screen")
                     decoder.onFrame(body.copyOfRange(8, body.size), ts)
                 }
                 sendEnc(AaProtocol.CH_VIDEO, AaProtocol.AV_MEDIA_ACK, AaMessages.mediaAck(videoSession))

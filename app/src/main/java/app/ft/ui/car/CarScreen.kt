@@ -496,12 +496,19 @@ private fun AaOverlay(aa: app.ft.aa.AaState) {
             factory = { ctx ->
                 TextureView(ctx).apply {
                     surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                        var mine: Surface? = null
                         override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
                             st.setDefaultBufferSize(fullW, fullH)
-                            AaVideoSink.attach(Surface(st), fullW, fullH)
+                            val s = Surface(st)
+                            mine = s
+                            AaVideoSink.attach(s, fullW, fullH)
                         }
                         override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = Unit
-                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean { AaVideoSink.detach(); return true }
+                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                            AaVideoSink.detach(mine)
+                            mine = null
+                            return true
+                        }
                         override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
                     }
                 }
