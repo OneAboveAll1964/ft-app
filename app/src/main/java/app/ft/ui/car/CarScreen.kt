@@ -6,9 +6,6 @@ import androidx.compose.runtime.key
 import android.view.SurfaceView
 import android.view.SurfaceHolder
 import android.graphics.Rect
-import android.graphics.SurfaceTexture
-import android.view.Surface
-import android.view.TextureView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -500,25 +497,19 @@ private fun AaOverlay(aa: app.ft.aa.AaState) {
     val prefs = FTApp.instance.prefs
     val (fullW, fullH) = app.ft.aa.AaProtocol.standardSize(prefs.aaWidth, prefs.aaHeight)
     Box(Modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
+        LaunchedEffect(Unit) {
+            delay(3000)
+            if (AaVideoSink.surface.value == null) DiagLog.w("Car", "Android Auto is on the car but its picture still has no place to be drawn")
+        }
         AndroidView(
             factory = { ctx ->
-                TextureView(ctx).apply {
-                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                        var mine: Surface? = null
-                        override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
-                            st.setDefaultBufferSize(fullW, fullH)
-                            val s = Surface(st)
-                            mine = s
-                            AaVideoSink.attach(s, fullW, fullH)
-                        }
-                        override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) = Unit
-                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-                            AaVideoSink.detach(mine)
-                            mine = null
-                            return true
-                        }
-                        override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
-                    }
+                SurfaceView(ctx).apply {
+                    holder.setFixedSize(fullW, fullH)
+                    holder.addCallback(object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(h: SurfaceHolder) = AaVideoSink.attach(h.surface, fullW, fullH)
+                        override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, height: Int) = Unit
+                        override fun surfaceDestroyed(h: SurfaceHolder) = AaVideoSink.detach(h.surface)
+                    })
                 }
             },
             modifier = Modifier.fillMaxWidth().aspectRatio(fullW.toFloat() / fullH).align(Alignment.TopCenter)
