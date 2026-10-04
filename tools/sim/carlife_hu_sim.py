@@ -28,6 +28,10 @@ FOREGROUND = 0x0001001B
 GO_TO_FOREGROUND = 0x00018025
 GO_TO_FOREGROUND_RESPONSE = 0x0001004C
 MODULE_STATUS = 0x00010026
+MEDIA_INFO = 0x00010035
+MEDIA_PROGRESS_BAR = 0x00010036
+PAUSE_MEDIA = 0x0001800E
+MODULE_CONTROL = 0x00018028
 STATISTIC_INFO = 0x00018027
 HU_AUTHEN_REQUEST = 0x00018048
 MD_AUTHEN_RESPONSE = 0x00010049
@@ -162,9 +166,12 @@ class Sim:
         self.link = link
         self.log = log
         self.video = []
+        self.video_times = []
         self.heartbeats = 0
         self.pending = []
         self.seen = []
+        self.songs = []
+        self.positions = []
 
     def send_cmd(self, sid, payload=b""):
         self.log("HU -> %s %d bytes%s" % (name(sid), len(payload), " (encrypted)" if self.link.aes and payload else ""))
@@ -185,10 +192,28 @@ class Sim:
             raise RuntimeError("link error: %s" % p.decode(errors="replace"))
         if ch == CH_VIDEO and s == VIDEO_DATA:
             self.video.append(p)
+            self.video_times.append(time.time())
             return None
         if ch == CH_VIDEO and s == VIDEO_HEARTBEAT:
             self.heartbeats += 1
             return None
+        if ch == CH_CMD and s == MEDIA_PROGRESS_BAR:
+            self.positions.append((time.time(), first(decode(p), 1, 0)))
+            return None
+        if ch == CH_CMD and s == MEDIA_INFO:
+            d = decode(p)
+            song = {
+                "t": time.time(),
+                "source": first(d, 1, b"").decode(errors="replace"),
+                "title": first(d, 2, b"").decode(errors="replace"),
+                "artist": first(d, 3, b"").decode(errors="replace"),
+                "album": first(d, 4, b"").decode(errors="replace"),
+                "art_bytes": len(first(d, 5, b"")),
+                "art_is_jpeg": first(d, 5, b"")[:2] == b"\xff\xd8",
+                "duration": first(d, 6, 0),
+            }
+            self.songs.append(song)
+            self.log("MD -> song info %s" % {k: v for k, v in song.items() if k != "t"})
         self.seen.append(s)
         self.log("MD -> %s on ch%d %d bytes" % (name(s), ch, len(p)))
         return item
@@ -426,11 +451,21 @@ def main():
             marks = []
             for spec in a.touches.split(";"):
                 xy, at = spec.split("@")
-                x, y = [int(v) for v in xy.split(",")]
                 at = float(at)
                 while time.time() - t0 < at:
                     sim.drain(min(0.25, at - (time.time() - t0)))
+                if xy.startswith("key:"):
+                    k = int(xy[4:])
+                    sim.log("HU -> steering wheel key %d" % k)
+                    sim.send_ctrl(CAR_HARD_KEY_CODE, f_varint(1, k))
+                    continue
+                if xy.startswith("cmd:"):
+                    sid = int(xy[4:], 16)
+                    sim.send_cmd(sid, f_varint(1, 3) + f_varint(2, 1) if sid == MODULE_CONTROL else b"")
+                    continue
+                x, y = [int(v) for v in xy.split(",")]
                 marks.append((x, y, len(sim.video)))
+                result.setdefault("tap_clock", []).append([x, y, round(time.time(), 3)])
                 sim.tap(x, y)
             sim.drain(a.tail_seconds)
             for i, (x, y, n0) in enumerate(marks):
@@ -460,6 +495,12 @@ def main():
             result["plain_after_key"] = link.plain_after_key
             result["checks"]["everything_encrypted_after_key"] = link.plain_after_key == 0
         result["total_frames"] = len(sim.video)
+        t_audio0 = link.audio[0][0] if link.audio else 0
+        result["songs"] = [dict(x, t=round(x["t"] - t_audio0, 3)) for x in sim.songs]
+        result["audio_t0"] = round(t_audio0, 3)
+        result["frame_clock"] = [round(t, 3) for t in sim.video_times]
+        write_h264(os.path.join(a.out, "all.h264"), sim.video)
+        result["positions"] = [(round(t - t_audio0, 3), v) for t, v in sim.positions]
         result["ok"] = all(result["checks"].values())
     except Exception as e:
         result["error"] = "%s: %s" % (type(e).__name__, e)

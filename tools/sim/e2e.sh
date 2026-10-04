@@ -23,6 +23,28 @@ $ADB install -r -g "$APK" >/dev/null 2>&1 && ok "apk installed" || ko "apk insta
 $ADB shell appops set $PKG SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1
 $ADB shell settings put secure enabled_accessibility_services $PKG/$PKG.FTTouchService >/dev/null 2>&1
 $ADB shell settings put secure accessibility_enabled 1 >/dev/null 2>&1
+$ADB shell appops set $PKG WRITE_SETTINGS allow >/dev/null 2>&1
+$ADB shell am kill-all >/dev/null 2>&1
+for p in com.android.settings com.android.chrome com.google.android.youtube com.google.android.apps.maps com.android.vending; do $ADB shell am force-stop $p >/dev/null 2>&1; done
+$ADB shell settings put system accelerometer_rotation 0 >/dev/null 2>&1
+$ADB shell settings put system user_rotation 0 >/dev/null 2>&1
+
+echo "== test media on the phone =="
+MEDIA="$OUT/media"; mkdir -p "$MEDIA"
+if [ ! -s "$MEDIA/test_drive_clip.mp4" ]; then
+  ffmpeg -y -loglevel error -f lavfi -i "mandelbrot=s=600x600" -frames:v 1 "$MEDIA/cover1.jpg"
+  ffmpeg -y -loglevel error -f lavfi -i "gradients=s=600x600:c0=0xff8ac0:c1=0x26102e:x0=0:y0=0:x1=600:y1=600" -frames:v 1 "$MEDIA/cover2.jpg"
+  ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=440:duration=45:sample_rate=44100" -i "$MEDIA/cover1.jpg" -map 0:a -map 1:v -c:a libmp3lame -b:a 192k -c:v mjpeg -id3v2_version 3 -metadata title="Alpha Tone" -metadata artist="FT Band" -metadata album="Road Tests" -disposition:v attached_pic "$MEDIA/alpha_tone.mp3"
+  ffmpeg -y -loglevel error -f lavfi -i "sine=frequency=660:duration=45:sample_rate=48000" -i "$MEDIA/cover2.jpg" -map 0:a -map 1:v -c:a libmp3lame -b:a 192k -c:v mjpeg -id3v2_version 3 -metadata title="Bravo Tone" -metadata artist="The Testers" -metadata album="Night Drive" -disposition:v attached_pic "$MEDIA/bravo_tone.mp3"
+  ffmpeg -y -loglevel error -f lavfi -i "testsrc2=s=1280x720:r=30:d=14" -f lavfi -i "sine=frequency=880:duration=14" -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest -metadata title="Test Drive Clip" "$MEDIA/test_drive_clip.mp4"
+fi
+$ADB push "$MEDIA/alpha_tone.mp3" "$MEDIA/bravo_tone.mp3" /sdcard/Music/ >/dev/null 2>&1
+$ADB push "$MEDIA/test_drive_clip.mp4" /sdcard/Movies/ >/dev/null 2>&1
+for f in /sdcard/Music/alpha_tone.mp3 /sdcard/Music/bravo_tone.mp3 /sdcard/Movies/test_drive_clip.mp4; do
+  $ADB shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$f" >/dev/null 2>&1
+done
+sleep 3
+check "test songs are in the phone's library with their tags" "$ADB shell content query --uri content://media/external/audio/media --projection title:artist 2>/dev/null | grep -q 'title=Alpha Tone, artist=FT Band'"
 for p in 5277 7240 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
 
 $ADB logcat -c
@@ -72,7 +94,8 @@ check "Home shows the connection steps and no setup left to do" "grep -q 'text=\
 check "Home no longer asks for screen sharing up front" "! grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect, Android Auto auto-start on) =="
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings >/dev/null 2>&1
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings \
+  --es carTiles music,videos,youtube,maps,browser,apps --es carBackground deep --ei carAccent -10492992 --ez carClock24 true >/dev/null 2>&1
 sleep 7
 check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt'"
 check "no WiFi Direct nagging while the car is reachable on this network" "! grep -q 'discoverPeers failed' '$OUT/logcat.txt'"
@@ -109,7 +132,8 @@ sleep 3
 
 echo "== run the head unit simulator =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
-  --touches "284,606@0;40,40@2;672,195@4;40,40@6;668,530@8" --tail-seconds 8 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
+  --touches "282,621@0;40,40@2;670,192@4;450,171@6;key:87@11;40,40@14;904,192@16;334,224@18;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;156,651@42;417,651@44;40,40@54" \
+  --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
 kill $LOGPID 2>/dev/null
@@ -130,7 +154,24 @@ check "Android Auto bridge starts after connection" "grep -q 'auto-starting Andr
 check "Android Auto is pointed at FT's own head unit port" "grep -qE 'asked Android Auto to project onto FT at 127.0.0.1:[0-9]+' '$OUT/logcat.txt'"
 check "Android Auto is told to draw at the car's size" "grep -q \"Android Auto will draw at the car's own 1280x720\" '$OUT/logcat.txt'"
 check "Android Auto stops when the car link drops" "grep -q 'Android Auto stopped because' '$OUT/logcat.txt'"
-check "car audio never outruns the car" "! grep -qE 'to the car (19[6-9][0-9]{3}|[2-9][0-9]{5}) of 192000' '$OUT/logcat.txt'"
+outruns(){ python3 - "$OUT/logcat.txt" <<'PY4'
+import re, sys
+bad = []
+for line in open(sys.argv[1], errors="replace"):
+    m = re.search(r"to the car (\d+) of 192000", line)
+    if not m or int(m.group(1)) < 196000:
+        continue
+    phone = re.search(r"\| phone (\d+)", line)
+    if phone and int(phone.group(1)) > 200000:
+        print("   ignored, the phone's own capture ran faster than real time:", line.strip()[-120:])
+        continue
+    bad.append(line.strip())
+for b in bad:
+    print("  ", b)
+sys.exit(1 if bad else 0)
+PY4
+}
+check "car audio never outruns the car" "outruns"
 check "car keeps showing the launcher while Android Auto is not projecting" "! grep -q 'android auto overlay on' '$OUT/logcat.txt'"
 check "presentation shown on virtual display" "grep -q 'presentation shown' '$OUT/logcat.txt'"
 check "encoder started 1280x720" "grep -q 'encoder started 1280x720' '$OUT/logcat.txt'"
@@ -138,6 +179,104 @@ check "projection started" "grep -q 'projection started' '$OUT/logcat.txt'"
 check "built-in Browser screen opens from a car tile" "grep -q 'car screen: BROWSER' '$OUT/logcat.txt'"
 check "tile launched an app and mirrored it to the car" "grep -q 'launched com.android.settings' '$OUT/logcat.txt'"
 check "phone mirror started" "grep -qE 'mirror [0-9]+x[0-9]+ started' '$OUT/logcat.txt'"
+
+echo "== music, videos and phone keys on the car =="
+song(){ python3 - "$OUT/carlife/result.json" "$1" <<'PY3'
+import json, sys, wave
+import numpy as np
+d = json.load(open(sys.argv[1]))
+want = sys.argv[2]
+if want == "info":
+    s = [x for x in d.get("songs", []) if x["title"] == "Alpha Tone"]
+    assert s, d.get("songs")
+    x = s[0]
+    print("   car was told:", x["title"], "/", x["artist"], "/", x["album"], "| cover", x["art_bytes"], "bytes")
+    assert x["artist"] == "FT Band" and x["album"] == "Road Tests" and x["art_is_jpeg"] and 1000 < x["art_bytes"] <= 30000, x
+    assert any(y["title"] == "Bravo Tone" for y in d["songs"]), d["songs"]
+elif want == "position":
+    p = d.get("positions", [])
+    print("   song positions sent:", len(p))
+    assert len(p) >= 4, p
+    assert any(b[1] > a[1] for a, b in zip(p, p[1:])), p
+elif want == "tones":
+    w = wave.open(sys.argv[1].replace("result.json", "media.wav"))
+    pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).reshape(-1, 2)[:, 0].astype(np.float64)
+    seen = []
+    for i in range(0, len(pcm) - 9600, 9600):
+        blk = pcm[i:i + 9600]
+        if np.abs(blk).max() < 500:
+            continue
+        f = np.fft.rfftfreq(len(blk), 1 / 48000.0)[np.argmax(np.abs(np.fft.rfft(blk * np.hanning(len(blk)))))]
+        tone = min((440, 660, 880), key=lambda t: abs(t - f))
+        if abs(tone - f) < 15 and (not seen or seen[-1] != tone):
+            seen.append(tone)
+    print("   tones heard by the car, in order:", seen)
+    assert seen[:3] == [440, 660, 880], seen
+elif want == "landscape":
+    import glob, os, subprocess, tempfile
+    from PIL import Image
+    taps = d.get("tap_clock", [])
+    turn = [t for x, y, t in taps if (x, y) == (417, 651)]
+    after = [t for x, y, t in taps if turn and t > turn[0]]
+    clock = d.get("frame_clock", [])
+    tmp = tempfile.mkdtemp()
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "quiet", "-i", sys.argv[1].replace("result.json", "all.h264"), "-fps_mode", "passthrough", tmp + "/f%05d.png"])
+    frames = sorted(glob.glob(tmp + "/*.png"))
+    off = len(clock) - len(frames)
+    wide = 0
+    for i, f in enumerate(frames):
+        t = clock[i + off] if 0 <= i + off < len(clock) else 0
+        if not turn or t < turn[0] or (after and t > after[0]):
+            continue
+        im = Image.open(f).convert("L")
+        row = [im.getpixel((x, 360)) for x in range(0, im.size[0], 8)]
+        bright = [i * 8 for i, v in enumerate(row) if v > 200]
+        if bright and min(bright) < 120 and max(bright) > 1160:
+            wide += 1
+    print("   frames showing the turned phone across the car screen:", wide)
+    assert wide >= 1
+elif want == "pace":
+    m = d["audio"]["media"]
+    taps = d.get("tap_clock", [])
+    video = [i for i, (x, y, t) in enumerate(taps) if (x, y) == (334, 224)]
+    start = d["songs"][0]["t"]
+    end = taps[video[0] + 1][2] - d["audio_t0"]
+    window = [q for t, q in m["delay_track"] if start <= t <= end]
+    print("   car queue while FT's player plays: %.2f to %.2f s over %d samples" % (min(window), max(window), len(window)))
+    assert len(window) >= 5 and max(window) < 0.4, window
+PY3
+}
+check "the Music screen opens from its car tile" "grep -q 'car screen: MUSIC' '$OUT/logcat.txt'"
+check "tapping a song plays it to the car" "grep -q \"playing 'Alpha Tone' by FT Band to the car\" '$OUT/logcat.txt'"
+check "the steering wheel's next key moves FT's player on" "grep -q \"steering wheel next track for FT's player\" '$OUT/logcat.txt' && grep -q \"playing 'Bravo Tone'\" '$OUT/logcat.txt'"
+check "the car is told the song, artist, album and cover" "song info"
+check "the car gets the song position as it plays" "song position"
+check "the car hears each song and the video, in order (440, 660, 880 Hz)" "song tones"
+check "FT's player never builds up delay in the car" "song pace"
+check "phone sound is held back while FT's player plays" "grep -q 'phone sound held back' '$OUT/logcat.txt'"
+check "the Videos screen plays a video to the car" "grep -q 'car screen: VIDEOS' '$OUT/logcat.txt' && grep -q \"playing 'Test Drive Clip' to the car\" '$OUT/logcat.txt'"
+check "leaving Videos stops the video" "grep -qE 'FT/Player.*: stopped' '$OUT/logcat.txt'"
+check "the phone keys open from their handle on the car" "grep -q 'phone keys shown' '$OUT/logcat.txt'"
+check "the phone's back key works from the car" "grep -q 'phone back' '$OUT/logcat.txt'"
+check "rotate turns the phone to landscape" "grep -q 'phone turned to landscape' '$OUT/logcat.txt'"
+check "the car shows the turned phone across its whole width" "song landscape"
+check "the mirror follows the phone into landscape" "grep -E 'phone turned, mirror is now [0-9]+x[0-9]+' '$OUT/logcat.txt' | tail -1 | python3 -c \"import re,sys;w,h=map(int,re.search(r'now (\\d+)x(\\d+)',sys.stdin.read()).groups());assert w>h\""
+check "the FT button still works on top of the mirror" "grep -q 'mirror stopped' '$OUT/logcat.txt'"
+check "the phone's rotation is put back when the car goes" "grep -q 'phone rotation set back the way it was' '$OUT/logcat.txt' && [ \"\$($ADB shell settings get system user_rotation | tr -d '\\r')\" = 0 ]"
+
+echo "== FT button in another corner, over a mirrored app =="
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/corner_logcat.txt" 2>&1 &
+CORNERLOG=$!
+grant_mirror
+$ADB shell am start -n $PKG/.MainActivity --ei aaCorner 3 --ez aaAuto false >/dev/null 2>&1
+sleep 3
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 \
+  --touches "670,528@1;1208,666@6" --tail-seconds 3 --out "$OUT/corner" > "$OUT/corner_sim.log" 2>&1
+sleep 1
+kill $CORNERLOG 2>/dev/null
+check "a bottom-right FT button is pressable over a mirrored app" "grep -q 'launched com.android.settings' '$OUT/corner_logcat.txt' && grep -q 'mirror stopped' '$OUT/corner_logcat.txt'"
+$ADB shell am start -n $PKG/.MainActivity --ei aaCorner 0 >/dev/null 2>&1
 
 echo "== phone ui =="
 $ADB shell am start -n $PKG/.MainActivity >/dev/null 2>&1; sleep 2
