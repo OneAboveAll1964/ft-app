@@ -66,6 +66,8 @@ data class CarStyle(
             raw.split(',').map { it.trim() }.filter { it.isNotEmpty() && (it in BUILT_IN_TILES || it.startsWith("app:")) }
                 .take(MAX_TILES)
 
+        fun columns(count: Int): Int = if (count <= 3) count.coerceAtLeast(1) else (count + 1) / 2
+
         fun gradient(name: String): List<Color> =
             BACKGROUNDS.firstOrNull { it.first == name }?.second ?: BACKGROUNDS.first().second
     }

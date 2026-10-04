@@ -379,7 +379,7 @@ private data class TileSpec(val key: String, val label: String, val icon: ImageV
 private fun TileGrid(keys: List<String>, modifier: Modifier, interactive: Boolean = true, onOpen: (CarView, Boolean) -> Unit) {
     val context = LocalContext.current
     val specs = remember(keys) { keys.map { tileSpec(context, it) } }
-    val columns = if (specs.size <= 3) specs.size.coerceAtLeast(1) else (specs.size + 1) / 2
+    val columns = CarStyle.columns(specs.size)
     val rows = specs.chunked(columns)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         rows.forEach { row ->

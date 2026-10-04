@@ -1,5 +1,7 @@
 package app.ft.ui.settings
 
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.height
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,13 +35,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -153,17 +153,25 @@ fun CarLookSettings() {
         }
 
         Label("Buttons")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            maxItemsInEachRow = CarStyle.columns(style.tiles.size)
+        ) {
             style.tiles.forEachIndexed { i, key ->
-                FilledTonalButton(onClick = { picking = i }) {
-                    Icon(tileIcon(key), contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(tileLabel(context, key), modifier = Modifier.padding(start = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                TileChip(key, Modifier.weight(1f)) { picking = i }
             }
             if (style.tiles.size < CarStyle.MAX_TILES) {
-                OutlinedButton(onClick = { picking = style.tiles.size }) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("Add", modifier = Modifier.padding(start = 8.dp))
+                Surface(
+                    onClick = { picking = style.tiles.size },
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    color = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f).height(76.dp)
+                ) {
+                    ChipBody(label = "Add") { Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(24.dp)) }
                 }
             }
         }
@@ -206,6 +214,39 @@ fun CarLookSettings() {
             CarStyles.reload()
             pickingMaps = false
         }
+    }
+}
+
+@Composable
+private fun TileChip(key: String, modifier: Modifier, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val app = remember(key) {
+        if (!key.startsWith("app:")) null
+        else runCatching { context.packageManager.getApplicationIcon(key.removePrefix("app:")).toBitmap(96, 96).asImageBitmap() }.getOrNull()
+    }
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = modifier.height(76.dp)
+    ) {
+        ChipBody(label = tileLabel(context, key)) {
+            if (app != null) Image(app, contentDescription = null, modifier = Modifier.size(24.dp))
+            else Icon(tileIcon(key), contentDescription = null, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ChipBody(label: String, icon: @Composable () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
+    ) {
+        icon()
+        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
 
