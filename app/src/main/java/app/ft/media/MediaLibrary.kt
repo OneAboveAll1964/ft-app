@@ -1,5 +1,6 @@
 package app.ft.media
 
+import app.ft.FTApp
 import android.content.ContentUris
 import android.content.Context
 import android.graphics.Bitmap
@@ -33,11 +34,19 @@ object MediaLibrary {
     }
     private val missing = HashSet<String>()
 
-    suspend fun songs(context: Context): List<Track> = withContext(Dispatchers.IO) {
+    private val chatFolders = listOf("whatsapp", "telegram")
+
+    fun chatAudio(relativePath: String?): Boolean {
+        val p = relativePath?.lowercase() ?: return false
+        return chatFolders.any { p.contains(it) }
+    }
+
+    suspend fun songs(context: Context, hideChats: Boolean = FTApp.instance.prefs.hideChatAudio): List<Track> = withContext(Dispatchers.IO) {
         val out = ArrayList<Track>()
         val cols = arrayOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.DURATION
+            MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.RELATIVE_PATH
         )
         runCatching {
             context.contentResolver.query(
@@ -46,6 +55,7 @@ object MediaLibrary {
                 "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
             )?.use { c ->
                 while (c.moveToNext() && out.size < 5000) {
+                    if (hideChats && chatAudio(c.getString(6))) continue
                     val id = c.getLong(0)
                     out += Track(
                         id = id,
@@ -62,7 +72,7 @@ object MediaLibrary {
         out
     }
 
-    suspend fun albums(context: Context): List<Album> = withContext(Dispatchers.IO) {
+    suspend fun albums(context: Context, keep: Set<Long>? = null): List<Album> = withContext(Dispatchers.IO) {
         val out = ArrayList<Album>()
         val cols = arrayOf(
             MediaStore.Audio.Albums._ID, MediaStore.Audio.Albums.ALBUM,
@@ -74,6 +84,7 @@ object MediaLibrary {
                 "${MediaStore.Audio.Albums.ALBUM} COLLATE NOCASE ASC"
             )?.use { c ->
                 while (c.moveToNext() && out.size < 2000) {
+                    if (keep != null && c.getLong(0) !in keep) continue
                     out += Album(
                         id = c.getLong(0),
                         title = c.getString(1)?.takeIf { it.isNotBlank() } ?: "Unknown album",

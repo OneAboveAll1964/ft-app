@@ -38,6 +38,7 @@ class Prefs(context: Context) {
     var carSizedApps: Boolean get() = bool("carSizedApps", false); set(v) = set("carSizedApps", v)
     var muteWhileProjecting: Boolean get() = bool("muteWhileProjecting", true); set(v) = set("muteWhileProjecting", v)
     var soundOverBluetooth: Boolean get() = bool("soundOverBluetooth", false); set(v) = set("soundOverBluetooth", v)
+    var hideChatAudio: Boolean get() = bool("hideChatAudio", true); set(v) = set("hideChatAudio", v)
 
     var autoStartWifi: Boolean get() = bool("autoStartWifi", false); set(v) = set("autoStartWifi", v)
     var autoStartAa: Boolean get() = bool("autoStartAa", false); set(v) = set("autoStartAa", v)

@@ -196,6 +196,7 @@ fun CarLookSettings() {
         Toggle("24-hour clock", style.clock24) { on -> save { p.carClock24 = on } }
         Toggle("Show connection details", style.showLink) { on -> save { p.carShowLink = on } }
         Toggle("Show the song on the car's own display", p.carSongInfo) { on -> p.carSongInfo = on }
+        Toggle("Hide WhatsApp and Telegram audio in Music", p.hideChatAudio) { on -> p.hideChatAudio = on }
     }
 
     if (picking >= 0) {

@@ -79,7 +79,9 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
     var album by remember { mutableStateOf<Album?>(null) }
     val allowed = remember { canReadMusic(context) }
     val songs by produceState<List<Track>?>(null) { value = MediaLibrary.songs(context) }
-    val albums by produceState<List<Album>?>(null) { value = MediaLibrary.albums(context) }
+    val albums by produceState<List<Album>?>(null, songs) {
+        value = songs?.let { list -> MediaLibrary.albums(context, list.map { it.albumId }.toSet()) }
+    }
 
     if (showPlaying && player.track != null) {
         NowPlaying(pad, player) { onPlaying(false) }
