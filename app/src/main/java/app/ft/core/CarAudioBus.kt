@@ -8,6 +8,9 @@ object CarAudioBus {
     const val LANE_MEDIA = 4
     const val LANE_SPEECH = 5
     const val LANE_SYSTEM = 6
+    const val GUIDANCE_IN_STEP = 0
+    const val GUIDANCE_DIP = 1
+    const val GUIDANCE_UNTOUCHED = 2
 
     interface Voice {
         fun begin(rate: Int, channels: Int)
@@ -58,12 +61,20 @@ object CarAudioBus {
     private var voiceInMusic = false
     private var duckGain = 1f
     private var mixedIn = 0L
+    private val recentLevels = ArrayDeque<DoubleArray>()
+    private var recentBytes = 0
+    private var measuring = false
+    private var beforeSq = 0.0
+    private var beforeN = 0.0
+    private var promptSq = 0.0
+    private var promptN = 0.0
+    private var promptSkip = 0
 
     @Volatile
     var mixTogether = true
 
     @Volatile
-    var voiceChannel = false
+    var guidance = GUIDANCE_IN_STEP
 
     @Volatile
     var voice: Voice? = null
@@ -102,6 +113,9 @@ object CarAudioBus {
                 primed = true
                 voiceInMusic = false
                 duckGain = 1f
+                recentLevels.clear()
+                recentBytes = 0
+                measuring = false
             }
         }
 
@@ -146,12 +160,57 @@ object CarAudioBus {
         voiceOpen = false
         voiceLane = -1
         runCatching { voice?.end() }
+        if (!blending) endMeasure()
     }
 
     private fun finishBlend() {
         blending = false
         blendLane = -1
         primed = true
+        if (!voiceOpen) endMeasure()
+    }
+
+    private fun startMeasure() {
+        if (measuring || System.nanoTime() - mainAt > MAIN_ALIVE_NS) return
+        measuring = true
+        beforeSq = recentLevels.sumOf { it[0] }
+        beforeN = recentLevels.sumOf { it[1] }
+        promptSq = 0.0
+        promptN = 0.0
+        promptSkip = REAL_TIME / 4
+    }
+
+    private fun endMeasure() {
+        if (!measuring) return
+        measuring = false
+        if (beforeN <= 0 || promptN <= 0) return
+        val before = Math.sqrt(beforeSq / beforeN)
+        if (before < SILENT) return
+        val during = Math.sqrt(promptSq / promptN)
+        val db = 20 * Math.log10(maxOf(during, 1.0) / before)
+        DiagLog.i("Audio", "music coming in under the directions: %+.1f dB against just before".format(java.util.Locale.US, db))
+    }
+
+    private fun level(pcm: ByteArray) {
+        var sq = 0.0
+        var i = 0
+        while (i + 1 < pcm.size) {
+            val v = ((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort().toDouble()
+            sq += v * v
+            i += 2
+        }
+        val n = (pcm.size / 2).toDouble()
+        if (measuring) {
+            if (promptSkip > 0) promptSkip -= pcm.size
+            else {
+                promptSq += sq
+                promptN += n
+            }
+            return
+        }
+        recentLevels.addLast(doubleArrayOf(sq, n, pcm.size.toDouble()))
+        recentBytes += pcm.size
+        while (recentBytes > REAL_TIME && recentLevels.size > 1) recentBytes -= recentLevels.removeFirst()[2].toInt()
     }
 
     fun play(lane: Int, pcm: ByteArray, rate: Int, channels: Int) {
@@ -175,7 +234,7 @@ object CarAudioBus {
             }
             if (!blending && !voiceOpen) {
                 val musicOn = now - mainAt < MAIN_ALIVE_NS && now - heardAt < MUSIC_HEARD_NS
-                if (!voiceChannel || v == null || musicOn) {
+                if (v == null || (guidance == GUIDANCE_IN_STEP && musicOn)) {
                     if (!loud) {
                         perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
                         return
@@ -187,6 +246,7 @@ object CarAudioBus {
                     blendGain = gainFor(top, BLEND_TARGET)
                     primed = false
                     started = true
+                    startMeasure()
                 }
             }
             if (blending) {
@@ -202,7 +262,7 @@ object CarAudioBus {
                 mix = toCarFormat(if (blendGain > 1.01f) louder(pcm, blendGain) else pcm, rate, channels)
             }
         }
-        if (started) DiagLog.i("Audio", "directions mixed into the music, so the music dips in step with them")
+        if (started) DiagLog.i("Audio", "directions mixed into the music, which dips in step with them")
         val m = mix
         if (m != null) {
             write(lane, m)
@@ -230,6 +290,7 @@ object CarAudioBus {
                 if (!loud) return
                 voiceOpen = true
                 voiceGain = want
+                startMeasure()
                 runCatching { v.begin(rate, channels) }
             } else if (now - voiceLoudAt > VOICE_IDLE_NS) {
                 closeVoice()
@@ -259,7 +320,7 @@ object CarAudioBus {
 
     private fun duck(media: ByteArray): ByteArray {
         if (voiceInMusic && !blending && held == 0) voiceInMusic = false
-        val target = if (voiceInMusic) DUCK_LEVEL else 1f
+        val target = if (voiceInMusic || (guidance == GUIDANCE_DIP && voiceOpen)) DUCK_LEVEL else 1f
         if (duckGain == 1f && target == 1f) return media
         val down = (1f - DUCK_LEVEL) / DUCK_DOWN_FRAMES
         val up = (1f - DUCK_LEVEL) / DUCK_UP_FRAMES
@@ -316,6 +377,7 @@ object CarAudioBus {
                 mainAt = now
                 if (audible) heardAt = now
                 if (lane != LANE_PHONE) ownAt = now
+                level(pcm)
                 if (!primed && (held >= PRIME_BYTES || now - blendStartAt >= PRIME_NS)) primed = true
                 if (primed && blending && held > 0) voiceInMusic = true
                 send.add(blend(duck(pcm)))

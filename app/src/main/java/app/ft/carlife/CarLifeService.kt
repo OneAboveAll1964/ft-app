@@ -287,7 +287,7 @@ class CarLifeService : Service() {
         super.onCreate()
         instance = this
         CarAudioBus.mixTogether = true
-        CarAudioBus.voiceChannel = !app.prefs.blendGuidance
+        CarAudioBus.guidance = app.prefs.guidanceMode
         CarAudioBus.voice = carVoice
         CarAudioBus.sink = carAudio
         watchCalls()

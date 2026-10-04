@@ -381,7 +381,7 @@ sleep 6
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 8 --speech-at 2 --speech-seconds 2.5 --out "$OUT/sound_phone" > "$OUT/sound_phone.log" 2>&1
 wait $SNDCAR
 kill $SNDLOG 2>/dev/null
-sound(){ python3 - "$OUT/sound_car/result.json" "$1" <<'PY2'
+sound(){ python3 - "$OUT/${2:-sound_car}/result.json" "$1" <<'PY2'
 import json, sys
 a = json.load(open(sys.argv[1]))["audio"]
 m, t = a["media"], a.get("tts")
@@ -396,6 +396,18 @@ elif want == "voice":
     names = [e["msg"] for e in a["events"]]
     assert "TTS_INIT" in names and "TTS_END" in names, names
     assert t and abs(t["audio_seconds"] - 2.5) < 0.05, t
+elif want == "undipped":
+    import wave
+    import numpy as np
+    w = wave.open(sys.argv[1].replace("result.json", "media.wav"))
+    pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).reshape(-1, 2)[:, 0].astype(np.float64)
+    n = 2400
+    win = np.hanning(n)
+    tone = np.array([np.abs(np.fft.rfft(pcm[i:i + n] * win))[22] for i in range(0, len(pcm) - n, n)])
+    full = np.median(tone)
+    low = np.median(np.sort(tone)[:40])
+    print("   music under the directions at %.2f of its level (Android Auto's own dip in the sim is 0.30)" % (low / full))
+    assert low / full >= 0.2, low / full
 elif want == "mixed":
     import wave
     import numpy as np
@@ -428,8 +440,29 @@ elif want == "delay":
 PY2
 }
 check "the car gets exactly the music that played, nothing extra" "sound music"
-check "directions over music are mixed into it and the music dips only while they play" "sound mixed"
+check "in step (default), directions over music are mixed in and the music dips only while they play" "sound mixed"
+measured(){ python3 - "$OUT/sound_logcat.txt" <<'PY6'
+import re, sys
+vals = [float(m.group(1)) for m in re.finditer(r"music coming in under the directions: ([+-][0-9.]+) dB", open(sys.argv[1], errors="replace").read())]
+print("   measured:", vals)
+assert vals and all(-12.0 < v < -9.0 for v in vals), vals
+PY6
+}
+check "FT logs how far Android Auto lowered its own music under the prompt" "measured"
 check "the car's sound does not fall behind after a prompt" "sound delay"
+
+echo "== sound: directions over music with the music untouched =="
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false --ei guidance 2 >/dev/null 2>&1
+sleep 3
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 16 --out "$OUT/untouched_car" > "$OUT/untouched_car.log" 2>&1 &
+UNTCAR=$!
+sleep 6
+python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 8 --speech-at 2 --speech-seconds 2.5 --out "$OUT/untouched_phone" > "$OUT/untouched_phone.log" 2>&1
+wait $UNTCAR
+$ADB shell am start -n $PKG/.MainActivity --ei guidance 0 >/dev/null 2>&1
+check "untouched: the car gets exactly the music's own length" "sound music untouched_car"
+check "untouched: directions go to the car's voice channel, start to end" "sound voice untouched_car"
+check "untouched: FT adds no dip of its own to the music under directions" "sound undipped untouched_car"
 
 echo "== sound: a voice prompt with no music =="
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1

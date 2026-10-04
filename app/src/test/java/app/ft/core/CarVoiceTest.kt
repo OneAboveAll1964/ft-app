@@ -31,14 +31,14 @@ class CarVoiceTest {
     fun setUp() {
         CarAudioBus.sink = { pcm -> music.add(pcm) }
         CarAudioBus.voice = voice
-        CarAudioBus.voiceChannel = true
+        CarAudioBus.guidance = CarAudioBus.GUIDANCE_IN_STEP
     }
 
     @After
     fun tearDown() {
         CarAudioBus.sink = null
         CarAudioBus.voice = null
-        CarAudioBus.voiceChannel = false
+        CarAudioBus.guidance = CarAudioBus.GUIDANCE_IN_STEP
         CarAudioBus.inCall = false
         music.clear()
         said.clear()
@@ -136,8 +136,8 @@ class CarVoiceTest {
     }
 
     @Test
-    fun blendingStillWorksWhenTheVoiceChannelIsOff() {
-        CarAudioBus.voiceChannel = false
+    fun withNoVoiceChannelDirectionsGoInTheMusicStream() {
+        CarAudioBus.voice = null
         CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
         assertTrue(said.isEmpty())
         assertEquals("directions were not sent with the music", 640 * 6, music.sumOf { it.size })
@@ -166,7 +166,7 @@ class CarVoiceTest {
     }
 
     @Test
-    fun directionsOverMusicAreMixedInAndTheMusicDipsInStep() {
+    fun inStepDirectionsOverMusicAreMixedInAndTheMusicDipsWithThem() {
         CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2)
         CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
         repeat(30) {
@@ -182,6 +182,45 @@ class CarVoiceTest {
     }
 
     @Test
+    fun onTimeDirectionsGoToTheVoiceChannelAndTheMusicDips() {
+        CarAudioBus.guidance = CarAudioBus.GUIDANCE_DIP
+        CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2)
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, level(8000, 640), 16000, 1)
+        repeat(5) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
+        assertEquals(listOf("begin 16000/1", "data 640"), said.toList())
+        val dipped = peakOf(music.last())
+        assertTrue("music did not dip under the directions: $dipped", dipped in 2700..2900)
+        CarAudioBus.end(CarAudioBus.LANE_SPEECH)
+        repeat(30) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
+        assertEquals("music did not come back up", 8000, peakOf(music.last()))
+    }
+
+    @Test
+    fun untouchedLeavesTheMusicAloneUnderDirectionsOnTheVoiceChannel() {
+        CarAudioBus.guidance = CarAudioBus.GUIDANCE_UNTOUCHED
+        CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2)
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        repeat(10) {
+            CarAudioBus.play(CarAudioBus.LANE_SPEECH, level(8000, 640), 16000, 1)
+            CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2)
+        }
+        CarAudioBus.end(CarAudioBus.LANE_SPEECH)
+        assertEquals("begin 16000/1", said.first())
+        assertEquals(10, said.count { it.startsWith("data") })
+        assertEquals("end", said.last())
+        assertTrue("FT changed the music under directions", music.all { peakOf(it) == 8000 })
+    }
+
+    @Test
+    fun silentMusicDoesNotCountAsMusic() {
+        repeat(5) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, ByteArray(3840), 48000, 2) }
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
+        assertEquals(listOf("begin 16000/1", "data 640"), said)
+    }
+
+    @Test
     fun aPromptOnTheVoiceChannelStaysThereWhenMusicStarts() {
         CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
         CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
@@ -194,16 +233,19 @@ class CarVoiceTest {
     }
 
     @Test
-    fun silentMusicDoesNotCountAsMusic() {
-        repeat(5) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, ByteArray(3840), 48000, 2) }
+    fun howFarTheIncomingMusicDropsUnderAPromptIsLogged() {
+        repeat(60) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
         CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
         CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
-        assertEquals(listOf("begin 16000/1", "data 640"), said)
+        repeat(30) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(2400, 3840), 48000, 2) }
+        CarAudioBus.end(CarAudioBus.LANE_SPEECH)
+        val line = DiagLog.entries.value.last { it.tag == "Audio" }.text
+        assertTrue("no measurement logged: $line", line.contains("-10.5 dB"))
     }
 
     @Test
-    fun musicIsNotDippedWhenBlending() {
-        CarAudioBus.voiceChannel = false
+    fun aPromptThatHasNotSpokenYetDoesNotDipTheMusic() {
+        CarAudioBus.guidance = CarAudioBus.GUIDANCE_DIP
         CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
         repeat(5) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
         assertEquals(8000, peakOf(music.last()))

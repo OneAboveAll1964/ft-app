@@ -75,10 +75,7 @@ fun SettingsScreen(pad: PaddingValues) {
         }
         item {
             Group("Sound") {
-                BoolSetting("Always mix directions into the music", p.blendGuidance) {
-                    p.blendGuidance = it
-                    app.ft.core.CarAudioBus.voiceChannel = !it
-                }
+                GuidanceSetting()
                 BoolSetting("Use the car's bluetooth for sound instead", p.soundOverBluetooth) { p.soundOverBluetooth = it }
                 BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
                 QuietShareSetting()
@@ -179,6 +176,31 @@ fun SettingsScreen(pad: PaddingValues) {
                 BoolSetting("Start the head unit at launch", p.autoStartAa) { p.autoStartAa = it }
             }
         }
+    }
+}
+
+private val GUIDANCE = listOf(
+    "In step" to "The music dips exactly while directions speak. On drives where the car holds the music longer, directions wait for it.",
+    "On time" to "Directions speak the moment they arrive and the music dips with them, which on some drives reaches the car late.",
+    "Untouched" to "Directions speak the moment they arrive, over the music as it is."
+)
+
+@Composable
+private fun GuidanceSetting() {
+    val p = FTApp.instance.prefs
+    var mode by remember { mutableIntStateOf(p.guidanceMode.coerceIn(0, GUIDANCE.size - 1)) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Directions over music", style = MaterialTheme.typography.bodyLarge)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GUIDANCE.forEachIndexed { i, (label, _) ->
+                ValueChip(label, mode == i, Modifier.weight(1f)) {
+                    mode = i
+                    p.guidanceMode = i
+                    app.ft.core.CarAudioBus.guidance = i
+                }
+            }
+        }
+        Text(GUIDANCE[mode].second, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

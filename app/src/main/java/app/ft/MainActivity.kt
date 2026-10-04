@@ -58,6 +58,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaInstaller
 import app.ft.carlife.CarLifeService
+import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
@@ -172,6 +173,10 @@ class MainActivity : ComponentActivity() {
             CarStyles.reload()
         }
         if (intent.hasExtra("carSongInfo")) app.prefs.carSongInfo = intent.getBooleanExtra("carSongInfo", true)
+        if (intent.hasExtra("guidance")) {
+            app.prefs.guidanceMode = intent.getIntExtra("guidance", CarAudioBus.GUIDANCE_IN_STEP)
+            CarAudioBus.guidance = app.prefs.guidanceMode
+        }
         if (intent.hasExtra("carClock24")) {
             app.prefs.carClock24 = intent.getBooleanExtra("carClock24", true)
             CarStyles.reload()
