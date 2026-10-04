@@ -107,23 +107,33 @@ class CarLifeSession(
 
     fun sendSong(title: String, artist: String, album: String, art: ByteArray?, durationMs: Long, index: Int, count: Int, id: String) {
         if (!projecting && _state.value !is State.Negotiated) return
-        val w = ProtoWriter()
-            .string(1, "FT")
-            .string(2, title)
-            .string(3, artist)
-            .string(4, album)
-        if (art != null && art.isNotEmpty()) w.bytes(5, art)
-        w.int32(6, durationMs.coerceIn(0, Int.MAX_VALUE.toLong()).toInt())
-            .int32(7, count)
-            .string(8, id)
-            .int32(9, 0)
-        cmd(CarLifeProtocol.CMD_MEDIA_INFO, w.toByteArray(), quiet = true)
+        cmd(CarLifeProtocol.CMD_MEDIA_INFO, songPayload(title, artist, album, art, durationMs, count, id), quiet = true)
         DiagLog.i(tag, "told the car the song: '$title'${if (artist.isNotBlank()) " by $artist" else ""}${if (art != null) ", with cover art (${art.size} bytes)" else ""}")
+    }
+
+    fun goToCarHome() {
+        cmd(CarLifeProtocol.CMD_GO_TO_DESKTOP)
+        DiagLog.i(tag, "asked the car to show its own screen, FT stays connected")
     }
 
     fun sendSongPosition(ms: Long) {
         if (!projecting) return
         cmd(CarLifeProtocol.CMD_MEDIA_PROGRESS_BAR, ProtoWriter().int32(1, ms.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()).toByteArray(), quiet = true)
+    }
+
+    companion object {
+        fun songPayload(title: String, artist: String, album: String, art: ByteArray?, durationMs: Long, count: Int, id: String): ByteArray =
+            ProtoWriter()
+                .string(1, "FT")
+                .string(2, title)
+                .string(3, artist)
+                .string(4, album)
+                .bytes(5, art ?: ByteArray(0))
+                .int32(6, durationMs.coerceIn(0, Int.MAX_VALUE.toLong()).toInt())
+                .int32(7, count)
+                .string(8, id)
+                .int32(9, 0)
+                .toByteArray()
     }
 
     private fun linked() {

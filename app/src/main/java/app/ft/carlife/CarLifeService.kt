@@ -135,6 +135,7 @@ class CarLifeService : Service() {
         fun showPhone() = instance?.phoneScreen()
         fun launchApp(pkg: String) = instance?.launch(pkg)
         fun stopMirror() = instance?.mirrorStop()
+        fun goToCarHome() = instance?.carHome()
         fun goHome() = instance?.home()
 
         private fun phoneKey(name: String, action: (FTTouchService) -> Boolean) {
@@ -242,6 +243,7 @@ class CarLifeService : Service() {
     @Volatile private var pendingLaunch: Pair<Intent, String>? = null
     @Volatile private var soundDeclined = false
     @Volatile private var blockedSoundNoticed = false
+    @Volatile private var songInfoAt = 0L
     @Volatile private var mediaReady = false
     @Volatile private var touchFt = false
     private var soundWatch: Job? = null
@@ -431,6 +433,7 @@ class CarLifeService : Service() {
         ble.start(null)
         wakeCarBluetooth()
         startFinder()
+        if (app.prefs.carP2pName.isNotBlank()) finder?.search()
         watchWifiDirect()
     }
 
@@ -625,6 +628,12 @@ class CarLifeService : Service() {
         }
         s.onClosed = { reason ->
             DiagLog.i(tag, "link closed: $reason")
+            val sinceSong = android.os.SystemClock.elapsedRealtime() - songInfoAt
+            if (songInfoAt > 0 && sinceSong < 3000 && app.prefs.carSongInfo) {
+                app.prefs.carSongInfo = false
+                DiagLog.w(tag, "the car dropped the connection ${sinceSong}ms after it was told the song, so FT stops sending song info (Settings, Car screen)")
+            }
+            songInfoAt = 0
             stopAndroidAuto("the car disconnected")
             mediaReady = false
             routePlayer()
@@ -642,7 +651,10 @@ class CarLifeService : Service() {
                     mediaReady = true
                     routePlayer()
                     startSoundWatch()
-                    CarPlayer.state.value.track?.let { t -> if (!t.video) tellCarTheSong(t) }
+                    scope.launch {
+                        delay(3000)
+                        if (mediaReady) CarPlayer.state.value.track?.let { t -> if (!t.video) tellCarTheSong(t) }
+                    }
                 } else if (st is CarLifeSession.State.Idle && mediaReady) {
                     mediaReady = false
                     routePlayer()
@@ -1070,6 +1082,15 @@ class CarLifeService : Service() {
         launchIntent(intent, pkg)
     }
 
+    private fun carHome() {
+        val s = session
+        if (s == null || !mediaReady) {
+            DiagLog.i(tag, "no car connected to send to its own screen")
+            return
+        }
+        scope.launch { s.goToCarHome() }
+    }
+
     private fun phoneScreen() {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val pkg = runCatching { packageManager.resolveActivity(home, 0)?.activityInfo?.packageName }.getOrNull() ?: "android"
@@ -1354,13 +1375,18 @@ class CarLifeService : Service() {
         DiagLog.i(tag, if (want) "FT's player plays on the car" else if (overBluetooth) "FT's player plays over bluetooth" else "FT's player plays on the phone")
     }
 
+    private val placeholderCover: ByteArray? by lazy {
+        runCatching { resources.openRawResource(R.raw.song_placeholder).use { it.readBytes() } }.getOrNull()
+    }
+
     private suspend fun tellCarTheSong(t: Track) {
         val s = session ?: return
         if (!app.prefs.carSongInfo || !CarPlayer.toCar) return
         val art = MediaLibrary.artBytes(this, t, 240)?.let { big ->
             if (big.size <= 24_000) big else MediaLibrary.artBytes(this, t, 160)
-        }?.takeIf { it.size <= 30_000 }
+        }?.takeIf { it.size <= 30_000 } ?: placeholderCover
         val st = CarPlayer.state.value
+        songInfoAt = android.os.SystemClock.elapsedRealtime()
         runCatching { s.sendSong(t.title, t.artist, t.album, art, t.durationMs, st.index, st.count, t.id.toString()) }
             .onFailure { DiagLog.w(tag, "could not tell the car the song: ${it.message}") }
     }

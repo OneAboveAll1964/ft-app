@@ -171,6 +171,7 @@ class MainActivity : ComponentActivity() {
             app.prefs.carAccent = intent.getIntExtra("carAccent", app.prefs.carAccent)
             CarStyles.reload()
         }
+        if (intent.hasExtra("carSongInfo")) app.prefs.carSongInfo = intent.getBooleanExtra("carSongInfo", true)
         if (intent.hasExtra("carClock24")) {
             app.prefs.carClock24 = intent.getBooleanExtra("carClock24", true)
             CarStyles.reload()

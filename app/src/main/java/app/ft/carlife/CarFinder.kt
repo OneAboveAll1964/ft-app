@@ -36,6 +36,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     @Volatile private var attemptAt = 0L
     @Volatile private var searching = false
     @Volatile private var enabled = true
+    @Volatile private var armed = false
     private var watchdog: Job? = null
     private var failures = 0
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
@@ -150,7 +151,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> m.requestPeers(ch) { list ->
                 val ps = list.deviceList.map { Peer(it.deviceName ?: "", it.deviceAddress ?: "", it.status, it.isGroupOwner) }
                 _peers.value = ps
-                if (ps.isNotEmpty()) DiagLog.d(tag, "peers: " + ps.joinToString { "${it.name}[${statusName(it.status)}]" })
+                if (ps.isNotEmpty()) DiagLog.d(tag, "peers: " + ps.joinToString { "${it.name}[${statusName(it.status)}${if (it.groupOwner) ", group up" else ""}]" })
                 autoMatch(ps)
             }
             WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
@@ -213,12 +214,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 watch(target)
             }
             WifiP2pDevice.CONNECTED -> m.requestConnectionInfo(ch) { info -> if (info != null && info.groupFormed) onGroup(info) }
-            else -> connect(target)
+            else -> if (armed) connect(target)
         }
     }
 
     fun connectByName(name: String) {
         prefs.carP2pName = name
+        armed = true
         val p = _peers.value.firstOrNull { it.name == name } ?: return
         connect(p)
     }
@@ -319,6 +321,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         watchdog?.cancel()
         watchdog = null
         failures = 0
+        armed = false
         receiver?.let { runCatching { context.unregisterReceiver(it) } }
         receiver = null
         val m = manager
