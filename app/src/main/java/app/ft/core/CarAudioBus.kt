@@ -18,11 +18,14 @@ object CarAudioBus {
     private const val RATE = 48000
     private const val REAL_TIME = RATE * 4
     private const val MAIN_ALIVE_NS = 400_000_000L
-    private const val HOLD_NS = 40_000_000L
-    private const val HOLD_CAP = REAL_TIME / 4
+    private const val MUSIC_HEARD_NS = 2_000_000_000L
+    private const val HOLD_CAP = REAL_TIME
+    private const val PRIME_BYTES = REAL_TIME * 15 / 100
+    private const val PRIME_NS = 150_000_000L
     private const val VOICE_IDLE_NS = 1_500_000_000L
     private const val SILENT = 300
     private const val VOICE_TARGET = 29000
+    private const val BLEND_TARGET = 20000
     private const val VOICE_MAX_GAIN = 4f
     private const val DUCK_LEVEL = 0.35f
     private const val DUCK_DOWN_FRAMES = RATE * 8 / 100
@@ -37,16 +40,24 @@ object CarAudioBus {
     private var held = 0
     private var offset = 0
     private var mainAt = 0L
+    private var heardAt = 0L
     private var ownAt = 0L
     private var shadowed = 0L
-    private var heldAt = 0L
     private var voiceOpen = false
     private var voiceLane = -1
     private var voiceLoudAt = 0L
     private var voiceGain = 1f
-    private var duckGain = 1f
     private var voiceSent = 0L
     private var speaking = false
+    private var blending = false
+    private var blendLane = -1
+    private var blendStartAt = 0L
+    private var blendLoudAt = 0L
+    private var blendGain = 1f
+    private var primed = true
+    private var voiceInMusic = false
+    private var duckGain = 1f
+    private var mixedIn = 0L
 
     @Volatile
     var mixTogether = true
@@ -62,7 +73,10 @@ object CarAudioBus {
         set(value) {
             if (field == value) return
             field = value
-            if (value) synchronized(lock) { if (voiceOpen) closeVoice() }
+            if (value) synchronized(lock) {
+                if (voiceOpen) closeVoice()
+                if (blending) finishBlend()
+            }
         }
 
     @Volatile
@@ -78,11 +92,15 @@ object CarAudioBus {
                 held = 0
                 offset = 0
                 mainAt = 0
+                heardAt = 0
                 ownAt = 0
-                heldAt = 0
                 voiceOpen = false
                 voiceLane = -1
                 speaking = false
+                blending = false
+                blendLane = -1
+                primed = true
+                voiceInMusic = false
                 duckGain = 1f
             }
         }
@@ -91,7 +109,16 @@ object CarAudioBus {
 
     fun clear(lane: Int) {
         synchronized(lock) { perLane.remove(lane) }
-        if (lane == LANE_SPEECH || lane == LANE_SYSTEM) end(lane)
+        if (lane == LANE_SPEECH || lane == LANE_SYSTEM) {
+            end(lane)
+            synchronized(lock) {
+                if (!blending) {
+                    waiting.clear()
+                    held = 0
+                    offset = 0
+                }
+            }
+        }
     }
 
     fun begin(lane: Int) {
@@ -101,6 +128,7 @@ object CarAudioBus {
     fun end(lane: Int) {
         synchronized(lock) {
             if (lane == LANE_SPEECH) speaking = false
+            if (blending && blendLane == lane) finishBlend()
             if (!voiceOpen || voiceLane != lane) return
             closeVoice()
         }
@@ -108,7 +136,9 @@ object CarAudioBus {
 
     fun tick() {
         synchronized(lock) {
-            if (voiceOpen && System.nanoTime() - voiceLoudAt > VOICE_IDLE_NS) closeVoice()
+            val now = System.nanoTime()
+            if (voiceOpen && now - voiceLoudAt > VOICE_IDLE_NS) closeVoice()
+            if (blending && now - blendLoudAt > VOICE_IDLE_NS) finishBlend()
         }
     }
 
@@ -118,15 +148,70 @@ object CarAudioBus {
         runCatching { voice?.end() }
     }
 
+    private fun finishBlend() {
+        blending = false
+        blendLane = -1
+        primed = true
+    }
+
     fun play(lane: Int, pcm: ByteArray, rate: Int, channels: Int) {
         if (pcm.isEmpty() || out == null) return
-        val v = voice
-        if ((lane == LANE_SPEECH || lane == LANE_SYSTEM) && voiceChannel && v != null) {
-            speak(v, lane, pcm, rate, channels)
+        if (lane != LANE_SPEECH && lane != LANE_SYSTEM) {
+            write(lane, toCarFormat(pcm, rate, channels))
             return
         }
-        write(lane, toCarFormat(pcm, rate, channels))
+        val v = voice
+        val now = System.nanoTime()
+        val top = peak(pcm)
+        val loud = top > SILENT
+        var mix: ByteArray? = null
+        var started = false
+        synchronized(lock) {
+            if (inCall) {
+                perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
+                if (voiceOpen) closeVoice()
+                if (blending) finishBlend()
+                return
+            }
+            if (!blending && !voiceOpen) {
+                val musicOn = now - mainAt < MAIN_ALIVE_NS && now - heardAt < MUSIC_HEARD_NS
+                if (!voiceChannel || v == null || musicOn) {
+                    if (!loud) {
+                        perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
+                        return
+                    }
+                    blending = true
+                    blendLane = lane
+                    blendStartAt = now
+                    blendLoudAt = now
+                    blendGain = gainFor(top, BLEND_TARGET)
+                    primed = false
+                    started = true
+                }
+            }
+            if (blending) {
+                if (lane == LANE_SYSTEM && speaking && blendLane == LANE_SPEECH) {
+                    perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
+                    return
+                }
+                if (loud) blendLoudAt = now
+                if (!started) {
+                    val want = gainFor(top, BLEND_TARGET)
+                    blendGain = if (want < blendGain) want else blendGain + (want - blendGain) * 0.1f
+                }
+                mix = toCarFormat(if (blendGain > 1.01f) louder(pcm, blendGain) else pcm, rate, channels)
+            }
+        }
+        if (started) DiagLog.i("Audio", "directions mixed into the music, so the music dips in step with them")
+        val m = mix
+        if (m != null) {
+            write(lane, m)
+            return
+        }
+        if (v != null) speak(v, lane, pcm, rate, channels)
     }
+
+    private fun gainFor(top: Int, target: Int) = (target.toFloat() / maxOf(top, 1)).coerceIn(1f, VOICE_MAX_GAIN)
 
     private fun speak(v: Voice, lane: Int, pcm: ByteArray, rate: Int, channels: Int) {
         val now = System.nanoTime()
@@ -140,7 +225,7 @@ object CarAudioBus {
             }
             if (lane == LANE_SYSTEM && speaking && voiceLane == LANE_SPEECH) return
             if (loud) voiceLoudAt = now
-            val want = (VOICE_TARGET.toFloat() / maxOf(top, 1)).coerceIn(1f, VOICE_MAX_GAIN)
+            val want = gainFor(top, VOICE_TARGET)
             if (!voiceOpen) {
                 if (!loud) return
                 voiceOpen = true
@@ -173,7 +258,8 @@ object CarAudioBus {
     }
 
     private fun duck(media: ByteArray): ByteArray {
-        val target = if (voiceChannel && voiceOpen) DUCK_LEVEL else 1f
+        if (voiceInMusic && !blending && held == 0) voiceInMusic = false
+        val target = if (voiceInMusic) DUCK_LEVEL else 1f
         if (duckGain == 1f && target == 1f) return media
         val down = (1f - DUCK_LEVEL) / DUCK_DOWN_FRAMES
         val up = (1f - DUCK_LEVEL) / DUCK_UP_FRAMES
@@ -208,6 +294,8 @@ object CarAudioBus {
         val target = out ?: return
         if (pcm.isEmpty()) return
         val now = System.nanoTime()
+        val main = lane == LANE_MEDIA || lane == LANE_PLAYER || lane == LANE_PHONE
+        val audible = main && peak(pcm) > SILENT
         val send = ArrayList<ByteArray>(3)
         synchronized(lock) {
             perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
@@ -215,23 +303,25 @@ object CarAudioBus {
                 shadowed += pcm.size
                 return
             }
-            if (held > 0 && now - heldAt > HOLD_NS) {
+            if (blending && now - blendLoudAt > VOICE_IDLE_NS) finishBlend()
+            if (held > 0 && now - mainAt >= MAIN_ALIVE_NS) {
                 while (true) {
                     val first = waiting.pollFirst() ?: break
-                    val part = if (offset > 0) first.copyOfRange(offset, first.size) else first
+                    send.add(if (offset > 0) first.copyOfRange(offset, first.size) else first)
                     offset = 0
-                    held -= part.size
-                    send.add(part)
                 }
                 held = 0
             }
-            if (lane == LANE_MEDIA || lane == LANE_PLAYER || lane == LANE_PHONE) {
+            if (main) {
                 mainAt = now
+                if (audible) heardAt = now
                 if (lane != LANE_PHONE) ownAt = now
+                if (!primed && (held >= PRIME_BYTES || now - blendStartAt >= PRIME_NS)) primed = true
+                if (primed && blending && held > 0) voiceInMusic = true
                 send.add(blend(duck(pcm)))
             } else if (mixTogether && now - mainAt < MAIN_ALIVE_NS) {
-                if (held == 0) heldAt = now
                 hold(pcm)
+                mixedIn += pcm.size
             } else {
                 send.add(pcm)
             }
@@ -246,13 +336,15 @@ object CarAudioBus {
         held += pcm.size
         while (held > HOLD_CAP) {
             val first = waiting.pollFirst() ?: break
-            held -= first.size
-            dropped += first.size
+            val gone = first.size - offset
+            offset = 0
+            held -= gone
+            dropped += gone
         }
     }
 
     private fun blend(media: ByteArray): ByteArray {
-        if (held == 0) return media
+        if (held == 0 || !primed) return media
         val out = media.copyOf()
         var at = 0
         while (at + 1 < out.size && held > 0) {
@@ -295,12 +387,14 @@ object CarAudioBus {
             reported = now
             val lanes = perLane.entries.joinToString(" | ") { "${laneName(it.key)} ${(it.value / secs).toInt()}" }
             val spoken = if (voiceSent > 0) ", voice channel ${(voiceSent / secs).toInt()} B/s" else ""
+            val mixed = if (mixedIn > 0) ", mixed into the music ${(mixedIn / secs).toInt()} B/s" else ""
             val muted = if (shadowed > 0) ", phone sound held back ${(shadowed / secs).toInt()} B/s" else ""
-            line = "to the car ${(sent / secs).toInt()} of $REAL_TIME B/s, dropped ${(dropped / secs).toInt()}$spoken$muted | $lanes"
+            line = "to the car ${(sent / secs).toInt()} of $REAL_TIME B/s, dropped ${(dropped / secs).toInt()}$spoken$mixed$muted | $lanes"
             sent = 0
             dropped = 0
             shadowed = 0
             voiceSent = 0
+            mixedIn = 0
             perLane.clear()
         }
         DiagLog.i("Audio", line)

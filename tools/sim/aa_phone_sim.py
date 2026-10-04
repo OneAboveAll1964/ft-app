@@ -207,7 +207,7 @@ def play_audio(ph, a, log, result):
     sent = {"media": 0, "speech": 0}
     events = []
     t0 = time.time()
-    next_m = t0
+    next_m = t0 if a.music else None
     next_s = None
     speech_left = 0.0
     speech_on = False
@@ -225,14 +225,15 @@ def play_audio(ph, a, log, result):
             next_s = now
         if now >= end and not speech_on:
             break
-        due = [x for x in (next_m if now < end else None, next_s if speech_on else None) if x is not None]
+        waiting_speech = t0 + a.speech_at if not speech_on and next_s is None and a.speech_at < 10 ** 8 else None
+        due = [x for x in (next_m if now < end else None, next_s if speech_on else None, waiting_speech) if x is not None]
         if not due:
             break
         wake = min(due)
         if wake > now:
             time.sleep(wake - now)
             continue
-        if now < end and next_m <= now:
+        if now < end and next_m is not None and next_m <= now:
             duck = a.duck if speech_on else 1.0
             pcm = tone(440, 48000, 2, m_step, int(8000 * duck), m_clock)
             m_clock += m_step
@@ -287,6 +288,7 @@ def main():
     ap.add_argument("--speech-at", type=float, default=2.0)
     ap.add_argument("--speech-seconds", type=float, default=2.5)
     ap.add_argument("--duck", type=float, default=0.3)
+    ap.add_argument("--music", type=int, default=1)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     lines = []

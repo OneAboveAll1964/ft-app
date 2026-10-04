@@ -159,7 +159,7 @@ import re, sys
 bad = []
 for line in open(sys.argv[1], errors="replace"):
     m = re.search(r"to the car (\d+) of 192000", line)
-    if not m or int(m.group(1)) < 196000:
+    if not m or int(m.group(1)) < 198000:
         continue
     phone = re.search(r"\| phone (\d+)", line)
     if phone and int(phone.group(1)) > 200000:
@@ -258,8 +258,9 @@ elif want == "pace":
     start = d["songs"][0]["t"]
     end = taps[video[0] + 1][2] - d["audio_t0"]
     window = [q for t, q in m["delay_track"] if start <= t <= end]
+    steady = window[1:]
     print("   car queue while FT's player plays: %.2f to %.2f s over %d samples" % (min(window), max(window), len(window)))
-    assert len(window) >= 5 and max(window) < 0.4, window
+    assert len(window) >= 5 and max(steady) - min(steady) < 0.08 and max(window) < 0.5, window
 PY3
 }
 check "the Music screen opens from its car tile" "grep -q 'car screen: MUSIC' '$OUT/logcat.txt'"
@@ -395,6 +396,31 @@ elif want == "voice":
     names = [e["msg"] for e in a["events"]]
     assert "TTS_INIT" in names and "TTS_END" in names, names
     assert t and abs(t["audio_seconds"] - 2.5) < 0.05, t
+elif want == "mixed":
+    import wave
+    import numpy as np
+    names = [e["msg"] for e in a["events"]]
+    assert "TTS_INIT" not in names, names
+    w = wave.open(sys.argv[1].replace("result.json", "media.wav"))
+    pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).reshape(-1, 2)[:, 0].astype(np.float64)
+    n = 2400
+    win = np.hanning(n)
+    mags = []
+    for i in range(0, len(pcm) - n, n):
+        f = np.abs(np.fft.rfft(pcm[i:i + n] * win))
+        mags.append((f[22], f[50]))
+    tone = np.array([m[0] for m in mags])
+    voice = np.array([m[1] for m in mags])
+    on = np.where(voice > 0.3 * voice.max())[0]
+    first, last = on[0], on[-1]
+    secs = (last - first + 1) * 0.05
+    before = np.median(tone[max(0, first - 30):max(1, first - 6)])
+    during = np.median(tone[first + 3:last - 2])
+    after = np.median(tone[last + 12:last + 30])
+    print("   directions heard inside the music for %.2fs from %.2fs; music %.0f before, %.0f under them, %.0f after" % (secs, first * 0.05, before, during, after))
+    assert 2.3 <= secs <= 2.75, secs
+    assert during <= 0.5 * before, (during, before)
+    assert after >= 0.85 * before, (after, before)
 elif want == "delay":
     grow = avg(5.0, 8.0) - avg(0.5, 2.0)
     print("   car delay before %.3fs, after %.3fs" % (avg(0.5, 2.0), avg(5.0, 8.0)))
@@ -402,8 +428,33 @@ elif want == "delay":
 PY2
 }
 check "the car gets exactly the music that played, nothing extra" "sound music"
-check "the prompt goes to the car's voice channel, start to end" "sound voice"
+check "directions over music are mixed into it and the music dips only while they play" "sound mixed"
 check "the car's sound does not fall behind after a prompt" "sound delay"
+
+echo "== sound: a voice prompt with no music =="
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
+sleep 3
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/voice_logcat.txt" 2>&1 &
+VOICELOG=$!
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 12 --out "$OUT/voice_car" > "$OUT/voice_car.log" 2>&1 &
+VOICECAR=$!
+sleep 6
+python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 6 --music 0 --speech-at 2 --speech-seconds 2.5 --out "$OUT/voice_phone" > "$OUT/voice_phone.log" 2>&1
+wait $VOICECAR
+kill $VOICELOG 2>/dev/null
+voice_alone(){ python3 - "$OUT/voice_car/result.json" <<'PY5'
+import json, sys
+a = json.load(open(sys.argv[1]))["audio"]
+names = [e["msg"] for e in a["events"]]
+t = a.get("tts")
+print("   voice channel:", names.count("TTS_INIT"), "start,", names.count("TTS_END"), "end,", t and t["audio_seconds"], "s")
+assert "TTS_INIT" in names and "TTS_END" in names, names
+assert t and abs(t["audio_seconds"] - 2.5) < 0.05, t
+PY5
+}
+check "with no music, directions go to the car's voice channel, start to end" "voice_alone"
+
 
 BUMBLE_PY="${BUMBLE_PY:-}"
 PHONE_BT="${PHONE_BT:-$($ADB shell settings get secure bluetooth_address 2>/dev/null | tr -d '\r')}"

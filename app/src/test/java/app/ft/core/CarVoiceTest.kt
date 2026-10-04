@@ -166,17 +166,39 @@ class CarVoiceTest {
     }
 
     @Test
-    fun musicDipsUnderDirectionsAndComesBack() {
+    fun directionsOverMusicAreMixedInAndTheMusicDipsInStep() {
         CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2)
-        assertEquals("music changed with nothing being said", 8000, peakOf(music.last()))
         CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
-        CarAudioBus.play(CarAudioBus.LANE_SPEECH, level(8000, 640), 16000, 1)
-        repeat(5) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
-        val dipped = peakOf(music.last())
-        assertTrue("music did not dip under the directions: $dipped", dipped in 2700..2900)
+        repeat(30) {
+            CarAudioBus.play(CarAudioBus.LANE_SPEECH, level(8000, 640), 16000, 1)
+            CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2)
+        }
+        assertTrue("directions went to the voice channel while music played", said.isEmpty())
+        assertEquals("the car got more than the music's own length", 31 * 3840, music.sumOf { it.size })
+        assertEquals("the music did not dip under the mixed-in directions", 20000 + 2800, peakOf(music.last()))
         CarAudioBus.end(CarAudioBus.LANE_SPEECH)
-        repeat(30) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
-        assertEquals("music did not come back up", 8000, peakOf(music.last()))
+        repeat(40) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2) }
+        assertEquals("the music did not come back up", 8000, peakOf(music.last()))
+    }
+
+    @Test
+    fun aPromptOnTheVoiceChannelStaysThereWhenMusicStarts() {
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
+        repeat(5) {
+            CarAudioBus.play(CarAudioBus.LANE_MEDIA, level(8000, 3840), 48000, 2)
+            CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
+        }
+        assertEquals(6, said.count { it.startsWith("data") })
+        assertTrue("music was changed by a prompt on the car's own voice channel", music.all { peakOf(it) == 8000 })
+    }
+
+    @Test
+    fun silentMusicDoesNotCountAsMusic() {
+        repeat(5) { CarAudioBus.play(CarAudioBus.LANE_MEDIA, ByteArray(3840), 48000, 2) }
+        CarAudioBus.begin(CarAudioBus.LANE_SPEECH)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(640), 16000, 1)
+        assertEquals(listOf("begin 16000/1", "data 640"), said)
     }
 
     @Test

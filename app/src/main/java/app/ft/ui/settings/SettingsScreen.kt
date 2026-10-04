@@ -63,7 +63,7 @@ fun SettingsScreen(pad: PaddingValues) {
         }
         item {
             Group("Sound") {
-                BoolSetting("Blend directions into the music", p.blendGuidance) {
+                BoolSetting("Always mix directions into the music", p.blendGuidance) {
                     p.blendGuidance = it
                     app.ft.core.CarAudioBus.voiceChannel = !it
                 }
