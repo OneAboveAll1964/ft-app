@@ -62,6 +62,7 @@ import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
+import app.ft.ui.settings.SettingsPage
 import app.ft.ui.settings.SettingsScreen
 import app.ft.ui.theme.FTTheme
 
@@ -248,26 +249,29 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
-    BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
+    var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    val inPage = screen == Screen.SETTINGS && settingsPage != null
+    BackHandler(enabled = screen != Screen.HOME) { if (inPage) settingsPage = null else screen = Screen.HOME }
     val barState = rememberTopAppBarState()
     val scroll = TopAppBarDefaults.pinnedScrollBehavior(barState)
-    LaunchedEffect(screen) { barState.contentOffset = 0f }
+    LaunchedEffect(screen, settingsPage) { barState.contentOffset = 0f }
     Scaffold(
         modifier = Modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = {
-                    AnimatedContent(targetState = screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { s ->
+                    val heading = if (inPage) settingsPage?.title.orEmpty() else screen.label
+                    AnimatedContent(targetState = screen to heading, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { (s, text) ->
                         if (s == Screen.HOME) Image(
                             painter = painterResource(R.drawable.ft_logo),
                             contentDescription = "FT",
                             modifier = Modifier.height(40.dp)
                         )
-                        else Text(s.label, style = MaterialTheme.typography.titleLarge)
+                        else Text(text, style = MaterialTheme.typography.titleLarge)
                     }
                 },
                 navigationIcon = {
-                    if (screen != Screen.HOME) IconButton(onClick = { screen = Screen.HOME }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    if (screen != Screen.HOME) IconButton(onClick = { if (inPage) settingsPage = null else screen = Screen.HOME }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     if (screen == Screen.LOG) IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = "Clear") }
@@ -280,7 +284,10 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
                 Screen.entries.forEach { s ->
                     NavigationBarItem(
                         selected = screen == s,
-                        onClick = { screen = s },
+                        onClick = {
+                            if (s == Screen.SETTINGS) settingsPage = null
+                            screen = s
+                        },
                         icon = { Icon(s.icon, contentDescription = s.label) },
                         label = { Text(s.label) }
                     )
@@ -288,7 +295,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
             }
         }
     ) { pad ->
-        AnimatedContent(targetState = screen, modifier = Modifier.fillMaxSize(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { s ->
+        AnimatedContent(targetState = screen to settingsPage, modifier = Modifier.fillMaxSize(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { (s, page) ->
             when (s) {
                 Screen.HOME -> HomeScreen(
                     pad = pad,
@@ -297,7 +304,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
                     onTakeOverAa = onTakeOverAa
                 )
                 Screen.LOG -> DiagnosticsScreen(pad)
-                Screen.SETTINGS -> SettingsScreen(pad)
+                Screen.SETTINGS -> SettingsScreen(pad, page) { settingsPage = it }
             }
         }
     }
