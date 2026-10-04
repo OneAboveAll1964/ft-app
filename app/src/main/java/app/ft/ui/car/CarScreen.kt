@@ -267,10 +267,10 @@ private fun Clock(h24: Boolean) {
         }
     }
     Column {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(time, style = MaterialTheme.typography.displayLarge, color = Color.White, fontWeight = FontWeight.Medium)
+        Row {
+            Text(time, style = MaterialTheme.typography.displayLarge, color = Color.White, fontWeight = FontWeight.Medium, modifier = Modifier.alignByBaseline())
             if (half.isNotEmpty()) {
-                Text(half, style = MaterialTheme.typography.titleLarge, color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(start = 8.dp, bottom = 10.dp))
+                Text(half, style = MaterialTheme.typography.titleLarge, color = Color.White.copy(alpha = 0.7f), modifier = Modifier.alignByBaseline().padding(start = 8.dp))
             }
         }
         Text(date, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.75f))
