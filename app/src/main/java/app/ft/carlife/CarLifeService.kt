@@ -25,6 +25,7 @@ import app.ft.R
 import app.ft.FTApp
 import app.ft.FTTouchService
 import app.ft.MainActivity
+import app.ft.ShareActivity
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
@@ -106,9 +107,9 @@ class CarLifeService : Service() {
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUDIO))
         }
 
-        fun shareDeclined(context: Context) {
+        fun shareDeclined(context: Context, quiet: Boolean = false) {
             if (instance == null) return
-            context.startService(Intent(context, CarLifeService::class.java).setAction(ACTION_SHARE_DECLINED))
+            context.startService(Intent(context, CarLifeService::class.java).setAction(ACTION_SHARE_DECLINED).putExtra("quiet", quiet))
         }
 
         fun cancelShareWait() = instance?.let { svc ->
@@ -237,6 +238,8 @@ class CarLifeService : Service() {
         }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-voice-out"; start() }
     }
     @Volatile private var aaAutoLaunched = false
+    @Volatile private var quietShareFailed = false
+    @Volatile private var quietShareAt = 0L
     @Volatile private var resumedMedia = false
     private var carNetwork: android.net.ConnectivityManager.NetworkCallback? = null
     private var aaReturn: Job? = null
@@ -317,6 +320,15 @@ class CarLifeService : Service() {
                 }
             }
             ACTION_SHARE_DECLINED -> {
+                if (intent.getBooleanExtra("quiet", false)) {
+                    quietShareFailed = true
+                    DiagLog.i(tag, "this phone still asks before sharing, FT will ask on the phone from now on")
+                    pendingLaunch?.let { (_, pkg) ->
+                        _state.update { it.copy(mirroring = false, mirrorPackage = pkg, waitingForShare = true, shareForSound = false) }
+                        askForScreenShare()
+                    }
+                    return START_STICKY
+                }
                 pendingLaunch = null
                 if (_state.value.shareForSound) soundDeclined = true
                 _state.update { it.copy(waitingForShare = false, shareForSound = false, mirrorPackage = "") }
@@ -1101,6 +1113,11 @@ class CarLifeService : Service() {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         if (!mirror.ready && projection == null && (app.mirrorResultCode == 0 || app.mirrorData == null)) {
             pendingLaunch = intent to pkg
+            if (canShareQuietly()) {
+                _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
+                shareQuietly()
+                return
+            }
             _state.update { it.copy(mirroring = false, mirrorPackage = pkg, waitingForShare = true, shareForSound = false) }
             askForScreenShare()
             return
@@ -1250,6 +1267,20 @@ class CarLifeService : Service() {
         savedVolume = -1
     }
 
+    private fun canShareQuietly() = !quietShareFailed && QuietShare.allowed(this)
+
+    private fun shareQuietly() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - quietShareAt < 10_000) return
+        quietShareAt = now
+        runCatching {
+            startActivity(
+                Intent(this, ShareActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+            )
+        }.onFailure { DiagLog.w(tag, "could not start screen sharing quietly: ${it.message}") }
+    }
+
     private fun askForScreenShare() {
         DiagLog.i(tag, "asking on the phone for screen sharing, the car is waiting")
         runCatching {
@@ -1349,6 +1380,8 @@ class CarLifeService : Service() {
         blockedSoundNoticed = false
         routePlayer()
         aaAutoLaunched = false
+        quietShareFailed = false
+        quietShareAt = 0L
         aaWatch?.cancel()
         aaWatch = null
         mode = -1
@@ -1421,6 +1454,11 @@ class CarLifeService : Service() {
                 if (projection != null || (app.mirrorResultCode != 0 && app.mirrorData != null)) {
                     DiagLog.i(tag, "the phone is playing, sending its sound to the car")
                     startAudioToCar()
+                    continue
+                }
+                if (canShareQuietly()) {
+                    DiagLog.i(tag, "the phone is playing, sharing its sound with the car without asking")
+                    shareQuietly()
                     continue
                 }
                 DiagLog.i(tag, "the phone is playing sound the car cannot hear yet, asking on the phone")

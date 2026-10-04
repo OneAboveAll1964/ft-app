@@ -455,6 +455,21 @@ PY5
 }
 check "with no music, directions go to the car's voice channel, start to end" "voice_alone"
 
+echo "== sharing without asking (screen sharing allowed ahead with appops) =="
+$ADB shell am force-stop $PKG
+$ADB shell appops set $PKG PROJECT_MEDIA allow >/dev/null 2>&1
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/quiet_logcat.txt" 2>&1 &
+QUIETLOG=$!
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false --es pkgMaps com.android.settings >/dev/null 2>&1
+sleep 5
+$ADB shell input keyevent KEYCODE_HOME >/dev/null 2>&1
+sleep 1
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --touches "670,528@1" --tail-seconds 6 --out "$OUT/quiet" > "$OUT/quiet_sim.log" 2>&1
+sleep 1
+kill $QUIETLOG 2>/dev/null
+$ADB shell appops set $PKG PROJECT_MEDIA default >/dev/null 2>&1
+check "with sharing allowed ahead, a car tile mirrors an app and nothing is asked on the phone" "grep -q 'screen sharing allowed without asking' '$OUT/quiet_logcat.txt' && grep -q 'launched com.android.settings' '$OUT/quiet_logcat.txt' && ! grep -q 'asking on the phone for screen sharing' '$OUT/quiet_logcat.txt'"
 
 BUMBLE_PY="${BUMBLE_PY:-}"
 PHONE_BT="${PHONE_BT:-$($ADB shell settings get secure bluetooth_address 2>/dev/null | tr -d '\r')}"

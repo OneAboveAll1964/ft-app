@@ -32,6 +32,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.ft.FTApp
+import android.app.AppOpsManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.ft.carlife.QuietShare
 
 @Composable
 fun SettingsScreen(pad: PaddingValues) {
@@ -69,6 +81,7 @@ fun SettingsScreen(pad: PaddingValues) {
                 }
                 BoolSetting("Use the car's bluetooth for sound instead", p.soundOverBluetooth) { p.soundOverBluetooth = it }
                 BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
+                QuietShareSetting()
             }
         }
         item {
@@ -165,6 +178,57 @@ fun SettingsScreen(pad: PaddingValues) {
                 IntSetting("Density", p.aaDensity, rev) { p.aaDensity = it }
                 BoolSetting("Start the head unit at launch", p.autoStartAa) { p.autoStartAa = it }
             }
+        }
+    }
+}
+
+@Composable
+private fun QuietShareSetting() {
+    val context = LocalContext.current
+    var resumed by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        resumed++
+        onPauseOrDispose { }
+    }
+    var allowed by remember { mutableStateOf(QuietShare.allowed(context)) }
+    LaunchedEffect(resumed) { allowed = QuietShare.allowed(context) }
+    DisposableEffect(Unit) {
+        val ops = context.getSystemService(AppOpsManager::class.java)
+        val watch = AppOpsManager.OnOpChangedListener { _, _ -> allowed = QuietShare.allowed(context) }
+        runCatching { ops?.startWatchingMode(QuietShare.OP, context.packageName, watch) }
+        onDispose { runCatching { ops?.stopWatchingMode(watch) } }
+    }
+    val command = if (allowed) QuietShare.undo(context) else QuietShare.command(context)
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Share sound without asking", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (allowed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = if (allowed) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Text(if (allowed) "On" else "Off", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+            }
+        }
+        Text(
+            if (allowed) "FT passes other apps' sound to the car by itself, with no question on the phone. To turn this off, run:"
+            else "Android asks on the phone before FT can pass other apps' sound to the car. Run this once from a computer with USB debugging on, and it stops asking:",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
+            SelectionContainer {
+                Text(command, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp))
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = {
+                context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("FT", command))
+            }) { Text("Copy") }
+            OutlinedButton(onClick = {
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, command)
+                runCatching { context.startActivity(Intent.createChooser(send, null)) }
+            }) { Text("Share") }
         }
     }
 }
