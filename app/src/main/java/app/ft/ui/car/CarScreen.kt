@@ -138,6 +138,7 @@ private fun CarRoot(style: CarStyle) {
     val drawerGrid = rememberLazyGridState()
     val pad = sidePadding(style.corner)
     LaunchedEffect(view) { DiagLog.i("Car", "car screen: ${view.name}") }
+    LaunchedEffect(nowPlaying) { if (view == CarView.MUSIC) DiagLog.i("Car", if (nowPlaying) "music: now playing" else "music: song list") }
     LaunchedEffect(Unit) {
         CarLifeService.screenKeys.collect { key ->
             when {
@@ -245,6 +246,7 @@ private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean
         Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Clock(style.clock24)
             if (style.showLink) LinkChip(state)
+            CarHomeButton { CarLifeService.goToCarHome() }
             Spacer(Modifier.weight(1f))
             NowPlayingCard(player, onOpen = { onOpen(CarView.MUSIC, player.track != null && !player.track!!.video) })
             Button(
@@ -284,6 +286,16 @@ private fun Clock(h24: Boolean) {
             }
         }
         Text(date, style = MaterialTheme.typography.titleMedium, color = Color.White.copy(alpha = 0.75f))
+    }
+}
+
+@Composable
+private fun CarHomeButton(onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), contentColor = Color.White) {
+        Row(Modifier.padding(start = 12.dp, end = 18.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(CarIcons.Back, contentDescription = null, modifier = Modifier.size(22.dp))
+            Text("Car screen", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
+        }
     }
 }
 
@@ -694,6 +706,7 @@ fun CarPreview(style: CarStyle, modifier: Modifier = Modifier) {
                             Text("WiFi · 1920×720 · 30 fps", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
                         }
                     }
+                    CarHomeButton {}
                     Spacer(Modifier.weight(1f))
                     NowPlayingCard(CarPlayer.State(), onOpen = {}, interactive = false)
                     Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(84.dp)) {

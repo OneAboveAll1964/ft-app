@@ -217,6 +217,18 @@ fun NowPlaying(pad: PaddingValues, player: CarPlayer.State, onClose: () -> Unit)
                 else Icon(CarIcons.Music, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(96.dp))
             }
             Column(Modifier.weight(1f).padding(start = gap), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Surface(
+                    onClick = onClose,
+                    shape = RoundedCornerShape(50),
+                    color = Color.White.copy(alpha = 0.14f),
+                    contentColor = Color.White,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                ) {
+                    Row(Modifier.padding(start = 12.dp, end = 18.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(CarIcons.Back, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Text("All songs", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
                 Text(t.title, style = MaterialTheme.typography.headlineLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
                 Text(t.artist, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.8f))
                 if (t.album.isNotBlank()) Text(t.album, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.6f))
