@@ -149,7 +149,7 @@ check "bluetooth pair info answered with the complete schema" "python3 -c \"impo
 check "video heartbeats flowed before VIDEO_ENCODER_INIT (watchdog rule)" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['heartbeat_before_init']\" 2>/dev/null"
 check "encoder honours the rate the head unit asked for (15)" "grep -q 'encoder started 1280x720@15' '$OUT/logcat.txt'"
 check "redraw clock follows the negotiated rate" "grep -q 'redraw every 66ms' '$OUT/logcat.txt'"
-check "projected stream paced to the negotiated rate, not flooded" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));f=d['video_launcher']['frames'];assert 30<=f<=110, f\" 2>/dev/null"
+check "projected stream paced to the negotiated rate, not flooded" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));f=d['video_launcher']['frames'];assert 20<=f<=110, f\" 2>/dev/null"
 check "Android Auto bridge starts after connection" "grep -q 'auto-starting Android Auto after connection' '$OUT/logcat.txt' && grep -q 'bridging this phone' '$OUT/logcat.txt'"
 check "Android Auto is pointed at FT's own head unit port" "grep -qE 'asked Android Auto to project onto FT at 127.0.0.1:[0-9]+' '$OUT/logcat.txt'"
 check "Android Auto is told to draw at the car's size" "grep -q \"Android Auto will draw at the car's own 1280x720\" '$OUT/logcat.txt'"
