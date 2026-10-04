@@ -32,6 +32,7 @@ GO_TO_DESKTOP = 0x00010021
 MEDIA_INFO = 0x00010035
 MEDIA_PROGRESS_BAR = 0x00010036
 PAUSE_MEDIA = 0x0001800E
+FRAME_RATE_CHANGE = 0x0001800C
 MODULE_CONTROL = 0x00018028
 STATISTIC_INFO = 0x00018027
 HU_AUTHEN_REQUEST = 0x00018048
@@ -466,6 +467,12 @@ def main():
                     k = int(xy[4:])
                     sim.log("HU -> steering wheel key %d" % k)
                     sim.send_ctrl(CAR_HARD_KEY_CODE, f_varint(1, k))
+                    continue
+                if xy.startswith("fps:"):
+                    n = int(xy[4:])
+                    sim.log("HU -> asks for %d fps" % n)
+                    result.setdefault("rate_clock", []).append([n, round(time.time(), 3)])
+                    sim.send_cmd(FRAME_RATE_CHANGE, f_varint(1, n))
                     continue
                 if xy.startswith("cmd:"):
                     sid = int(xy[4:], 16)

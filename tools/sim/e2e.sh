@@ -132,7 +132,7 @@ sleep 3
 
 echo "== run the head unit simulator =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
-  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;156,651@42;417,651@44;40,40@54" \
+  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;fps:5@19.5;fps:15@23.5;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;156,651@42;417,651@44;40,40@54" \
   --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
@@ -148,7 +148,7 @@ check "head unit asked for encryption and FT negotiated it (RSA/AES)" "grep -q '
 check "bluetooth pair info answered with the complete schema" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['bt_pair_info_complete']\" 2>/dev/null"
 check "video heartbeats flowed before VIDEO_ENCODER_INIT (watchdog rule)" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['heartbeat_before_init']\" 2>/dev/null"
 check "encoder honours the rate the head unit asked for (15)" "grep -q 'encoder started 1280x720@15' '$OUT/logcat.txt'"
-check "redraw clock follows the negotiated rate" "grep -q 'redraw every 66ms' '$OUT/logcat.txt'"
+check "redraw clock follows the negotiated rate" "grep -qE 'redraw every 66ms|at most 15 frames a second' '$OUT/logcat.txt'"
 check "projected stream paced to the negotiated rate, not flooded" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));f=d['video_launcher']['frames'];assert 20<=f<=110, f\" 2>/dev/null"
 check "Android Auto bridge starts after connection" "grep -q 'auto-starting Android Auto after connection' '$OUT/logcat.txt' && grep -q 'bridging this phone' '$OUT/logcat.txt'"
 check "Android Auto is pointed at FT's own head unit port" "grep -qE 'asked Android Auto to project onto FT at 127.0.0.1:[0-9]+' '$OUT/logcat.txt'"
@@ -239,6 +239,18 @@ elif want == "landscape":
             wide += 1
     print("   frames showing the turned phone across the car screen:", wide)
     assert wide >= 1
+elif want == "rate":
+    asks = d.get("rate_clock", [])
+    clock = d.get("frame_clock", [])
+    assert len(asks) >= 2, asks
+    low_from, low_to = asks[0][1] + 1.0, asks[1][1]
+    low = [t for t in clock if low_from <= t < low_to]
+    back = [t for t in clock if asks[1][1] + 1.0 <= t < asks[1][1] + 4.0]
+    low_fps = len(low) / (low_to - low_from)
+    back_fps = len(back) / 3.0
+    print("   car asked for %d fps while a video played: got %.1f fps; asked for %d again: got %.1f fps" % (asks[0][0], low_fps, asks[1][0], back_fps))
+    assert 2.5 <= low_fps <= asks[0][0] + 1.5, low_fps
+    assert back_fps >= asks[1][0] * 0.7, back_fps
 elif want == "pace":
     m = d["audio"]["media"]
     taps = d.get("tap_clock", [])
@@ -263,6 +275,8 @@ check "FT's player never builds up delay in the car" "song pace"
 check "phone sound is held back while FT's player plays" "grep -q 'phone sound held back' '$OUT/logcat.txt'"
 check "the Videos screen plays a video to the car" "grep -q 'car screen: VIDEOS' '$OUT/logcat.txt' && grep -q \"playing 'Test Drive Clip' to the car\" '$OUT/logcat.txt'"
 check "leaving Videos stops the video" "grep -qE 'FT/Player.*: stopped' '$OUT/logcat.txt'"
+check "FT sends no more frames than the car asks for, even while a video plays" "song rate"
+check "frames to the car pass through the frame gate" "grep -q 'frames to the car follow the rate the head unit asks for' '$OUT/logcat.txt'"
 check "the phone keys open from their handle on the car" "grep -q 'phone keys shown' '$OUT/logcat.txt'"
 check "the phone's back key works from the car" "grep -q 'phone back' '$OUT/logcat.txt'"
 check "rotate turns the phone to landscape" "grep -q 'phone turned to landscape' '$OUT/logcat.txt'"

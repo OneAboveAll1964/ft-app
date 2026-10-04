@@ -19,7 +19,8 @@ class SurfaceEncoder(
     fps: Int,
     private val maxBitrate: Int,
     private val onConfig: (ByteArray) -> Unit,
-    private val onFrame: (frame: ByteArray, keyFrame: Boolean) -> Unit
+    private val onFrame: (frame: ByteArray, keyFrame: Boolean) -> Unit,
+    private val gated: Boolean = false
 ) {
     private val tag = "Encoder"
     private val fps = fps.coerceIn(1, 60)
@@ -46,7 +47,7 @@ class SurfaceEncoder(
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
             setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
             setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1_000_000L)
-            setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, this@SurfaceEncoder.fps.toFloat())
+            if (!gated) setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, this@SurfaceEncoder.fps.toFloat())
             setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
             setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel4)
             runCatching {

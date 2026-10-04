@@ -283,7 +283,12 @@ class CarLifeSession(
                 onKeyFrameRequest?.invoke()
             }
             CarLifeProtocol.CMD_VIDEO_ENCODER_FRAME_RATE_CHANGE -> {
-                val f = ProtoReader(c.payload).int(1, fps).coerceIn(1, 60)
+                val asked = ProtoReader(c.payload).int(1, fps).coerceIn(1, 60)
+                val f = when {
+                    prefs.forceFps > 0 -> prefs.forceFps
+                    prefs.minFps > 0 -> maxOf(asked, prefs.minFps)
+                    else -> asked
+                }.coerceIn(1, 60)
                 if (f != fps) {
                     fps = f
                     onFrameRate?.invoke(f)

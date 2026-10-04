@@ -16,6 +16,7 @@ class CarDisplay(private val context: Context) {
     private val tag = "Display"
     private val main = Handler(Looper.getMainLooper())
     private var encoder: SurfaceEncoder? = null
+    private var gate: FrameGate? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var presentation: CarPresentation? = null
     private var downTime = 0L
@@ -45,10 +46,19 @@ class CarDisplay(private val context: Context) {
         this.width = width
         this.height = height
         frameIntervalMs = (1000L / fps.coerceIn(1, 120)).coerceAtLeast(8L)
-        val enc = SurfaceEncoder(width, height, fps, maxBitrate, onConfig, onFrame)
+        var enc = SurfaceEncoder(width, height, fps, maxBitrate, onConfig, onFrame, gated = true)
         enc.start()
+        val g = FrameGate(width, height, enc.surface ?: throw IllegalStateException("no encoder surface"))
+        val surface = if (g.start(fps)) {
+            gate = g
+            g.input ?: throw IllegalStateException("no frame gate surface")
+        } else {
+            enc.stop()
+            enc = SurfaceEncoder(width, height, fps, maxBitrate, onConfig, onFrame)
+            enc.start()
+            enc.surface ?: throw IllegalStateException("no encoder surface")
+        }
         encoder = enc
-        val surface = enc.surface ?: throw IllegalStateException("no encoder surface")
         val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val density = context.resources.displayMetrics.densityDpi.coerceIn(120, 240)
         val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
@@ -61,8 +71,12 @@ class CarDisplay(private val context: Context) {
                 p.show()
                 presentation = p
                 _active.value = true
-                main.postDelayed(ticker, frameIntervalMs)
-                DiagLog.i(tag, "presentation shown, redraw every ${frameIntervalMs}ms")
+                if (gate == null) {
+                    main.postDelayed(ticker, frameIntervalMs)
+                    DiagLog.i(tag, "presentation shown, redraw every ${frameIntervalMs}ms")
+                } else {
+                    DiagLog.i(tag, "presentation shown, at most ${1000L / frameIntervalMs} frames a second to the car")
+                }
             } catch (t: Throwable) {
                 DiagLog.e(tag, "presentation failed", t)
             }
@@ -76,7 +90,13 @@ class CarDisplay(private val context: Context) {
         val interval = (1000L / f).coerceAtLeast(8L)
         if (interval == frameIntervalMs) return
         frameIntervalMs = interval
-        DiagLog.i(tag, "head unit asked for $f fps, redrawing every ${interval}ms")
+        val g = gate
+        if (g != null) {
+            g.setRate(f)
+            DiagLog.i(tag, "head unit asked for $f fps, sending at most $f frames a second")
+        } else {
+            DiagLog.i(tag, "head unit asked for $f fps, redrawing every ${interval}ms")
+        }
     }
 
     fun setBitrate(bps: Int) = encoder?.setBitrate(bps)
@@ -108,6 +128,8 @@ class CarDisplay(private val context: Context) {
         _active.value = false
         runCatching { virtualDisplay?.release() }
         virtualDisplay = null
+        runCatching { gate?.stop() }
+        gate = null
         runCatching { encoder?.stop() }
         encoder = null
     }
