@@ -80,9 +80,9 @@ fun FTTheme(dark: Boolean = isSystemInDarkTheme(), dynamic: Boolean = true, cont
 }
 
 @Composable
-fun CarTheme(content: @Composable () -> Unit) {
+fun CarTheme(accent: Color = Mint, content: @Composable () -> Unit) {
     MaterialExpressiveTheme(
-        colorScheme = DarkScheme,
+        colorScheme = app.ft.ui.car.carScheme(DarkScheme, accent),
         typography = FTTypography,
         motionScheme = MotionScheme.expressive(),
         content = content

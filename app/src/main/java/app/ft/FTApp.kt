@@ -22,6 +22,7 @@ class FTApp : Application() {
         instance = this
         prefs = Prefs(this)
         DiagLog.attach(getExternalFilesDir("logs"))
+        app.ft.ui.car.CarStyles.reload()
         DiagLog.i("App", "FT ${runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""} ready")
     }
 

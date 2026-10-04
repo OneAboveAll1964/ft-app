@@ -87,8 +87,9 @@ fun CarBrowser(startUrl: String, searchTemplate: String = "https://duckduckgo.co
     Column(Modifier.fillMaxSize()) {
         if (showAddressBar) {
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                val pillLeft = CarStyles.current.value.corner.let { it == 0 || it == 2 }
                 Row(
-                    Modifier.fillMaxWidth().height(72.dp).padding(start = 104.dp, end = 10.dp),
+                    Modifier.fillMaxWidth().height(72.dp).padding(start = if (pillLeft) 104.dp else 10.dp, end = if (pillLeft) 10.dp else 104.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
