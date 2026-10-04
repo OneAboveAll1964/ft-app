@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 87
-        versionName = "3.4.8"
+        versionCode = 88
+        versionName = "3.4.9"
     }
 
     signingConfigs {
