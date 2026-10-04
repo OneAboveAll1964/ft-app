@@ -516,6 +516,7 @@ class CarLifeService : Service() {
                 updateBeacon()
             }
         }
+        f.onRetry = { _, attempt -> step("Still joining the car's WiFi Direct, trying again (try $attempt)") }
         f.onLeft = {
             ipJob?.cancel()
             p2pIface = null

@@ -33,12 +33,17 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var receiver: BroadcastReceiver? = null
     private var loop: Job? = null
     @Volatile private var connecting: String? = null
+    @Volatile private var attemptAt = 0L
     @Volatile private var searching = false
+    @Volatile private var enabled = true
+    private var watchdog: Job? = null
+    private var failures = 0
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
     private val _state = MutableStateFlow("off")
     private val _link = MutableStateFlow<Link?>(null)
     var onJoined: ((Link) -> Unit)? = null
     var onLeft: (() -> Unit)? = null
+    var onRetry: ((name: String, attempt: Int) -> Unit)? = null
 
     fun start() {
         val m = manager
@@ -118,6 +123,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         when (i.action) {
             WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
                 val on = i.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1) == WifiP2pManager.WIFI_P2P_STATE_ENABLED
+                enabled = on
                 DiagLog.i(tag, if (on) "WiFi Direct enabled" else "WiFi Direct disabled")
                 if (!on) _state.value = "wifi direct off"
             }
@@ -137,7 +143,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                     _state.value = "searching"
                     DiagLog.w(tag, "left the car group")
                     onLeft?.invoke()
-                } else if (connecting != null) {
+                } else if (connecting != null && android.os.SystemClock.elapsedRealtime() - attemptAt > JoinWatch.GIVE_UP_MS) {
                     connecting = null
                 }
             }
@@ -160,6 +166,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         m.requestGroupInfo(ch) { g ->
             val l = Link(ip, g?.`interface`, info.isGroupOwner, g?.networkName ?: connecting ?: "")
             connecting = null
+            watchdog?.cancel()
+            watchdog = null
+            failures = 0
             _link.value = l
             _state.value = "joined ${l.name.ifBlank { ip }}"
             DiagLog.i(tag, "joined group owner=$ip iface=${l.iface} weAreOwner=${l.weAreOwner} network=${g?.networkName} ${g?.frequency ?: 0} MHz")
@@ -178,12 +187,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         when (target.status) {
             WifiP2pDevice.INVITED -> {
                 connecting = target.name
+                attemptAt = android.os.SystemClock.elapsedRealtime()
                 _state.value = "invited by ${target.name}"
-                DiagLog.i(tag, "${target.name} already invited us, letting the invitation finish")
-                scope.launch(Dispatchers.Main) {
-                    delay(15_000)
-                    if (connecting == target.name && _link.value == null) connecting = null
-                }
+                DiagLog.i(tag, "${target.name} already invited us, giving it ${JoinWatch.INVITE_MS / 1000}s")
+                watch(target)
             }
             WifiP2pDevice.CONNECTED -> m.requestConnectionInfo(ch) { info -> if (info != null && info.groupFormed) onGroup(info) }
             else -> connect(target)
@@ -220,19 +227,74 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             }
             groupOwnerIntent = 0
         }
+        attemptAt = android.os.SystemClock.elapsedRealtime()
         m.connect(ch, cfg, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() = Unit
+            override fun onSuccess() = watch(p)
             override fun onFailure(reason: Int) {
-                connecting = null
                 _state.value = "connect failed ($reason)"
                 DiagLog.w(tag, "connect to ${p.name} failed reason=$reason")
+                restart(p, if (reason == WifiP2pManager.BUSY) "WiFi Direct was busy" else "the request failed ($reason)")
             }
         })
+    }
+
+    private fun watch(p: Peer) {
+        watchdog?.cancel()
+        watchdog = scope.launch(Dispatchers.Main) {
+            while (isActive && _link.value == null && connecting == p.name) {
+                val waited = android.os.SystemClock.elapsedRealtime() - attemptAt
+                val carConnected = _peers.value.firstOrNull { it.address.equals(p.address, true) }?.status == WifiP2pDevice.CONNECTED
+                if (JoinWatch.next(waited, carConnected, NetUtil.p2pGroupUp()) == JoinWatch.Next.RETRY) {
+                    restart(p, "no answer after ${waited / 1000}s")
+                    return@launch
+                }
+                delay(500)
+            }
+        }
+    }
+
+    private fun restart(p: Peer, why: String) {
+        val m = manager ?: return
+        val ch = channel ?: return
+        watchdog?.cancel()
+        watchdog = null
+        failures++
+        DiagLog.w(tag, "joining ${p.name} stalled ($why), cancelling and trying again (attempt ${failures + 1})")
+        onRetry?.invoke(p.name, failures + 1)
+        val again = {
+            runCatching { m.removeGroup(ch, null) }
+            if (JoinWatch.renewChannel(failures)) renewChannel()
+            connecting = null
+            discover()
+            scope.launch(Dispatchers.Main) {
+                delay(JoinWatch.retryDelayMs(failures))
+                if (enabled && _link.value == null && connecting == null) {
+                    connect(_peers.value.firstOrNull { it.address.equals(p.address, true) } ?: p)
+                }
+            }
+            Unit
+        }
+        runCatching {
+            m.cancelConnect(ch, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() { again() }
+                override fun onFailure(reason: Int) { again() }
+            })
+        }.onFailure { again() }
+    }
+
+    private fun renewChannel() {
+        val m = manager ?: return
+        runCatching { channel?.close() }
+        channel = runCatching { m.initialize(context, Looper.getMainLooper()) { DiagLog.w(tag, "channel lost"); channel = null } }.getOrNull()
+        DiagLog.i(tag, "WiFi Direct reconnected to Android after $failures stalled joins")
     }
 
     fun stop() {
         loop?.cancel()
         loop = null
+        watchdog?.cancel()
+        watchdog = null
+        failures = 0
         receiver?.let { runCatching { context.unregisterReceiver(it) } }
         receiver = null
         val m = manager

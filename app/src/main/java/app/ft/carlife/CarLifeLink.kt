@@ -145,6 +145,12 @@ object NetUtil {
         null
     }
 
+    fun p2pGroupUp(): Boolean = try {
+        NetworkInterface.getNetworkInterfaces().toList().any { it.isUp && it.name.startsWith("p2p-") }
+    } catch (_: Throwable) {
+        false
+    }
+
     fun hotspotIpv4(): String? = try {
         NetworkInterface.getNetworkInterfaces().toList()
             .filter { n -> n.isUp && listOf("swlan", "ap", "softap").any { n.name.startsWith(it) } }
