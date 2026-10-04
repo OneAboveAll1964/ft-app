@@ -1,5 +1,11 @@
 package app.ft.ui.home
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.foundation.Canvas
 import app.ft.ui.car.CarStyles
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
@@ -393,15 +399,33 @@ private fun StepMark(number: Int, state: StepState, working: Boolean) {
                 Modifier.fillMaxSize().border(2.dp, scheme.primary, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text("$number", style = MaterialTheme.typography.labelLarge, color = scheme.primary, fontWeight = FontWeight.Bold)
+                StepNumber(number, scheme.primary, bold = true)
             }
             else -> Box(
                 Modifier.fillMaxSize().border(1.5.dp, scheme.outlineVariant, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (number > 0) Text("$number", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                if (number > 0) StepNumber(number, scheme.onSurfaceVariant, bold = false)
             }
         }
+    }
+}
+
+@Composable
+private fun StepNumber(number: Int, color: Color, bold: Boolean) {
+    val text = number.toString()
+    val textSize = with(LocalDensity.current) { 14.sp.toPx() }
+    val paint = remember(color, bold, textSize) {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.textSize = textSize
+            this.color = color.toArgb()
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, if (bold) 700 else 500, false)
+        }
+    }
+    Canvas(Modifier.fillMaxSize()) {
+        val ink = android.graphics.Rect()
+        paint.getTextBounds(text, 0, text.length, ink)
+        drawContext.canvas.nativeCanvas.drawText(text, size.width / 2f - ink.exactCenterX(), size.height / 2f - ink.exactCenterY(), paint)
     }
 }
 
