@@ -1,5 +1,7 @@
 package app.ft.ui.settings
 
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.height
 import android.content.Intent
@@ -117,6 +119,11 @@ fun CarLookSettings() {
 
         Label("Background")
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(CarStyle.PICTURES) { (name, res) ->
+                Swatch(chosen = style.background == name, onClick = { save { p.carBackground = name } }) {
+                    Image(painterResource(res), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+            }
             items(CarStyle.BACKGROUNDS) { (name, colors) ->
                 Swatch(chosen = style.background == name, onClick = { save { p.carBackground = name } }) {
                     Box(Modifier.fillMaxSize().background(Brush.linearGradient(colors)))

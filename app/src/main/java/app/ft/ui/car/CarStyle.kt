@@ -1,5 +1,7 @@
 package app.ft.ui.car
 
+import androidx.compose.ui.res.painterResource
+import app.ft.R
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -43,6 +45,12 @@ data class CarStyle(
         val DEFAULT_ACCENT = 0xFF5FE3C0.toInt()
         const val DEFAULT_TILES = "music,videos,youtube,maps,browser,apps"
         const val MAX_TILES = 6
+
+        val PICTURES: List<Pair<String, Int>> = listOf(
+            "blade" to R.drawable.car_bg_blade
+        )
+
+        fun picture(name: String): Int? = PICTURES.firstOrNull { it.first == name }?.second
 
         val BACKGROUNDS: List<Pair<String, List<Color>>> = listOf(
             "deep" to listOf(Color(0xFF0B1D2A), Color(0xFF0F2634)),
@@ -121,6 +129,14 @@ fun carScheme(base: ColorScheme, accent: Color): ColorScheme = base.copy(
 
 @Composable
 fun CarBackground(style: CarStyle, modifier: Modifier = Modifier) {
+    val picture = CarStyle.picture(style.background)
+    if (picture != null) {
+        Box(modifier.fillMaxSize().background(Color.Black)) {
+            Image(painterResource(picture), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.35f), Color.Black.copy(alpha = 0.65f)))))
+        }
+        return
+    }
     if (style.background == CarStyle.PHOTO && style.photoStamp > 0) {
         val photo by produceState<ImageBitmap?>(null, style.photoStamp) {
             value = withContext(Dispatchers.IO) {
