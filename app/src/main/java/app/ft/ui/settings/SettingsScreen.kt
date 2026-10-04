@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
+import app.ft.projection.VideoPlans
 
 @Composable
 fun SettingsScreen(pad: PaddingValues) {
@@ -82,76 +83,8 @@ fun SettingsScreen(pad: PaddingValues) {
             }
         }
         item {
-            Group("Picture quality") {
-                Text(
-                    "Presets set everything below. Change any one of them and it becomes Custom.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val current = presetName(p)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PRESETS.forEach { preset ->
-                        val chosen = current == preset.name
-                        if (chosen) {
-                            FilledTonalButton(onClick = { apply(p, preset); rev++ }, modifier = Modifier.weight(1f)) {
-                                Text(preset.name, maxLines = 1, textAlign = TextAlign.Center)
-                            }
-                        } else {
-                            OutlinedButton(onClick = { apply(p, preset); rev++ }, modifier = Modifier.weight(1f)) {
-                                Text(preset.name, maxLines = 1, textAlign = TextAlign.Center)
-                            }
-                        }
-                    }
-                }
-                Text(
-                    when (current) {
-                        CUSTOM -> "Custom settings"
-                        DEFAULT.name -> "The settings FT started with"
-                        else -> "$current quality"
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                OutlinedButton(
-                    onClick = { apply(p, DEFAULT); rev++ },
-                    enabled = current != DEFAULT.name,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (current == DEFAULT.name) "Already back to default" else "Put everything back to default")
-                }
-                Text("Resolution", style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SIZES.take(3).forEach { size ->
-                        SizeChip(size, p.forceWidth, p.forceHeight, Modifier.weight(1f)) {
-                            p.forceWidth = size.w; p.forceHeight = size.h; rev++
-                        }
-                    }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SIZES.drop(3).forEach { size ->
-                        SizeChip(size, p.forceWidth, p.forceHeight, Modifier.weight(1f)) {
-                            p.forceWidth = size.w; p.forceHeight = size.h; rev++
-                        }
-                    }
-                }
-                Text("Frame rate", style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0 to "As the car asks", 24 to "24", 30 to "30", 60 to "60").forEach { (value, label) ->
-                        ValueChip(label, p.forceFps == value, Modifier.weight(1f)) { p.forceFps = value; rev++ }
-                    }
-                }
-                Text("Picture data limit", style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(1_500_000 to "1.5", 3_000_000 to "3", 6_000_000 to "6", 10_000_000 to "10").forEach { (value, label) ->
-                        ValueChip("$label Mbps", p.maxBitrate == value, Modifier.weight(1f)) { p.maxBitrate = value; rev++ }
-                    }
-                }
-                IntSetting("Width, 0 means as the car asks", p.forceWidth, rev) { p.forceWidth = it }
-                IntSetting("Height, 0 means as the car asks", p.forceHeight, rev) { p.forceHeight = it }
-                IntSetting("Frame rate, 0 means as the car asks", p.forceFps, rev) { p.forceFps = it }
-                IntSetting("Lowest frame rate to accept, 0 means no floor", p.minFps, rev) { p.minFps = it }
-                IntSetting("Picture data limit in bits per second", p.maxBitrate, rev) { p.maxBitrate = it }
-                IntSetting("Sharpness of the car screen", p.carDensity, rev) { p.carDensity = it }
+            Group("Picture") {
+                PictureSettings()
             }
         }
         item {
@@ -299,51 +232,88 @@ private fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> 
     }
 }
 
-private const val CUSTOM = "Custom"
-
-private data class Preset(val name: String, val w: Int, val h: Int, val fps: Int, val bitrate: Int, val density: Int, val minFps: Int = 0)
-
-private data class Size(val label: String, val w: Int, val h: Int)
-
-private val DEFAULT = Preset("Default", 0, 0, 0, 3_000_000, 160)
-
-private val PRESETS = listOf(
-    Preset("Low", 1280, 720, 24, 1_500_000, 160),
-    Preset("Medium", 0, 0, 30, 3_000_000, 160),
-    Preset("High", 0, 0, 60, 8_000_000, 200)
+private val SIZE_CHOICES = listOf(
+    VideoPlans.SIZE_BAIDU to "Like Baidu",
+    VideoPlans.SIZE_CAR to "Car's own",
+    VideoPlans.SIZE_CUSTOM to "Custom"
 )
 
-private val SIZES = listOf(
-    Size("As the car", 0, 0),
-    Size("800×480", 800, 480),
-    Size("1280×720", 1280, 720),
-    Size("1600×720", 1600, 720),
-    Size("1920×720", 1920, 720),
-    Size("1920×1080", 1920, 1080)
-)
+private val FPS_CHOICES = listOf(0 to "Like Baidu", 15 to "15", 20 to "20", 24 to "24", 30 to "30")
 
-private fun matches(p: app.ft.core.Prefs, preset: Preset) =
-    preset.w == p.forceWidth && preset.h == p.forceHeight && preset.fps == p.forceFps &&
-        preset.bitrate == p.maxBitrate && preset.density == p.carDensity && preset.minFps == p.minFps
+private val RATE_CHOICES = listOf(0 to "Like Baidu", 1_500_000 to "1.5", 2_500_000 to "2.5", 4_000_000 to "4", 6_000_000 to "6")
 
-private fun presetName(p: app.ft.core.Prefs): String =
-    (listOf(DEFAULT) + PRESETS).firstOrNull { matches(p, it) }?.name ?: CUSTOM
-
-private fun apply(p: app.ft.core.Prefs, preset: Preset) {
-    p.minFps = preset.minFps
-    p.forceWidth = preset.w
-    p.forceHeight = preset.h
-    p.forceFps = preset.fps
-    p.maxBitrate = preset.bitrate
-    p.carDensity = preset.density
-    p.aaFps = if (preset.fps == 0) 30 else preset.fps
-    p.aaDensity = preset.density
-}
+private val FLOOR_CHOICES = listOf(0 to "Off", 18 to "18", 22 to "22", 26 to "26")
 
 @Composable
-private fun SizeChip(size: Size, w: Int, h: Int, modifier: Modifier, onPick: () -> Unit) {
-    ValueChip(size.label, w == size.w && h == size.h, modifier, onPick)
+private fun PictureSettings() {
+    val p = FTApp.instance.prefs
+    var rev by remember { mutableIntStateOf(0) }
+    var size by remember(rev) { mutableIntStateOf(p.videoSize) }
+    var fps by remember(rev) { mutableIntStateOf(p.videoFps) }
+    var rate by remember(rev) { mutableIntStateOf(p.videoBitrate) }
+    var floor by remember(rev) { mutableIntStateOf(p.videoQpFloor) }
+    val baidu = size == VideoPlans.SIZE_BAIDU && fps == 0 && rate == 0 && p.videoMinFps == 0 && floor == DEFAULT_FLOOR
+    Text(
+        if (baidu) "FT sends the car its picture the way Baidu CarLife does: 1280×720 for this car, starting at 20 frames a second and following what the car asks for."
+        else "Changes take effect the next time the car connects.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text("Size sent to the car", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SIZE_CHOICES.forEach { (value, label) ->
+            ValueChip(label, size == value, Modifier.weight(1f)) { size = value; p.videoSize = value }
+        }
+    }
+    if (size == VideoPlans.SIZE_CUSTOM) {
+        IntSetting("Width", p.videoWidth, rev) { p.videoWidth = it }
+        IntSetting("Height", p.videoHeight, rev) { p.videoHeight = it }
+    }
+    Text("Frames a second", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FPS_CHOICES.forEach { (value, label) ->
+            ValueChip(label, fps == value, Modifier.weight(if (value == 0) 2f else 1f)) { fps = value; p.videoFps = value }
+        }
+    }
+    Text("Picture data in Mbps", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RATE_CHOICES.forEach { (value, label) ->
+            ValueChip(label, rate == value, Modifier.weight(if (value == 0) 2f else 1f)) { rate = value; p.videoBitrate = value }
+        }
+    }
+    Text("Quality floor", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FLOOR_CHOICES.forEach { (value, label) ->
+            ValueChip(label, floor == value, Modifier.weight(1f)) { floor = value; p.videoQpFloor = value }
+        }
+    }
+    Text(
+        "Keeps every full picture small enough for the car to take, so the screen comes back after the car shows its own screens. Lower numbers are sharper and bigger. Off sends whatever the phone makes.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    IntSetting("Lowest frame rate to accept, 0 means no floor", p.videoMinFps, rev) { p.videoMinFps = it }
+    IntSetting("Sharpness of apps on the car screen", p.carDensity, rev) { p.carDensity = it }
+    OutlinedButton(
+        onClick = {
+            p.videoSize = VideoPlans.SIZE_BAIDU
+            p.videoWidth = 0
+            p.videoHeight = 0
+            p.videoFps = 0
+            p.videoMinFps = 0
+            p.videoBitrate = 0
+            p.videoQpFloor = DEFAULT_FLOOR
+            p.carDensity = 160
+            rev++
+        },
+        enabled = !baidu || p.carDensity != 160,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(if (baidu && p.carDensity == 160) "Already like Baidu" else "Put everything back like Baidu")
+    }
 }
+
+private const val DEFAULT_FLOOR = 22
 
 @Composable
 private fun ValueChip(label: String, chosen: Boolean, modifier: Modifier, onPick: () -> Unit) {

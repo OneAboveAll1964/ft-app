@@ -20,7 +20,13 @@ import java.nio.FloatBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-class FrameGate(private val width: Int, private val height: Int, private val output: Surface) {
+class FrameGate(
+    private val inWidth: Int,
+    private val inHeight: Int,
+    private val width: Int,
+    private val height: Int,
+    private val output: Surface
+) {
     private val tag = "Gate"
     private var thread: HandlerThread? = null
     @Volatile private var handler: Handler? = null
@@ -38,6 +44,7 @@ class FrameGate(private val width: Int, private val height: Int, private val out
     private val uv = floats(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f)
     private var ready = false
     private var fresh = false
+    private var empty = 0
     private var lastNs = 0L
     private var newFrames = 0
     private var repeats = 0
@@ -47,7 +54,7 @@ class FrameGate(private val width: Int, private val height: Int, private val out
     var input: Surface? = null
         private set
 
-    private val tick = Runnable { draw() }
+    private val tick = Runnable { onTick() }
 
     fun start(fps: Int): Boolean {
         setRate(fps)
@@ -108,12 +115,12 @@ class FrameGate(private val width: Int, private val height: Int, private val out
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
         val st = SurfaceTexture(textureName)
-        st.setDefaultBufferSize(width, height)
+        st.setDefaultBufferSize(inWidth, inHeight)
         st.setOnFrameAvailableListener({ onFrame() }, h)
         texture = st
         input = Surface(st)
         reportedNs = System.nanoTime()
-        DiagLog.i(tag, "frames to the car follow the rate the head unit asks for")
+        DiagLog.i(tag, "frames to the car follow the rate the head unit asks for" + if (inWidth != width || inHeight != height) ", ${inWidth}x$inHeight drawn into ${width}x$height" else "")
     }
 
     private fun onFrame() {
@@ -121,6 +128,7 @@ class FrameGate(private val width: Int, private val height: Int, private val out
         if (runCatching { st.updateTexImage() }.isFailure) return
         if (fresh) skipped++
         fresh = true
+        empty = 0
         ready = true
         val h = handler ?: return
         val wait = lastNs + intervalNs - System.nanoTime()
@@ -130,6 +138,20 @@ class FrameGate(private val width: Int, private val height: Int, private val out
         } else if (!h.hasCallbacks(tick)) {
             h.postDelayed(tick, (wait + 999_999) / 1_000_000)
         }
+    }
+
+    private fun onTick() {
+        val h = handler ?: return
+        if (!ready) return
+        if (!fresh) {
+            empty++
+            if (empty > IDLE_TICKS && empty % IDLE_EVERY != 0) {
+                h.removeCallbacks(tick)
+                h.postDelayed(tick, intervalNs / 1_000_000)
+                return
+            }
+        }
+        draw()
     }
 
     private fun draw() {
@@ -233,6 +255,8 @@ class FrameGate(private val width: Int, private val height: Int, private val out
     companion object {
         private const val EGL_RECORDABLE_ANDROID = 0x3142
         private const val SLACK_NS = 4_000_000L
+        private const val IDLE_TICKS = 8
+        private const val IDLE_EVERY = 20
         private const val REPORT_NS = 30_000_000_000L
 
         private val VERTEX = """

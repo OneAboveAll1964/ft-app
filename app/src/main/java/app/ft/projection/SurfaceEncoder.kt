@@ -4,7 +4,6 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Build
-import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
@@ -17,20 +16,19 @@ class SurfaceEncoder(
     private val width: Int,
     private val height: Int,
     fps: Int,
-    private val maxBitrate: Int,
+    bitrate: Int,
+    private val qpFloor: Int,
     private val onConfig: (ByteArray) -> Unit,
     private val onFrame: (frame: ByteArray, keyFrame: Boolean) -> Unit,
     private val gated: Boolean = false
 ) {
     private val tag = "Encoder"
     private val fps = fps.coerceIn(1, 60)
-    private val startBitrate = (width.toLong() * height * this.fps / 12)
-        .coerceIn(600_000L, maxBitrate.toLong().coerceAtLeast(600_000L)).toInt()
+    private val bitrate = bitrate.coerceIn(300_000, 40_000_000)
     private val running = AtomicBoolean(false)
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private var codec: MediaCodec? = null
-    @Volatile private var config = ByteArray(0)
     var surface: Surface? = null
         private set
 
@@ -40,21 +38,32 @@ class SurfaceEncoder(
         thread = t
         val h = Handler(t.looper)
         handler = h
+        val tuning = VideoPlans.encoderKeys(
+            Build.HARDWARE,
+            if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else "",
+            Build.VERSION.SDK_INT,
+            Build.BRAND,
+            Build.BOARD,
+            qpFloor
+        )
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, startBitrate)
+            setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
             setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
-            setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
-            setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1_000_000L)
-            if (!gated) setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, this@SurfaceEncoder.fps.toFloat())
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+            setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
+            setLong(MediaFormat.KEY_DURATION, 100_000L)
+            setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
             setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel4)
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
+            if (!gated) setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, this@SurfaceEncoder.fps.toFloat())
             runCatching {
                 setInteger(MediaFormat.KEY_PRIORITY, 0)
                 setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
                 if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LATENCY, 1)
             }
+            tuning.forEach { (k, v) -> setInteger(k, v) }
         }
         val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         c.setCallback(object : MediaCodec.Callback() {
@@ -66,15 +75,14 @@ class SurfaceEncoder(
                     if (info.size <= 0) return
                     buf.position(info.offset)
                     buf.limit(info.offset + info.size)
-                    var frame = ByteArray(info.size)
+                    val frame = ByteArray(info.size)
                     buf.get(frame)
                     if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-                        config = frame
                         onConfig(frame)
                         return
                     }
                     val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
-                    if (key && config.isNotEmpty()) frame = config + frame
+                    if (key && frame.size >= BIG_FRAME) DiagLog.w(tag, "key picture of ${frame.size / 1024} KB")
                     if (running.get()) onFrame(frame, key)
                 } catch (t: Throwable) {
                     DiagLog.e(tag, "output error", t)
@@ -97,10 +105,7 @@ class SurfaceEncoder(
                         out.write(bytes)
                     }
                 }
-                if (out.size() > 0) {
-                    config = out.toByteArray()
-                    onConfig(config)
-                }
+                if (out.size() > 0) onConfig(out.toByteArray())
                 DiagLog.i(tag, "format ${format.getInteger(MediaFormat.KEY_WIDTH)}x${format.getInteger(MediaFormat.KEY_HEIGHT)}")
             }
         }, h)
@@ -114,24 +119,8 @@ class SurfaceEncoder(
         surface = c.createInputSurface()
         c.start()
         codec = c
-        DiagLog.i(tag, "encoder started ${width}x${height}@$fps at ${startBitrate / 1000} kbps (cap ${maxBitrate / 1000})")
+        DiagLog.i(tag, "encoder started ${width}x${height}@$fps at ${bitrate / 1000} kbps, a key picture every second${if (tuning.isEmpty()) "" else ", " + tuning.entries.joinToString { "${it.key}=${it.value}" }}")
     }
-
-    fun requestKeyFrame() {
-        val c = codec ?: return
-        runCatching { c.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0) }) }
-    }
-
-    fun setBitrate(bps: Int) {
-        val c = codec ?: return
-        val target = bps.coerceIn(400_000, maxBitrate.coerceAtLeast(400_000))
-        runCatching {
-            c.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, target) })
-            DiagLog.i(tag, "bitrate now ${target / 1000} kbps")
-        }
-    }
-
-    fun currentConfig(): ByteArray = config
 
     fun stop() {
         if (!running.getAndSet(false)) return
@@ -143,5 +132,9 @@ class SurfaceEncoder(
         runCatching { thread?.quitSafely() }
         thread = null
         handler = null
+    }
+
+    companion object {
+        private const val BIG_FRAME = 256 * 1024
     }
 }

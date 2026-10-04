@@ -303,7 +303,7 @@ private fun CarHomeButton(onClick: () -> Unit) {
 private fun LinkChip(state: CarState) {
     val s = state.session
     val label = when (s) {
-        is CarLifeSession.State.Projecting -> "${s.via} · ${s.width}×${s.height} · ${s.fps} fps"
+        is CarLifeSession.State.Projecting -> "${s.via} · ${s.streamWidth}×${s.streamHeight} · ${s.fps} fps"
         is CarLifeSession.State.Negotiated -> "${s.via} · getting ready"
         is CarLifeSession.State.Linked -> "${s.via} · connected"
         else -> "not connected"
