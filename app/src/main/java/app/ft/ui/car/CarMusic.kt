@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -302,7 +303,8 @@ fun RoundKey(icon: ImageVector, size: Dp, filled: Boolean = false, active: Boole
 
 @Composable
 fun Artwork(uri: Uri?, fallback: Uri?, size: Dp?, corner: Dp, icon: ImageVector, modifier: Modifier = Modifier) {
-    val art = rememberArt(uri, fallback, if (size != null && size > 120.dp) 512 else 192)
+    val px = with(LocalDensity.current) { size?.roundToPx() }
+    val art = rememberArt(uri, fallback, artSize(px))
     val scheme = MaterialTheme.colorScheme
     Box(
         (if (size != null) modifier.size(size) else modifier).clip(RoundedCornerShape(corner)).background(scheme.primaryContainer),
@@ -312,6 +314,10 @@ fun Artwork(uri: Uri?, fallback: Uri?, size: Dp?, corner: Dp, icon: ImageVector,
         else Icon(icon, contentDescription = null, tint = scheme.onPrimaryContainer, modifier = Modifier.fillMaxSize(0.42f))
     }
 }
+
+private val ART_SIZES = listOf(96, 128, 192, 256, 384, 512)
+
+fun artSize(px: Int?): Int = if (px == null) 320 else ART_SIZES.firstOrNull { it >= px } ?: ART_SIZES.last()
 
 @Composable
 fun rememberArt(uri: Uri?, fallback: Uri?, px: Int): ImageBitmap? {

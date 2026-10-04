@@ -5,13 +5,18 @@ import android.content.ContentUris
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.CancellationSignal
+import android.os.Process
 import android.provider.MediaStore
 import android.util.LruCache
 import android.util.Size
 import app.ft.core.DiagLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executors
+import kotlin.coroutines.resume
 
 data class Track(
     val id: Long,
@@ -33,6 +38,12 @@ object MediaLibrary {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val missing = HashSet<String>()
+    private val loader = Executors.newFixedThreadPool(2) { r ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            r.run()
+        }, "FT-Art").apply { isDaemon = true }
+    }
 
     private val chatFolders = listOf("whatsapp", "telegram")
 
@@ -127,10 +138,18 @@ object MediaLibrary {
         val key = "$uri@$size"
         art.get(key)?.let { return it }
         synchronized(missing) { if (key in missing) return null }
-        return withContext(Dispatchers.IO) {
-            val b = runCatching { context.contentResolver.loadThumbnail(uri, Size(size, size), null) }.getOrNull()
-            if (b != null) art.put(key, b) else synchronized(missing) { missing += key }
-            b
+        return suspendCancellableCoroutine { cont ->
+            val signal = CancellationSignal()
+            val task = loader.submit {
+                if (!cont.isActive) return@submit
+                val b = art.get(key) ?: runCatching { context.contentResolver.loadThumbnail(uri, Size(size, size), signal) }.getOrNull()
+                if (b != null) art.put(key, b) else if (!signal.isCanceled) synchronized(missing) { missing += key }
+                cont.resume(b)
+            }
+            cont.invokeOnCancellation {
+                signal.cancel()
+                task.cancel(false)
+            }
         }
     }
 
