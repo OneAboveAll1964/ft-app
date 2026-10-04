@@ -46,6 +46,9 @@ class CarLifeSession(
     private var voiceBytes = 0L
     var onLaunchMode: ((mode: String) -> Unit)? = null
     var onClosed: ((reason: String) -> Unit)? = null
+    var onPauseMedia: (() -> Unit)? = null
+    private var gear = -1
+    private var musicAskAt = 0L
 
     @Volatile var width = 1280; private set
     @Volatile var height = 720; private set
@@ -96,10 +99,31 @@ class CarLifeSession(
         link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_END, ByteArray(0)))
     }
 
-    private fun cmd(serviceId: Int, payload: ByteArray = ByteArray(0)) {
+    private fun cmd(serviceId: Int, payload: ByteArray = ByteArray(0), quiet: Boolean = false) {
         val inner = CarLifeFraming.cmd(serviceId, crypto.encryptOut(payload))
-        DiagLog.tx(tag, CarLifeProtocol.name(serviceId), inner)
+        if (!quiet) DiagLog.tx(tag, CarLifeProtocol.name(serviceId), inner)
         link.send(CarLifeProtocol.CH_CMD, inner)
+    }
+
+    fun sendSong(title: String, artist: String, album: String, art: ByteArray?, durationMs: Long, index: Int, count: Int, id: String) {
+        if (!projecting && _state.value !is State.Negotiated) return
+        val w = ProtoWriter()
+            .string(1, "FT")
+            .string(2, title)
+            .string(3, artist)
+            .string(4, album)
+        if (art != null && art.isNotEmpty()) w.bytes(5, art)
+        w.int32(6, durationMs.coerceIn(0, Int.MAX_VALUE.toLong()).toInt())
+            .int32(7, count)
+            .string(8, id)
+            .int32(9, 0)
+        cmd(CarLifeProtocol.CMD_MEDIA_INFO, w.toByteArray(), quiet = true)
+        DiagLog.i(tag, "told the car the song: '$title'${if (artist.isNotBlank()) " by $artist" else ""}${if (art != null) ", with cover art (${art.size} bytes)" else ""}")
+    }
+
+    fun sendSongPosition(ms: Long) {
+        if (!projecting) return
+        cmd(CarLifeProtocol.CMD_MEDIA_PROGRESS_BAR, ProtoWriter().int32(1, ms.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()).toByteArray(), quiet = true)
     }
 
     private fun linked() {
@@ -155,7 +179,7 @@ class CarLifeSession(
     }
 
     private fun handleCmd(c: CarLifeFraming.Cmd) {
-        DiagLog.rx(tag, CarLifeProtocol.name(c.serviceId), c.payload)
+        if (c.serviceId != CarLifeProtocol.CMD_HU_GEAR_INFO) DiagLog.rx(tag, CarLifeProtocol.name(c.serviceId), c.payload)
         when (c.serviceId) {
             CarLifeProtocol.CMD_HU_PROTOCOL_VERSION -> {
                 val r = ProtoReader(c.payload)
@@ -276,7 +300,28 @@ class CarLifeSession(
             CarLifeProtocol.CMD_LAUNCH_MODE_PHONE -> onLaunchMode?.invoke("phone")
             CarLifeProtocol.CMD_LAUNCH_MODE_MAP -> onLaunchMode?.invoke("map")
             CarLifeProtocol.CMD_LAUNCH_MODE_MUSIC -> onLaunchMode?.invoke("music")
-            CarLifeProtocol.CMD_MODULE_CONTROL, CarLifeProtocol.CMD_PAUSE_MEDIA, CarLifeProtocol.CMD_CAR_VELOCITY,
+            CarLifeProtocol.CMD_PAUSE_MEDIA -> {
+                DiagLog.i(tag, "the car asked to pause the music")
+                onPauseMedia?.invoke()
+            }
+            CarLifeProtocol.CMD_MODULE_CONTROL -> {
+                val r = ProtoReader(c.payload)
+                val module = r.int(1, -1)
+                val status = r.int(2, -1)
+                val now = System.currentTimeMillis()
+                if (module == CarLifeProtocol.MODULE_MUSIC && now - musicAskAt > 4000) {
+                    musicAskAt = now
+                    DiagLog.i(tag, "the car asked for the music module (status $status)")
+                }
+            }
+            CarLifeProtocol.CMD_HU_GEAR_INFO -> {
+                val g = ProtoReader(c.payload).int(1, -1)
+                if (g != gear) {
+                    gear = g
+                    DiagLog.d(tag, "car gear $g")
+                }
+            }
+            CarLifeProtocol.CMD_CAR_VELOCITY,
             CarLifeProtocol.CMD_CAR_GPS, CarLifeProtocol.CMD_CAR_GYROSCOPE, CarLifeProtocol.CMD_CAR_ACCELERATION,
             CarLifeProtocol.CMD_CAR_OIL, CarLifeProtocol.CMD_ERROR_CODE, CarLifeProtocol.CMD_BT_HFP_INDICATION,
             CarLifeProtocol.CMD_BT_HFP_CONNECTION, CarLifeProtocol.CMD_BT_HFP_RESPONSE, CarLifeProtocol.CMD_BT_HFP_STATUS_RESPONSE,
