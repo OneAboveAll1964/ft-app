@@ -5,10 +5,13 @@ import app.ft.core.DiagLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.net.BindException
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
@@ -46,8 +49,12 @@ class WifiChannelLink(
             locks[channel] = Any()
             jobs += scope.launch(Dispatchers.IO) {
                 try {
-                    val ss = ServerSocket(port).also { it.reuseAddress = true }
+                    val ss = NetUtil.listen(port) { running.get() } ?: return@launch
                     synchronized(servers) { servers[channel] = ss }
+                    if (!running.get()) {
+                        runCatching { ss.close() }
+                        return@launch
+                    }
                     onEvent("WIFI ${CarLifeProtocol.channelName(channel)} listening on $port")
                     while (isActive && running.get()) {
                         val s = ss.accept()
@@ -124,6 +131,24 @@ class WifiChannelLink(
 }
 
 object NetUtil {
+    suspend fun listen(port: Int, alive: () -> Boolean): ServerSocket? {
+        var tries = 0
+        while (alive()) {
+            val ss = ServerSocket()
+            try {
+                ss.reuseAddress = true
+                ss.bind(InetSocketAddress(port))
+                return ss
+            } catch (e: BindException) {
+                runCatching { ss.close() }
+                if (++tries >= 40) throw e
+                if (tries == 1) DiagLog.d("Link", "port $port is still in use, trying again")
+                delay(250)
+            }
+        }
+        return null
+    }
+
     fun localIpv4(): String? = try {
         NetworkInterface.getNetworkInterfaces().toList()
             .filter { it.isUp && !it.isLoopback }

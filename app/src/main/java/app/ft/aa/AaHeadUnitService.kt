@@ -12,6 +12,7 @@ import android.os.IBinder
 import app.ft.R
 import app.ft.FTApp
 import app.ft.MainActivity
+import app.ft.carlife.NetUtil
 import app.ft.core.DiagLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -131,7 +132,7 @@ class AaHeadUnitService : Service() {
         }
         acceptJob = scope.launch {
             try {
-                val ss = ServerSocket(port).also { it.reuseAddress = true }
+                val ss = NetUtil.listen(port) { isActive } ?: return@launch
                 server = ss
                 _state.update { it.copy(listening = true, port = port) }
                 DiagLog.i(tag, "head unit waiting for Android Auto on tcp:$port")
