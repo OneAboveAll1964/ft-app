@@ -4,6 +4,7 @@ import java.util.ArrayDeque
 
 object CarAudioBus {
     const val LANE_PHONE = 0
+    const val LANE_PLAYER = 1
     const val LANE_MEDIA = 4
     const val LANE_SPEECH = 5
     const val LANE_SYSTEM = 6
@@ -36,6 +37,8 @@ object CarAudioBus {
     private var held = 0
     private var offset = 0
     private var mainAt = 0L
+    private var ownAt = 0L
+    private var shadowed = 0L
     private var heldAt = 0L
     private var voiceOpen = false
     private var voiceLane = -1
@@ -75,6 +78,7 @@ object CarAudioBus {
                 held = 0
                 offset = 0
                 mainAt = 0
+                ownAt = 0
                 heldAt = 0
                 voiceOpen = false
                 voiceLane = -1
@@ -207,6 +211,10 @@ object CarAudioBus {
         val send = ArrayList<ByteArray>(3)
         synchronized(lock) {
             perLane[lane] = (perLane[lane] ?: 0L) + pcm.size
+            if (lane == LANE_PHONE && ownAt != 0L && now - ownAt < MAIN_ALIVE_NS) {
+                shadowed += pcm.size
+                return
+            }
             if (held > 0 && now - heldAt > HOLD_NS) {
                 while (true) {
                     val first = waiting.pollFirst() ?: break
@@ -217,8 +225,9 @@ object CarAudioBus {
                 }
                 held = 0
             }
-            if (lane == LANE_MEDIA || lane == LANE_PHONE) {
+            if (lane == LANE_MEDIA || lane == LANE_PLAYER || lane == LANE_PHONE) {
                 mainAt = now
+                if (lane != LANE_PHONE) ownAt = now
                 send.add(blend(duck(pcm)))
             } else if (mixTogether && now - mainAt < MAIN_ALIVE_NS) {
                 if (held == 0) heldAt = now
@@ -271,6 +280,7 @@ object CarAudioBus {
 
     private fun laneName(id: Int) = when (id) {
         LANE_PHONE -> "phone"
+        LANE_PLAYER -> "player"
         LANE_MEDIA -> "media"
         LANE_SPEECH -> "guidance"
         LANE_SYSTEM -> "system"
@@ -285,9 +295,11 @@ object CarAudioBus {
             reported = now
             val lanes = perLane.entries.joinToString(" | ") { "${laneName(it.key)} ${(it.value / secs).toInt()}" }
             val spoken = if (voiceSent > 0) ", voice channel ${(voiceSent / secs).toInt()} B/s" else ""
-            line = "to the car ${(sent / secs).toInt()} of $REAL_TIME B/s, dropped ${(dropped / secs).toInt()}$spoken | $lanes"
+            val muted = if (shadowed > 0) ", phone sound held back ${(shadowed / secs).toInt()} B/s" else ""
+            line = "to the car ${(sent / secs).toInt()} of $REAL_TIME B/s, dropped ${(dropped / secs).toInt()}$spoken$muted | $lanes"
             sent = 0
             dropped = 0
+            shadowed = 0
             voiceSent = 0
             perLane.clear()
         }

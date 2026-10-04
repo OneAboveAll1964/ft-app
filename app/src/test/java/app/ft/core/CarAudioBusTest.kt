@@ -109,4 +109,28 @@ class CarAudioBusTest {
         val out = CarAudioBus.toCarFormat(oneSecondMono16k, 16000, 1)
         assertEquals("one second in should be one second out", 48000 * 4, out.size)
     }
+    @Test
+    fun phoneSoundIsHeldBackWhileFtsOwnPlayerPlays() {
+        listen()
+        CarAudioBus.write(CarAudioBus.LANE_PLAYER, ByteArray(3840))
+        CarAudioBus.write(CarAudioBus.LANE_PHONE, ByteArray(3840))
+        CarAudioBus.write(CarAudioBus.LANE_PLAYER, ByteArray(3840))
+        assertEquals("the car must only get the player, not the player plus the phone", 2, got.size)
+    }
+
+    @Test
+    fun phoneSoundIsHeldBackWhileAndroidAutoPlays() {
+        listen()
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, ByteArray(3840))
+        CarAudioBus.write(CarAudioBus.LANE_PHONE, ByteArray(3840))
+        assertEquals(1, got.size)
+    }
+
+    @Test
+    fun phoneSoundFlowsWhenNothingElsePlays() {
+        listen()
+        CarAudioBus.write(CarAudioBus.LANE_PHONE, ByteArray(3840))
+        CarAudioBus.write(CarAudioBus.LANE_PHONE, ByteArray(3840))
+        assertEquals(2, got.size)
+    }
 }
