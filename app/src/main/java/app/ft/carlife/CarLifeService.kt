@@ -1,4 +1,6 @@
 package app.ft.carlife
+import app.ft.media.Track
+import app.ft.media.MediaLibrary
 import android.annotation.SuppressLint
 
 import android.app.ActivityOptions
@@ -27,7 +29,9 @@ import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
+import app.ft.media.CarPlayer
 import app.ft.projection.CarDisplay
+import app.ft.projection.CarTouchZones
 import app.ft.projection.MirrorSink
 import app.ft.projection.PhoneMirror
 import app.ft.ui.car.CarScreen
@@ -38,7 +42,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -59,7 +65,8 @@ data class CarState(
     val beacon: Boolean = false,
     val step: String = "",
     val refused: String = "",
-    val waitingForShare: Boolean = false
+    val waitingForShare: Boolean = false,
+    val shareForSound: Boolean = false
 )
 
 class CarLifeService : Service() {
@@ -69,8 +76,8 @@ class CarLifeService : Service() {
         const val ACTION_STOP = "app.ft.carlife.STOP"
         const val ACTION_AUDIO = "app.ft.carlife.AUDIO"
         const val ACTION_SHARE_DECLINED = "app.ft.carlife.SHARE_DECLINED"
-        const val CORNER = 96
         private val AA_KEYS = setOf(3, 4, 19, 20, 21, 22, 23, 84, 85, 86, 87, 88, 126, 127)
+        private val MEDIA_KEYS = setOf(85, 87, 88, 126, 127)
         private const val CHANNEL = "ft_carlife"
         private const val NOTIFICATION_ID = 41
         private const val VOICE_START = 0
@@ -80,6 +87,8 @@ class CarLifeService : Service() {
 
         private val _state = MutableStateFlow(CarState())
         val state: StateFlow<CarState> = _state
+        private val _screenKeys = MutableSharedFlow<Int>(extraBufferCapacity = 8)
+        val screenKeys: SharedFlow<Int> = _screenKeys
         @Volatile private var instance: CarLifeService? = null
 
         fun startWifi(context: Context) = startAuto(context)
@@ -103,7 +112,11 @@ class CarLifeService : Service() {
 
         fun cancelShareWait() = instance?.let { svc ->
             svc.pendingLaunch = null
-            _state.update { it.copy(waitingForShare = false) }
+            if (_state.value.shareForSound) {
+                svc.soundDeclined = true
+                DiagLog.i("CarLife", "sound stays on the phone for this drive")
+            }
+            _state.update { it.copy(waitingForShare = false, shareForSound = false) }
         }
 
         fun btSend(hex: String) = instance?.sendBluetooth(hex)
@@ -113,11 +126,24 @@ class CarLifeService : Service() {
         fun startAaWireless() = instance?.triggerAaWireless()
         fun volumeUp() = instance?.volume(true)
         fun volumeDown() = instance?.volume(false)
-        fun navBack() = FTTouchService.instance?.back()
-        fun navHome() = FTTouchService.instance?.home()
+        fun navBack() = phoneKey("back") { it.back() }
+        fun navHome() = phoneKey("home") { it.home() }
+        fun navRecents() = phoneKey("recent apps") { it.recents() }
+        fun navNotifications() = phoneKey("notifications") { it.notifications() }
+        fun rotatePhone() = instance?.rotate()
+        fun showPhone() = instance?.phoneScreen()
         fun launchApp(pkg: String) = instance?.launch(pkg)
         fun stopMirror() = instance?.mirrorStop()
         fun goHome() = instance?.home()
+
+        private fun phoneKey(name: String, action: (FTTouchService) -> Boolean) {
+            val svc = FTTouchService.instance
+            if (svc == null) {
+                DiagLog.w("CarLife", "phone $name needs FT's accessibility switch on")
+                return
+            }
+            if (action(svc)) DiagLog.i("CarLife", "phone $name") else DiagLog.w("CarLife", "the phone did not take $name")
+        }
     }
 
     private val tag = "CarLife"
@@ -213,6 +239,15 @@ class CarLifeService : Service() {
     private var carNetwork: android.net.ConnectivityManager.NetworkCallback? = null
     private var aaReturn: Job? = null
     @Volatile private var pendingLaunch: Pair<Intent, String>? = null
+    @Volatile private var soundDeclined = false
+    @Volatile private var mediaReady = false
+    @Volatile private var touchFt = false
+    private var soundWatch: Job? = null
+    private var progressJob: Job? = null
+    private var turnWatch: android.hardware.display.DisplayManager.DisplayListener? = null
+    private var savedRotation: Pair<Int, Int>? = null
+    private var rotateJob: Job? = null
+    private var lastSongPositionAt = 0L
     private var savedVolume = -1
     private val app get() = application as FTApp
     private val beacon by lazy { CarBeacon(scope, { app.prefs.carName }, { beaconTargets() }) }
@@ -249,6 +284,11 @@ class CarLifeService : Service() {
         CarAudioBus.voice = carVoice
         CarAudioBus.sink = carAudio
         watchCalls()
+        CarPlayer.onTrack = { t -> if (!t.video) scope.launch { tellCarTheSong(t) } }
+        MirrorSink.onGone = { surface -> if (mirror.isShowing(surface)) mirror.hide() }
+        progressJob = scope.launch {
+            CarPlayer.state.collect { st -> songPosition(st) }
+        }
         carDisplay = CarDisplay(this)
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel(CHANNEL, "FT projection", NotificationManager.IMPORTANCE_LOW))
@@ -265,7 +305,7 @@ class CarLifeService : Service() {
                 audio.stop()
                 foreground(noteText, projection = true, microphone = canRecord())
                 startAudioToCar()
-                _state.update { it.copy(waitingForShare = false) }
+                _state.update { it.copy(waitingForShare = false, shareForSound = false) }
                 pendingLaunch?.let { (i, p) ->
                     pendingLaunch = null
                     launchIntent(i, p)
@@ -273,7 +313,8 @@ class CarLifeService : Service() {
             }
             ACTION_SHARE_DECLINED -> {
                 pendingLaunch = null
-                _state.update { it.copy(waitingForShare = false, mirrorPackage = "") }
+                if (_state.value.shareForSound) soundDeclined = true
+                _state.update { it.copy(waitingForShare = false, shareForSound = false, mirrorPackage = "") }
                 DiagLog.i(tag, "screen sharing was declined on the phone")
             }
             ACTION_AUTO, ACTION_WIFI -> {
@@ -572,9 +613,19 @@ class CarLifeService : Service() {
         s.onTouch = { a, x, y -> routeTouch(a, x, y) }
         s.onHardKey = { k -> onHardKey(k) }
         s.onVoiceAudio = { pcm -> AaHeadUnitService.current?.feedCarMicrophone(pcm) }
+        s.onPauseMedia = {
+            if (CarPlayer.playing) {
+                CarPlayer.pause()
+                DiagLog.i(tag, "FT's music paused for the car")
+            }
+        }
         s.onClosed = { reason ->
             DiagLog.i(tag, "link closed: $reason")
             stopAndroidAuto("the car disconnected")
+            mediaReady = false
+            routePlayer()
+            stopSoundWatch()
+            soundDeclined = false
             updateBeacon()
         }
         stateJob?.cancel()
@@ -582,6 +633,16 @@ class CarLifeService : Service() {
             s.state.collect { st ->
                 _state.update { it.copy(link = l.name, session = st, refused = if (st !is CarLifeSession.State.Idle) "" else it.refused) }
                 updateBeacon()
+                if (st is CarLifeSession.State.Projecting && !mediaReady) {
+                    mediaReady = true
+                    routePlayer()
+                    startSoundWatch()
+                    CarPlayer.state.value.track?.let { t -> if (!t.video) tellCarTheSong(t) }
+                } else if (st is CarLifeSession.State.Idle && mediaReady) {
+                    mediaReady = false
+                    routePlayer()
+                    stopSoundWatch()
+                }
                 if (st is CarLifeSession.State.Projecting && app.prefs.aaAutoStart && !aaAutoLaunched) {
                     aaAutoLaunched = true
                     DiagLog.i(tag, "auto-starting Android Auto after connection")
@@ -650,6 +711,7 @@ class CarLifeService : Service() {
 
     private fun onStopVideo() {
         mirrorClose()
+        CarPlayer.stopVideo()
         carDisplay.stop()
         aaAutoLaunched = false
         _state.update { it.copy(aaOverlay = false) }
@@ -782,16 +844,20 @@ class CarLifeService : Service() {
 
     private fun routeTouch(action: Int, x: Int, y: Int) {
         val st = _state.value
-        val corner = x < CORNER && y < CORNER
+        if (action == 0) touchFt = CarTouchZones.hit(x, y)
+        if (touchFt) {
+            carDisplay.dispatchTouch(action, x, y)
+            return
+        }
         val aa = AaHeadUnitService.current
-        if (st.aaOverlay && !corner && aa != null && aa.phase.value >= AaSession.Phase.DISCOVERED) {
+        if (st.aaOverlay && aa != null && aa.phase.value >= AaSession.Phase.DISCOVERED) {
             val p = app.prefs
             val w = carDisplay.width.coerceAtLeast(1)
             val h = carDisplay.height.coerceAtLeast(1)
             aa.sendTouch(x * p.aaWidth / w, y * p.aaHeight / h, action)
             return
         }
-        if (st.mirroring && !corner) {
+        if (st.mirroring) {
             val svc = FTTouchService.instance
             if (svc != null && mirror.active) {
                 if (mirror.ownDisplay) {
@@ -799,7 +865,7 @@ class CarLifeService : Service() {
                 } else {
                     val w = carDisplay.width.coerceAtLeast(1).toFloat()
                     val h = carDisplay.height.coerceAtLeast(1).toFloat()
-                    val scale = minOf(w / mirror.width, h / mirror.height)
+                    val scale = minOf(w / mirror.width.coerceAtLeast(1), h / mirror.height.coerceAtLeast(1))
                     val offX = (w - mirror.width * scale) / 2f
                     val offY = (h - mirror.height * scale) / 2f
                     svc.inject(action, ((x - offX) / scale).coerceIn(0f, mirror.width - 1f), ((y - offY) / scale).coerceIn(0f, mirror.height - 1f))
@@ -918,6 +984,8 @@ class CarLifeService : Service() {
         87 -> "next track"
         88 -> "previous track"
         85 -> "play or pause"
+        126 -> "play"
+        127 -> "pause"
         84 -> "voice"
         3 -> "home"
         4 -> "back"
@@ -950,10 +1018,35 @@ class CarLifeService : Service() {
             st.mirroring -> when (mapped) {
                 4 -> FTTouchService.instance?.back()
                 3 -> mirrorStop()
+                in MEDIA_KEYS -> mediaKey(mapped)
                 else -> DiagLog.i(tag, "steering wheel key $key ignored while mirroring")
             }
-            else -> Unit
+            else -> when (mapped) {
+                in MEDIA_KEYS -> mediaKey(mapped)
+                3, 4 -> _screenKeys.tryEmit(mapped)
+                else -> DiagLog.i(tag, "steering wheel key $key has nothing to do on FT's screen")
+            }
         }
+    }
+
+    private fun mediaKey(key: Int) {
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        if (CarPlayer.playing || (CarPlayer.hasTrack && !am.isMusicActive)) {
+            when (key) {
+                85 -> CarPlayer.toggle()
+                126 -> CarPlayer.resume()
+                127 -> CarPlayer.pause()
+                87 -> CarPlayer.next()
+                88 -> CarPlayer.previous()
+            }
+            DiagLog.i(tag, "steering wheel ${keyName(key)} for FT's player")
+            return
+        }
+        runCatching {
+            am.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, key))
+            am.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, key))
+        }.onSuccess { DiagLog.i(tag, "steering wheel ${keyName(key)} sent to the app playing on the phone") }
+            .onFailure { DiagLog.w(tag, "could not pass ${keyName(key)} to the phone: ${it.message}") }
     }
 
     private fun aaOverlay(on: Boolean) {
@@ -972,20 +1065,27 @@ class CarLifeService : Service() {
         launchIntent(intent, pkg)
     }
 
-    private fun launchIntent(intent: Intent, pkg: String) {
+    private fun phoneScreen() {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val pkg = runCatching { packageManager.resolveActivity(home, 0)?.activityInfo?.packageName }.getOrNull() ?: "android"
+        launchIntent(home, pkg, phone = true)
+    }
+
+    private fun launchIntent(intent: Intent, pkg: String, phone: Boolean = intent.hasCategory(Intent.CATEGORY_HOME)) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         if (!mirror.ready && projection == null && (app.mirrorResultCode == 0 || app.mirrorData == null)) {
             pendingLaunch = intent to pkg
-            _state.update { it.copy(mirroring = false, mirrorPackage = pkg, waitingForShare = true) }
+            _state.update { it.copy(mirroring = false, mirrorPackage = pkg, waitingForShare = true, shareForSound = false) }
             askForScreenShare()
             return
         }
-        if (!mirror.ready && !mirrorOpen(pkg, ownDisplay = true)) {
+        if (phone && mirror.ready && mirror.ownDisplay) mirror.close()
+        if (!mirror.ready && !mirrorOpen(pkg, ownDisplay = !phone)) {
             _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
             return
         }
         var placed = false
-        if (mirror.ownDisplay && mirror.displayId > 0) {
+        if (!phone && mirror.ownDisplay && mirror.displayId > 0) {
             placed = runCatching {
                 val options = ActivityOptions.makeBasic().setLaunchDisplayId(mirror.displayId)
                 startActivity(intent, options.toBundle())
@@ -1011,6 +1111,7 @@ class CarLifeService : Service() {
             return
         }
         _state.update { it.copy(aaOverlay = false, mirroring = true, mirrorPackage = pkg) }
+        watchTurning()
         mirrorJob?.cancel()
         mirrorJob = scope.launch {
             MirrorSink.surface.collect { surface ->
@@ -1157,7 +1258,7 @@ class CarLifeService : Service() {
             val w = if (useCar) carDisplay.width else metrics.width()
             val h = if (useCar) carDisplay.height else metrics.height()
             val d = if (useCar) app.prefs.carDensity else resources.displayMetrics.densityDpi
-            val ok = mirror.open(mp, w, h, d, useCar)
+            val ok = mirror.open(mp, w, h, d, useCar, carDisplay.width, carDisplay.height)
             if (ok && !audio.active) startAudioToCar()
             ok
         } catch (t: Throwable) {
@@ -1178,6 +1279,8 @@ class CarLifeService : Service() {
 
     private fun mirrorClose() {
         mirrorStop()
+        stopWatchingTurning()
+        restoreRotation()
         audio.stop()
         restorePhone()
         mirror.close()
@@ -1213,6 +1316,12 @@ class CarLifeService : Service() {
 
     private fun teardown() {
         stopLink()
+        stopSoundWatch()
+        stopWatchingTurning()
+        restoreRotation()
+        mediaReady = false
+        soundDeclined = false
+        routePlayer()
         aaAutoLaunched = false
         aaWatch?.cancel()
         aaWatch = null
@@ -1221,6 +1330,171 @@ class CarLifeService : Service() {
         wakeLock = null
         releaseWifi()
         _state.value = CarState()
+    }
+
+    private fun routePlayer() {
+        val linked = mediaReady && session != null && CarAudioBus.open
+        val overBluetooth = linked && app.prefs.audioOverBluetooth && runCatching {
+            btAudio.open()
+            btAudio.ready() && btAudio.somethingIsPlaying() != null
+        }.getOrDefault(false)
+        val want = linked && !overBluetooth
+        if (CarPlayer.toCar == want) return
+        if (!want && CarPlayer.playing) {
+            CarPlayer.pause()
+            DiagLog.i(tag, "the car is gone, FT's music is paused instead of moving to the phone speaker")
+        }
+        CarPlayer.toCar = want
+        DiagLog.i(tag, if (want) "FT's player plays on the car" else if (overBluetooth) "FT's player plays over bluetooth" else "FT's player plays on the phone")
+    }
+
+    private suspend fun tellCarTheSong(t: Track) {
+        val s = session ?: return
+        if (!app.prefs.carSongInfo || !CarPlayer.toCar) return
+        val art = MediaLibrary.artBytes(this, t, 240)?.let { big ->
+            if (big.size <= 24_000) big else MediaLibrary.artBytes(this, t, 160)
+        }?.takeIf { it.size <= 30_000 }
+        val st = CarPlayer.state.value
+        runCatching { s.sendSong(t.title, t.artist, t.album, art, t.durationMs, st.index, st.count, t.id.toString()) }
+            .onFailure { DiagLog.w(tag, "could not tell the car the song: ${it.message}") }
+    }
+
+    private fun songPosition(st: CarPlayer.State) {
+        val t = st.track ?: return
+        if (t.video || !st.playing || !st.toCar || !app.prefs.carSongInfo) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastSongPositionAt < 1000) return
+        lastSongPositionAt = now
+        runCatching { session?.sendSongPosition(st.positionMs) }
+    }
+
+    private fun startSoundWatch() {
+        if (soundWatch?.isActive == true) return
+        soundWatch = scope.launch {
+            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            var heard = 0
+            while (true) {
+                delay(1500)
+                val st = _state.value
+                val busy = st.waitingForShare || st.aaOverlay || st.mirroring || audio.active || CarPlayer.playing ||
+                    CarAudioBus.inCall || soundDeclined || AaHeadUnitService.current != null || session?.projecting != true
+                if (busy || !am.isMusicActive) {
+                    heard = 0
+                    continue
+                }
+                if (++heard < 2) continue
+                heard = 0
+                if (app.prefs.audioOverBluetooth && btAudio.ready() && btAudio.somethingIsPlaying() != null) continue
+                if (!canRecord()) continue
+                if (projection != null || (app.mirrorResultCode != 0 && app.mirrorData != null)) {
+                    DiagLog.i(tag, "the phone is playing, sending its sound to the car")
+                    startAudioToCar()
+                    continue
+                }
+                DiagLog.i(tag, "the phone is playing sound the car cannot hear yet, asking on the phone")
+                _state.update { it.copy(waitingForShare = true, shareForSound = true, mirrorPackage = "") }
+                askForScreenShare()
+            }
+        }
+    }
+
+    private fun stopSoundWatch() {
+        soundWatch?.cancel()
+        soundWatch = null
+        if (_state.value.shareForSound) _state.update { it.copy(waitingForShare = false, shareForSound = false) }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun phoneSize(): Pair<Int, Int>? {
+        val dm = getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+        val d = dm.getDisplay(android.view.Display.DEFAULT_DISPLAY) ?: return null
+        val p = android.graphics.Point()
+        d.getRealSize(p)
+        return if (p.x > 0 && p.y > 0) p.x to p.y else null
+    }
+
+    private fun watchTurning() {
+        if (turnWatch != null || mirror.ownDisplay) return
+        val dm = getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+        val l = object : android.hardware.display.DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) = Unit
+            override fun onDisplayRemoved(displayId: Int) = Unit
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId != android.view.Display.DEFAULT_DISPLAY || mirror.ownDisplay) return
+                val (w, h) = phoneSize() ?: return
+                if (mirror.resize(w, h)) carDisplay.requestKeyFrame()
+            }
+        }
+        dm.registerDisplayListener(l, Handler(Looper.getMainLooper()))
+        turnWatch = l
+        phoneSize()?.let { (w, h) -> mirror.resize(w, h) }
+    }
+
+    private fun stopWatchingTurning() {
+        val l = turnWatch ?: return
+        turnWatch = null
+        val dm = getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+        runCatching { dm.unregisterDisplayListener(l) }
+    }
+
+    private fun rotate() {
+        if (!android.provider.Settings.System.canWrite(this)) {
+            DiagLog.i(tag, "turning the phone needs 'Modify system settings' for FT, asking on the phone")
+            runCatching {
+                startActivity(
+                    Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS, android.net.Uri.parse("package:$packageName"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.onFailure { DiagLog.w(tag, "could not open the setting: ${it.message}") }
+            val back = _state.value.mirrorPackage
+            rotateJob?.cancel()
+            rotateJob = scope.launch {
+                repeat(120) {
+                    delay(1000)
+                    if (android.provider.Settings.System.canWrite(this@CarLifeService)) {
+                        DiagLog.i(tag, "FT may turn the phone now")
+                        turnPhone()
+                        if (back.isNotBlank() && _state.value.mirroring) {
+                            packageManager.getLaunchIntentForPackage(back)?.let { i ->
+                                runCatching { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            }
+                        }
+                        return@launch
+                    }
+                }
+            }
+            return
+        }
+        turnPhone()
+    }
+
+    private fun turnPhone() {
+        val cr = contentResolver
+        runCatching {
+            if (savedRotation == null) {
+                savedRotation = android.provider.Settings.System.getInt(cr, android.provider.Settings.System.ACCELEROMETER_ROTATION, 1) to
+                    android.provider.Settings.System.getInt(cr, android.provider.Settings.System.USER_ROTATION, 0)
+            }
+            val (w, h) = phoneSize() ?: (0 to 0)
+            val upright = h >= w
+            val next = if (upright) android.view.Surface.ROTATION_90 else android.view.Surface.ROTATION_0
+            android.provider.Settings.System.putInt(cr, android.provider.Settings.System.ACCELEROMETER_ROTATION, 0)
+            android.provider.Settings.System.putInt(cr, android.provider.Settings.System.USER_ROTATION, next)
+            DiagLog.i(tag, "phone turned to ${if (upright) "landscape" else "portrait"}")
+        }.onFailure { DiagLog.w(tag, "could not turn the phone: ${it.message}") }
+    }
+
+    private fun restoreRotation() {
+        rotateJob?.cancel()
+        rotateJob = null
+        val (auto, user) = savedRotation ?: return
+        savedRotation = null
+        runCatching {
+            val cr = contentResolver
+            android.provider.Settings.System.putInt(cr, android.provider.Settings.System.USER_ROTATION, user)
+            android.provider.Settings.System.putInt(cr, android.provider.Settings.System.ACCELEROMETER_ROTATION, auto)
+            DiagLog.i(tag, "phone rotation set back the way it was")
+        }
     }
 
     private fun notification(text: String): Notification {
@@ -1241,6 +1515,8 @@ class CarLifeService : Service() {
 
     override fun onDestroy() {
         teardown()
+        progressJob?.cancel()
+        CarPlayer.onTrack = null
         scope.cancel()
         writer?.interrupt()
         writer = null
