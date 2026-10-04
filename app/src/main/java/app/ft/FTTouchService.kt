@@ -82,4 +82,6 @@ class FTTouchService : AccessibilityService() {
 
     fun back() = performGlobalAction(GLOBAL_ACTION_BACK)
     fun home() = performGlobalAction(GLOBAL_ACTION_HOME)
+    fun recents() = performGlobalAction(GLOBAL_ACTION_RECENTS)
+    fun notifications() = performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
 }
