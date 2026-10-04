@@ -243,7 +243,7 @@ private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean
                 shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Icon(CarIcons.Car, contentDescription = null, modifier = Modifier.size(34.dp))
+                Icon(CarIcons.AndroidAuto, contentDescription = null, modifier = Modifier.size(34.dp))
                 Spacer(Modifier.width(12.dp))
                 Text("Android Auto", style = MaterialTheme.typography.headlineSmall, maxLines = 1)
             }
@@ -428,7 +428,7 @@ fun tileIcon(key: String): ImageVector = when (key) {
     "browser" -> CarIcons.Web
     "apps" -> CarIcons.Apps
     "maps" -> CarIcons.Map
-    "aa" -> CarIcons.Car
+    "aa" -> CarIcons.AndroidAuto
     "phone" -> CarIcons.Phone
     else -> CarIcons.Apps
 }
@@ -687,7 +687,7 @@ fun CarPreview(style: CarStyle, modifier: Modifier = Modifier) {
                     Spacer(Modifier.weight(1f))
                     NowPlayingCard(CarPlayer.State(), onOpen = {}, interactive = false)
                     Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(84.dp)) {
-                        Icon(CarIcons.Car, contentDescription = null, modifier = Modifier.size(34.dp))
+                        Icon(CarIcons.AndroidAuto, contentDescription = null, modifier = Modifier.size(34.dp))
                         Spacer(Modifier.width(12.dp))
                         Text("Android Auto", style = MaterialTheme.typography.headlineSmall, maxLines = 1)
                     }
