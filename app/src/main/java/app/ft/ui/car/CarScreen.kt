@@ -163,6 +163,16 @@ private fun CarRoot(style: CarStyle) {
                 view = v
             }
         }
+        AnimatedVisibility(
+            visible = state.notice.isNotEmpty(),
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp, start = 120.dp, end = 120.dp)
+        ) {
+            Surface(shape = RoundedCornerShape(50), color = Color.Black.copy(alpha = 0.82f), contentColor = Color.White) {
+                Text(state.notice, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+            }
+        }
         if (state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) {
             CornerPill(style.corner) {
                 view = CarView.LAUNCHER

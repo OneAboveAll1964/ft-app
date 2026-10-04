@@ -66,7 +66,8 @@ data class CarState(
     val step: String = "",
     val refused: String = "",
     val waitingForShare: Boolean = false,
-    val shareForSound: Boolean = false
+    val shareForSound: Boolean = false,
+    val notice: String = ""
 )
 
 class CarLifeService : Service() {
@@ -240,6 +241,7 @@ class CarLifeService : Service() {
     private var aaReturn: Job? = null
     @Volatile private var pendingLaunch: Pair<Intent, String>? = null
     @Volatile private var soundDeclined = false
+    @Volatile private var blockedSoundNoticed = false
     @Volatile private var mediaReady = false
     @Volatile private var touchFt = false
     private var soundWatch: Job? = null
@@ -627,6 +629,7 @@ class CarLifeService : Service() {
             routePlayer()
             stopSoundWatch()
             soundDeclined = false
+            blockedSoundNoticed = false
             updateBeacon()
         }
         stateJob?.cancel()
@@ -1187,7 +1190,7 @@ class CarLifeService : Service() {
     }
 
     private fun carPlaysOurSound(): Boolean {
-        if (!app.prefs.audioOverBluetooth) return false
+        if (!app.prefs.soundOverBluetooth) return false
         btAudio.open()
         if (!btAudio.ready()) return false
         val playing = btAudio.somethingIsPlaying()
@@ -1322,6 +1325,7 @@ class CarLifeService : Service() {
         restoreRotation()
         mediaReady = false
         soundDeclined = false
+        blockedSoundNoticed = false
         routePlayer()
         aaAutoLaunched = false
         aaWatch?.cancel()
@@ -1335,7 +1339,7 @@ class CarLifeService : Service() {
 
     private fun routePlayer() {
         val linked = mediaReady && session != null && CarAudioBus.open
-        val overBluetooth = linked && app.prefs.audioOverBluetooth && runCatching {
+        val overBluetooth = linked && app.prefs.soundOverBluetooth && runCatching {
             btAudio.open()
             btAudio.ready() && btAudio.somethingIsPlaying() != null
         }.getOrDefault(false)
@@ -1377,6 +1381,7 @@ class CarLifeService : Service() {
             while (true) {
                 delay(1500)
                 val st = _state.value
+                checkBlockedSound(am, st)
                 val busy = st.waitingForShare || st.aaOverlay || st.mirroring || audio.active || CarPlayer.playing ||
                     CarAudioBus.inCall || soundDeclined || AaHeadUnitService.current != null || session?.projecting != true
                 if (busy || !am.isMusicActive) {
@@ -1385,7 +1390,7 @@ class CarLifeService : Service() {
                 }
                 if (++heard < 2) continue
                 heard = 0
-                if (app.prefs.audioOverBluetooth && btAudio.ready() && btAudio.somethingIsPlaying() != null) continue
+                if (app.prefs.soundOverBluetooth && btAudio.ready() && btAudio.somethingIsPlaying() != null) continue
                 if (!canRecord()) continue
                 if (projection != null || (app.mirrorResultCode != 0 && app.mirrorData != null)) {
                     DiagLog.i(tag, "the phone is playing, sending its sound to the car")
@@ -1396,6 +1401,31 @@ class CarLifeService : Service() {
                 _state.update { it.copy(waitingForShare = true, shareForSound = true, mirrorPackage = "") }
                 askForScreenShare()
             }
+        }
+    }
+
+    private fun checkBlockedSound(am: android.media.AudioManager, st: CarState) {
+        if (blockedSoundNoticed || !audio.active) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        val blocked = SoundCheck.blocked(
+            captureRunningMs = now - audio.startedAt,
+            msSinceLoud = now - audio.lastLoudAt,
+            phonePlaying = am.isMusicActive,
+            ftPlaying = CarPlayer.playing,
+            androidAuto = st.aaOverlay || AaHeadUnitService.current != null,
+            inCall = CarAudioBus.inCall
+        )
+        if (!blocked) return
+        blockedSoundNoticed = true
+        DiagLog.i(tag, "the phone is playing but the car hears silence: that app does not let its sound be shared")
+        notice("The app playing on your phone won't share its sound. Play it through Android Auto to hear it in the car.")
+    }
+
+    private fun notice(text: String) {
+        _state.update { it.copy(notice = text) }
+        scope.launch {
+            delay(8000)
+            _state.update { if (it.notice == text) it.copy(notice = "") else it }
         }
     }
 

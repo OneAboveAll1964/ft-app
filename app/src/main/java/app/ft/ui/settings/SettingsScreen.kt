@@ -67,7 +67,7 @@ fun SettingsScreen(pad: PaddingValues) {
                     p.blendGuidance = it
                     app.ft.core.CarAudioBus.voiceChannel = !it
                 }
-                BoolSetting("Let the car play the sound over bluetooth", p.audioOverBluetooth) { p.audioOverBluetooth = it }
+                BoolSetting("Use the car's bluetooth for sound instead", p.soundOverBluetooth) { p.soundOverBluetooth = it }
                 BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
             }
         }

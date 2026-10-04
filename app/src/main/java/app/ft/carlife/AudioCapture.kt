@@ -15,6 +15,8 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
     private var thread: Thread? = null
 
     val active: Boolean get() = running.get()
+    @Volatile var startedAt = 0L; private set
+    @Volatile var lastLoudAt = 0L; private set
 
     fun start(projection: MediaProjection): Boolean {
         stop()
@@ -36,6 +38,8 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
                 .setBufferSizeInBytes(maxOf(min, 16384))
                 .build()
             record = r
+            startedAt = android.os.SystemClock.elapsedRealtime()
+            lastLoudAt = startedAt
             running.set(true)
             r.startRecording()
             thread = Thread {
@@ -46,12 +50,15 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
                     val n = runCatching { r.read(buf, 0, buf.size) }.getOrDefault(-1)
                     if (n <= 0) { if (n < 0) break else continue }
                     var i = 0
+                    var loudest = 0
                     while (i + 1 < n) {
                         val s = ((buf[i + 1].toInt() shl 8) or (buf[i].toInt() and 0xff)).toShort().toInt()
                         val a = if (s < 0) -s else s
-                        if (a > peak) peak = a
+                        if (a > loudest) loudest = a
                         i += 2
                     }
+                    if (loudest > peak) peak = loudest
+                    if (loudest > SoundCheck.LOUD) lastLoudAt = android.os.SystemClock.elapsedRealtime()
                     blocks++
                     if (blocks % 250 == 0L) {
                         DiagLog.i(tag, "sound to the car: loudest sample $peak/32767${if (peak < 40) " (nothing playing)" else ""}")
