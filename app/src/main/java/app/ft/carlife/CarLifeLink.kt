@@ -39,12 +39,16 @@ class WifiChannelLink(
     private val sockets = HashMap<Int, Socket>()
     private val locks = HashMap<Int, Any>()
     private val jobs = ArrayList<Job>()
+    private var cmdGeneration = 0
+    private var closedHook: ((String) -> Unit)? = null
+    private var watch: Job? = null
 
     override val isOpen: Boolean get() = running.get() && synchronized(sockets) { sockets.isNotEmpty() }
     override val connected: Boolean get() = running.get() && synchronized(sockets) { sockets.containsKey(CarLifeProtocol.CH_CMD) }
 
     override fun start(scope: CoroutineScope, onMessage: LinkMessage, onEvent: (String) -> Unit, onConnected: () -> Unit, onClosed: (String) -> Unit) {
         running.set(true)
+        closedHook = onClosed
         for ((channel, port) in ports) {
             locks[channel] = Any()
             jobs += scope.launch(Dispatchers.IO) {
@@ -62,18 +66,37 @@ class WifiChannelLink(
                             runCatching { s.close() }
                             continue
                         }
-                        s.tcpNoDelay = true
-                        sendBuffer(channel)?.let { size -> runCatching { s.sendBufferSize = size } }
-                        synchronized(sockets) {
-                            sockets[channel]?.let { runCatching { it.close() } }
+                        tune(s, channel)
+                        val stale = synchronized(sockets) { sockets[channel] }
+                        if (stale != null) {
+                            DiagLog.w(tag, "WIFI ${CarLifeProtocol.channelName(channel)} connected again while the old one was still open, starting the connection over")
+                            dropAll()
+                            onClosed("head unit connected again")
+                        }
+                        val generation = synchronized(sockets) {
                             sockets[channel] = s
+                            if (channel == CarLifeProtocol.CH_CMD) cmdGeneration++
+                            cmdGeneration
                         }
                         onEvent("WIFI ${CarLifeProtocol.channelName(channel)} connected from ${s.inetAddress.hostAddress}")
-                        if (channel == CarLifeProtocol.CH_CMD) onConnected()
-                        readLoop(channel, s, onMessage)
-                        synchronized(sockets) { if (sockets[channel] === s) sockets.remove(channel) }
-                        onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
-                        if (channel == CarLifeProtocol.CH_CMD) onClosed("head unit disconnected")
+                        if (channel == CarLifeProtocol.CH_CMD) {
+                            onConnected()
+                            watchCar(scope, s)
+                        }
+                        scope.launch(Dispatchers.IO) {
+                            readLoop(channel, s, onMessage)
+                            val current = synchronized(sockets) {
+                                val mine = sockets[channel] === s
+                                if (mine) sockets.remove(channel)
+                                mine && (channel != CarLifeProtocol.CH_CMD || generation == cmdGeneration)
+                            }
+                            if (!current) return@launch
+                            onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
+                            if (channel == CarLifeProtocol.CH_CMD) {
+                                watch?.cancel()
+                                onClosed("head unit disconnected")
+                            }
+                        }
                     }
                 } catch (t: Throwable) {
                     if (running.get()) DiagLog.w(tag, "WIFI ${CarLifeProtocol.channelName(channel)} server ended: ${t.message}")
@@ -82,11 +105,66 @@ class WifiChannelLink(
         }
     }
 
-    private fun sendBuffer(channel: Int): Int? = if (channel == CarLifeProtocol.CH_TTS) 8 * 1024 else null
+    private fun tune(s: Socket, channel: Int) {
+        runCatching { s.tcpNoDelay = true }
+        runCatching { s.keepAlive = true }
+        runCatching { s.setSoLinger(true, 0) }
+        runCatching { s.receiveBufferSize = BUFFER }
+        runCatching { s.sendBufferSize = if (channel == CarLifeProtocol.CH_TTS) VOICE_BUFFER else BUFFER }
+        trafficClass(channel)?.let { tc -> runCatching { s.trafficClass = tc } }
+    }
+
+    private fun trafficClass(channel: Int): Int? = when (channel) {
+        CarLifeProtocol.CH_MEDIA, CarLifeProtocol.CH_TTS -> TOS_VOICE
+        CarLifeProtocol.CH_VIDEO -> TOS_VIDEO
+        else -> null
+    }
+
+    private fun dropAll() {
+        val all = synchronized(sockets) {
+            val list = sockets.values.toList()
+            sockets.clear()
+            cmdGeneration++
+            list
+        }
+        watch?.cancel()
+        all.forEach { runCatching { it.close() } }
+    }
+
+    private fun watchCar(scope: CoroutineScope, s: Socket) {
+        watch?.cancel()
+        watch = scope.launch(Dispatchers.IO) {
+            var misses = 0
+            while (isActive && running.get() && !s.isClosed) {
+                delay(REACH_EVERY_MS)
+                if (s.isClosed || synchronized(sockets) { sockets[CarLifeProtocol.CH_CMD] !== s }) break
+                val reachable = runCatching { s.inetAddress.isReachable(REACH_TIMEOUT_MS) }.getOrDefault(true)
+                if (reachable) {
+                    misses = 0
+                    continue
+                }
+                misses++
+                DiagLog.w(tag, "the head unit did not answer a ping ($misses)")
+                if (misses < 2) {
+                    delay(REACH_RETRY_MS)
+                    val again = runCatching { s.inetAddress.isReachable(REACH_TIMEOUT_MS) }.getOrDefault(true)
+                    if (again) {
+                        misses = 0
+                        continue
+                    }
+                    misses++
+                }
+                DiagLog.w(tag, "the head unit is gone, closing the connection")
+                dropAll()
+                closedHook?.invoke("head unit stopped answering")
+                break
+            }
+        }
+    }
 
     private fun readLoop(channel: Int, s: Socket, onMessage: LinkMessage) {
         try {
-            val i = s.getInputStream()
+            val i = java.io.BufferedInputStream(s.getInputStream(), 32 * 1024)
             val hl = CarLifeFraming.headLen(channel)
             while (running.get() && !s.isClosed) {
                 val head = ByteArray(hl)
@@ -123,10 +201,21 @@ class WifiChannelLink(
 
     override fun stop() {
         running.set(false)
+        watch?.cancel()
         synchronized(sockets) { sockets.values.forEach { runCatching { it.close() } }; sockets.clear() }
         synchronized(servers) { servers.values.forEach { runCatching { it.close() } }; servers.clear() }
         jobs.forEach { it.cancel() }
         jobs.clear()
+    }
+
+    companion object {
+        private const val BUFFER = 327_680
+        private const val VOICE_BUFFER = 8 * 1024
+        private const val TOS_VOICE = 0xB8
+        private const val TOS_VIDEO = 0x88
+        private const val REACH_EVERY_MS = 180_000L
+        private const val REACH_RETRY_MS = 10_000L
+        private const val REACH_TIMEOUT_MS = 5000
     }
 }
 
