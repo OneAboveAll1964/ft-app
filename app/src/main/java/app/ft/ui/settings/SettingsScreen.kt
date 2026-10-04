@@ -43,6 +43,11 @@ fun SettingsScreen(pad: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            Group("Car screen") {
+                CarLookSettings()
+            }
+        }
+        item {
             Group("Car") {
                 TextSetting("Name shown to the head unit", p.carName) { p.carName = it }
                 TextSetting("WiFi Direct name (blank = any CarLife)", p.carP2pName) { p.carP2pName = it }
@@ -159,14 +164,6 @@ fun SettingsScreen(pad: PaddingValues) {
                 IntSetting("Frame rate", p.aaFps, rev) { p.aaFps = it }
                 IntSetting("Density", p.aaDensity, rev) { p.aaDensity = it }
                 BoolSetting("Start the head unit at launch", p.autoStartAa) { p.autoStartAa = it }
-            }
-        }
-        item {
-            Group("Launcher tiles") {
-                TextSetting("Maps package", p.mapsPackage) { p.mapsPackage = it }
-                TextSetting("Music package", p.musicPackage) { p.musicPackage = it }
-                TextSetting("Video package", p.videoPackage) { p.videoPackage = it }
-                TextSetting("Phone package", p.phonePackage) { p.phonePackage = it }
             }
         }
     }

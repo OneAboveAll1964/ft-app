@@ -1,5 +1,6 @@
 package app.ft
 
+import app.ft.ui.car.CarStyles
 import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -141,7 +142,10 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        if (intent.hasExtra("aaCorner")) app.prefs.aaCorner = intent.getIntExtra("aaCorner", 0)
+        if (intent.hasExtra("aaCorner")) {
+            app.prefs.aaCorner = intent.getIntExtra("aaCorner", 0)
+            CarStyles.reload()
+        }
         if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
         if (intent.getBooleanExtra("wifi", false)) CarLifeService.startWifi(this)
         if (intent.getBooleanExtra("auto", false)) CarLifeService.startAuto(this)
@@ -161,6 +165,16 @@ class MainActivity : ComponentActivity() {
         if (intent.hasExtra("btEcho")) CarLifeService.btEcho(intent.getBooleanExtra("btEcho", false))
         intent.getStringExtra("pkgMaps")?.let { app.prefs.mapsPackage = it }
         intent.getStringExtra("pkgVideo")?.let { app.prefs.videoPackage = it }
+        intent.getStringExtra("carTiles")?.let { app.prefs.carTiles = it; CarStyles.reload() }
+        intent.getStringExtra("carBackground")?.let { app.prefs.carBackground = it; CarStyles.reload() }
+        if (intent.hasExtra("carAccent")) {
+            app.prefs.carAccent = intent.getIntExtra("carAccent", app.prefs.carAccent)
+            CarStyles.reload()
+        }
+        if (intent.hasExtra("carClock24")) {
+            app.prefs.carClock24 = intent.getBooleanExtra("carClock24", true)
+            CarStyles.reload()
+        }
         intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }
     }
 

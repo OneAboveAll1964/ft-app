@@ -1,5 +1,6 @@
 package app.ft.ui.home
 
+import app.ft.ui.car.CarStyles
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -209,6 +210,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                     CornerPicker(aaCorner, app.prefs.aaWidth, app.prefs.aaHeight) {
                         aaCorner = it
                         app.prefs.aaCorner = it
+                        CarStyles.reload()
                     }
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalButton(
