@@ -84,6 +84,7 @@ class CarLifeSession(
     @Volatile private var newVehicle = false
     private var frames = 0L
     private val feed = VideoFeed(::videoPacket, ::videoEmpty)
+    private val media = MediaStream(::mediaPacket, ::moduleUpdate)
 
     fun start() {
         DiagLog.i(tag, "session start via ${link.name}")
@@ -106,6 +107,7 @@ class CarLifeSession(
         initSeen = false
         videoReady = false
         feed.close()
+        media.forget()
         unwatchScreen()
     }
 
@@ -128,20 +130,36 @@ class CarLifeSession(
         link.send(CarLifeProtocol.CH_VIDEO, CarLifeFraming.stream(id, ByteArray(0), videoClock()))
     }
 
-    fun sendAudio(pcm: ByteArray) {
-        link.send(CarLifeProtocol.CH_MEDIA, CarLifeFraming.stream(CarLifeProtocol.MEDIA_DATA, pcm))
+    fun sendAudio(pcm: ByteArray) = media.data(pcm)
+
+    fun mediaIdle(): Boolean = media.idle()
+
+    val musicOpen: Boolean get() = media.open
+
+    private fun mediaPacket(serviceId: Int, payload: ByteArray) {
+        val body = if (serviceId == CarLifeProtocol.MEDIA_DATA) crypto.encryptOut(payload) else payload
+        if (serviceId != CarLifeProtocol.MEDIA_DATA) DiagLog.d(tag, "media channel ${CarLifeProtocol.name(serviceId)}")
+        link.send(CarLifeProtocol.CH_MEDIA, CarLifeFraming.stream(serviceId, body))
     }
 
     fun sendVoiceStart(rate: Int, channels: Int) {
-        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_INIT, ProtoWriter().int32(1, rate).int32(2, channels).int32(3, 16).toByteArray()))
+        val r = if (rate in 4000..48000) rate else 16000
+        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_INIT, ProtoWriter().int32(1, r).int32(2, channels.coerceIn(1, 2)).int32(3, 16).toByteArray()))
+        moduleUpdate(CarLifeProtocol.MODULE_NAVI, 1)
     }
 
     fun sendVoice(pcm: ByteArray) {
-        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_DATA, pcm))
+        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_DATA, crypto.encryptOut(pcm)))
     }
 
     fun sendVoiceEnd() {
         link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_END, ByteArray(0)))
+        moduleUpdate(CarLifeProtocol.MODULE_NAVI, 0)
+    }
+
+    private fun moduleUpdate(module: Int, state: Int) {
+        if (!matched) return
+        cmd(CarLifeProtocol.CMD_MODULE_STATUS, ProtoWriter().int32(1, 1).message(2, ProtoWriter().int32(1, module).int32(2, state)).toByteArray())
     }
 
     private fun cmd(serviceId: Int, payload: ByteArray = ByteArray(0), quiet: Boolean = false) {
@@ -293,7 +311,6 @@ class CarLifeSession(
             }
             CarLifeProtocol.CMD_VIDEO_ENCODER_INIT -> onVideoInit(ProtoReader(c.payload))
             CarLifeProtocol.CMD_VIDEO_ENCODER_START -> {
-                link.send(CarLifeProtocol.CH_MEDIA, CarLifeFraming.stream(CarLifeProtocol.MEDIA_INIT, ProtoWriter().int32(1, 48000).int32(2, 2).int32(3, 16).toByteArray()))
                 val mode = feed.start()
                 projecting = true
                 frames = 0
@@ -345,7 +362,10 @@ class CarLifeSession(
                 DiagLog.i(tag, "HU authen result ${ProtoReader(c.payload).bool(1)}")
             }
             CarLifeProtocol.CMD_GO_TO_FOREGROUND -> DiagLog.i(tag, "head unit asked FT to come forward, it already draws on the car")
-            CarLifeProtocol.CMD_LAUNCH_MODE_NORMAL -> onLaunchMode?.invoke("normal")
+            CarLifeProtocol.CMD_LAUNCH_MODE_NORMAL -> {
+                media.launchedAgain()
+                onLaunchMode?.invoke("normal")
+            }
             CarLifeProtocol.CMD_LAUNCH_MODE_PHONE -> onLaunchMode?.invoke("phone")
             CarLifeProtocol.CMD_LAUNCH_MODE_MAP -> onLaunchMode?.invoke("map")
             CarLifeProtocol.CMD_LAUNCH_MODE_MUSIC -> onLaunchMode?.invoke("music")
@@ -386,6 +406,7 @@ class CarLifeSession(
             return
         }
         newVehicle = VideoPlans.newVehicle(major, minor)
+        media.oldVehicle = !newVehicle
         DiagLog.i(tag, "HU protocol $major.$minor")
         cmd(CarLifeProtocol.CMD_PROTOCOL_VERSION_MATCH_STATUS, ProtoWriter().int32(1, 1).toByteArray())
         matched = true
@@ -640,10 +661,9 @@ class CarLifeSession(
         val modules = listOf(
             CarLifeProtocol.MODULE_PHONE to 0,
             CarLifeProtocol.MODULE_NAVI to 0,
-            CarLifeProtocol.MODULE_MUSIC to 0,
+            CarLifeProtocol.MODULE_MUSIC to if (media.open) 1 else 0,
             CarLifeProtocol.MODULE_VR to 0,
-            CarLifeProtocol.MODULE_MIC to 0,
-            CarLifeProtocol.MODULE_CONNECT to 1
+            CarLifeProtocol.MODULE_MIC to 0
         )
         val w = ProtoWriter().int32(1, modules.size)
         for ((id, st) in modules) w.message(2, ProtoWriter().int32(1, id).int32(2, st))

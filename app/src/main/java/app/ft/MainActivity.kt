@@ -174,7 +174,7 @@ class MainActivity : ComponentActivity() {
         }
         if (intent.hasExtra("carSongInfo")) app.prefs.carSongInfo = intent.getBooleanExtra("carSongInfo", true)
         if (intent.hasExtra("guidance")) {
-            app.prefs.guidanceMode = intent.getIntExtra("guidance", CarAudioBus.GUIDANCE_IN_STEP)
+            app.prefs.guidanceMode = intent.getIntExtra("guidance", CarAudioBus.GUIDANCE_UNTOUCHED)
             CarAudioBus.guidance = app.prefs.guidanceMode
         }
         if (intent.hasExtra("carClock24")) {

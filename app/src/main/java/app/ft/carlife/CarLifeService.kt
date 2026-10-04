@@ -184,9 +184,21 @@ class CarLifeService : Service() {
     private fun startWriter() {
         if (writer?.isAlive == true) return
         writer = Thread {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             while (!Thread.currentThread().isInterrupted) {
-                val pcm = runCatching { outbound.take() }.getOrNull() ?: break
-                session?.sendAudio(pcm)
+                val pcm = try {
+                    outbound.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } catch (_: InterruptedException) {
+                    break
+                }
+                val s = session ?: continue
+                if (pcm == null) {
+                    if (s.mediaIdle()) DiagLog.i(tag, "sound to the car stopped, told the car the music paused")
+                    continue
+                }
+                val first = !s.musicOpen
+                s.sendAudio(pcm)
+                if (first && s.musicOpen) DiagLog.i(tag, "sound to the car started, told the car the music is playing")
             }
         }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-audio-out"; start() }
     }
@@ -213,6 +225,7 @@ class CarLifeService : Service() {
     private fun startVoiceWriter() {
         if (voiceWriter?.isAlive == true) return
         voiceWriter = Thread {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             try {
                 while (true) {
                     val c = voiceOut.poll(500, java.util.concurrent.TimeUnit.MILLISECONDS)

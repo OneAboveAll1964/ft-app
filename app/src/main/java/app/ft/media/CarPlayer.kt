@@ -82,6 +82,7 @@ object CarPlayer {
 
     private val tee = TeeAudioProcessor(object : TeeAudioProcessor.AudioBufferSink {
         override fun flush(sampleRateHz: Int, channelCount: Int, encoding: Int) {
+            if (sampleRateHz != rate && sampleRateHz != CAR_RATE) DiagLog.w(tag, "player sound reaches the car path at $sampleRateHz Hz, converting it on the way")
             rate = sampleRateHz
             channels = channelCount
             if (encoding != C.ENCODING_PCM_16BIT) DiagLog.w(tag, "player sound is not 16-bit pcm ($encoding), the car may not get it")
@@ -102,6 +103,17 @@ object CarPlayer {
         }
     })
 
+    private class CarRate(private val sonic: SonicAudioProcessor = SonicAudioProcessor()) : AudioProcessor by sonic {
+        override fun configure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+            sonic.setOutputSampleRateHz(CAR_RATE)
+            val out = sonic.configure(inputAudioFormat)
+            if (inputAudioFormat.sampleRate != CAR_RATE) DiagLog.i(tag, "player sound at ${inputAudioFormat.sampleRate} Hz, resampled to $CAR_RATE Hz for the car")
+            return out
+        }
+
+        override fun getDurationAfterProcessorApplied(durationUs: Long): Long = sonic.getDurationAfterProcessorApplied(durationUs)
+    }
+
     private fun firstTwo(pcm: ByteArray, count: Int): ByteArray {
         val frames = pcm.size / (2 * count)
         val out = ByteArray(frames * 4)
@@ -120,9 +132,8 @@ object CarPlayer {
         val app = context.applicationContext
         val renderers = object : DefaultRenderersFactory(app) {
             override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
-                val sonic = SonicAudioProcessor().apply { setOutputSampleRateHz(CAR_RATE) }
                 return DefaultAudioSink.Builder(context)
-                    .setAudioProcessors(arrayOf<AudioProcessor>(sonic, tee))
+                    .setAudioProcessors(arrayOf<AudioProcessor>(CarRate(), tee))
                     .build()
             }
         }

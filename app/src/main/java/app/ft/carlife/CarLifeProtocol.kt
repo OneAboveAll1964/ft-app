@@ -132,8 +132,7 @@ object CarLifeProtocol {
     const val MODULE_NAVI = 2
     const val MODULE_MUSIC = 3
     const val MODULE_VR = 4
-    const val MODULE_MIC = 5
-    const val MODULE_CONNECT = 6
+    const val MODULE_MIC = 6
 
     fun name(id: Int): String = when (id) {
         CMD_HU_PROTOCOL_VERSION -> "HU_PROTOCOL_VERSION"

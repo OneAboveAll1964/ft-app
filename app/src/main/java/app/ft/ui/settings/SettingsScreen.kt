@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
+import app.ft.core.CarAudioBus
 import app.ft.projection.VideoPlans
 
 @Composable
@@ -113,27 +114,28 @@ fun SettingsScreen(pad: PaddingValues) {
 }
 
 private val GUIDANCE = listOf(
-    "In step" to "The music dips exactly while directions speak. On drives where the car holds the music longer, directions wait for it.",
-    "On time" to "Directions speak the moment they arrive and the music dips with them, which on some drives reaches the car late.",
-    "Untouched" to "Directions speak the moment they arrive, over the music as it is."
+    Triple(CarAudioBus.GUIDANCE_UNTOUCHED, "Like Baidu", "Directions go to the car on their own channel the moment they arrive and the car decides how the music sits under them, the way Baidu CarLife does it."),
+    Triple(CarAudioBus.GUIDANCE_IN_STEP, "In step", "FT mixes directions into the music and dips the music exactly while they speak. On drives where the car holds the music longer, directions wait for it."),
+    Triple(CarAudioBus.GUIDANCE_DIP, "On time", "Directions speak the moment they arrive and FT dips the music with them, which on some drives reaches the car late.")
 )
 
 @Composable
 private fun GuidanceSetting() {
     val p = FTApp.instance.prefs
-    var mode by remember { mutableIntStateOf(p.guidanceMode.coerceIn(0, GUIDANCE.size - 1)) }
+    var mode by remember { mutableIntStateOf(p.guidanceMode) }
+    val chosen = GUIDANCE.firstOrNull { it.first == mode } ?: GUIDANCE.first()
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Directions over music", style = MaterialTheme.typography.bodyLarge)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GUIDANCE.forEachIndexed { i, (label, _) ->
-                ValueChip(label, mode == i, Modifier.weight(1f)) {
-                    mode = i
-                    p.guidanceMode = i
-                    app.ft.core.CarAudioBus.guidance = i
+            GUIDANCE.forEach { (value, label, _) ->
+                ValueChip(label, chosen.first == value, Modifier.weight(1f)) {
+                    mode = value
+                    p.guidanceMode = value
+                    CarAudioBus.guidance = value
                 }
             }
         }
-        Text(GUIDANCE[mode].second, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(chosen.third, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
