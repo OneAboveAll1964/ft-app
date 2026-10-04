@@ -130,7 +130,9 @@ class CarLifeSession(
         link.send(CarLifeProtocol.CH_VIDEO, CarLifeFraming.stream(id, ByteArray(0), videoClock()))
     }
 
-    fun sendAudio(pcm: ByteArray) = media.data(pcm)
+    fun sendAudio(pcm: ByteArray) {
+        if (matched) media.data(pcm)
+    }
 
     fun mediaIdle(): Boolean = media.idle()
 
@@ -406,6 +408,7 @@ class CarLifeSession(
             return
         }
         newVehicle = VideoPlans.newVehicle(major, minor)
+        media.forget()
         media.oldVehicle = !newVehicle
         DiagLog.i(tag, "HU protocol $major.$minor")
         cmd(CarLifeProtocol.CMD_PROTOCOL_VERSION_MATCH_STATUS, ProtoWriter().int32(1, 1).toByteArray())
