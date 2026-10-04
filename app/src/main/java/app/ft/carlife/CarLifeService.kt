@@ -892,7 +892,10 @@ class CarLifeService : Service() {
         val (x, y) = carDisplay.toContent(raw.x, raw.y)
         val second = if (raw.x2 >= 0 && raw.y2 >= 0) carDisplay.toContent(raw.x2, raw.y2) else -1 to -1
         val t = raw.copy(x = x, y = y, x2 = second.first, y2 = second.second)
-        if (t.action == CarTouch.DOWN) touchFt = CarTouchZones.hit(x, y)
+        if (t.action == CarTouch.DOWN) {
+            touchFt = CarTouchZones.hit(x, y)
+            DiagLog.i(tag, "car touched ${raw.x},${raw.y} of its picture, ${x},${y} on FT's screen")
+        }
         if (touchFt) {
             carDisplay.dispatchTouch(t)
             return

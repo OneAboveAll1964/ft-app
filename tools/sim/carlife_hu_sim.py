@@ -24,7 +24,13 @@ VIDEO_ENCODER_INIT = 0x00018007
 VIDEO_ENCODER_INIT_DONE = 0x00010008
 VIDEO_ENCODER_START = 0x00018009
 VIDEO_ENCODER_PAUSE = 0x0001800A
+SCREEN_ON = 0x00010018
+SCREEN_USERPRESENT = 0x0001001A
 FOREGROUND = 0x0001001B
+LAUNCH_MODE_NORMAL = 0x0001801D
+CARLIFE_DATA_SUBSCRIBE = 0x00018043
+CARLIFE_DATA_SUBSCRIBE_DONE = 0x00010044
+FRAME_RATE_CHANGE_DONE = 0x0001000D
 GO_TO_FOREGROUND = 0x00018025
 GO_TO_FOREGROUND_RESPONSE = 0x0001004C
 MODULE_STATUS = 0x00010026
@@ -56,6 +62,10 @@ TTS_INIT = 0x00040001
 TTS_END = 0x00040002
 TTS_DATA = 0x00040003
 TOUCH_ACTION = 0x00068001
+TOUCH_DOWN = 0x00068002
+TOUCH_UP = 0x00068003
+TOUCH_MOVE = 0x00068004
+TOUCH_SINGLE_CLICK = 0x00068005
 CAR_HARD_KEY_CODE = 0x00068008
 
 NAMES = {v: k for k, v in list(globals().items()) if k.isupper() and isinstance(v, int) and v > 0xFFFF}
@@ -118,6 +128,7 @@ class WifiLink:
         self.aes = None
         self.plain_after_key = 0
         self.audio = []
+        self.video_clock = []
         for ch, port in ports.items():
             s = socket.create_connection((host, port), timeout=10)
             s.settimeout(None)
@@ -142,8 +153,10 @@ class WifiLink:
                 ln = struct.unpack(">H", head[:2])[0] if hl == 8 else struct.unpack(">I", head[:4])[0]
                 body = read_exact(s, ln) if ln else b""
                 sid, payload = parse_inner(ch, head, body)
+                if ch == CH_VIDEO:
+                    self.video_clock.append((time.time(), struct.unpack(">I", head[4:8])[0], sid))
                 if ch in (CH_MEDIA, CH_TTS):
-                    self.audio.append((time.time(), ch, sid, payload))
+                    self.audio.append((time.time(), ch, sid, payload, self.aes))
                     if sid in (MEDIA_DATA, TTS_DATA):
                         continue
                 self.q.put((ch, sid, self._unwrap(ch, payload)))
@@ -174,6 +187,8 @@ class Sim:
         self.seen = []
         self.songs = []
         self.positions = []
+        self.modules = []
+        self.marks = []
         self.crash_on_song = False
 
     def send_cmd(self, sid, payload=b""):
@@ -194,12 +209,21 @@ class Sim:
         if s == -1:
             raise RuntimeError("link error: %s" % p.decode(errors="replace"))
         if ch == CH_VIDEO and s == VIDEO_DATA:
+            if not p:
+                self.marks.append((time.time(), "empty"))
+                return None
             self.video.append(p)
             self.video_times.append(time.time())
+            self.marks.append((time.time(), "frame"))
             return None
         if ch == CH_VIDEO and s == VIDEO_HEARTBEAT:
             self.heartbeats += 1
+            self.marks.append((time.time(), "beat"))
             return None
+        if ch == CH_CMD and s == MODULE_STATUS:
+            d = decode(p)
+            items = [(first(decode(m), 1, 0), first(decode(m), 2, 0)) for m in d.get(2, [])]
+            self.modules.append((time.time(), first(d, 1, 0), items))
         if ch == CH_CMD and s == MEDIA_PROGRESS_BAR:
             self.positions.append((time.time(), first(decode(p), 1, 0)))
             return None
@@ -257,6 +281,16 @@ class Sim:
         self.send_ctrl(TOUCH_ACTION, f_varint(1, 0) + f_varint(2, x) + f_varint(3, y))
         time.sleep(0.09)
         self.send_ctrl(TOUCH_ACTION, f_varint(1, 1) + f_varint(2, x) + f_varint(3, y))
+
+    def tap_points(self, x, y):
+        self.log("HU -> touch down/up messages (%d,%d)" % (x, y))
+        self.send_ctrl(TOUCH_DOWN, f_varint(1, x) + f_varint(2, y))
+        time.sleep(0.09)
+        self.send_ctrl(TOUCH_UP, f_varint(1, x) + f_varint(2, y))
+
+    def click(self, x, y):
+        self.log("HU -> single click (%d,%d)" % (x, y))
+        self.send_ctrl(TOUCH_SINGLE_CLICK, f_varint(1, x) + f_varint(2, y))
 
 
 def video_stats(frames):
@@ -321,9 +355,32 @@ def write_wav(path, pcm, rate, channels):
         w.writeframes(pcm)
 
 
+def clear_audio(audio):
+    keyed = {}
+    for i, (t, ch, sid, p, key) in enumerate(audio):
+        if key and p and sid in (MEDIA_DATA, TTS_DATA) and len(p) % 16 == 0:
+            keyed.setdefault(key, []).append(i)
+    plain = [(t, ch, sid, p) for t, ch, sid, p, key in audio]
+    for key, idx in keyed.items():
+        blob = b"".join(audio[i][3] for i in idx)
+        out = subprocess.run(["openssl", "enc", "-d", "-aes-128-ecb", "-K", key.encode("utf-8").hex(), "-nosalt", "-nopad"], input=blob, capture_output=True, check=True).stdout
+        at = 0
+        for i in idx:
+            n = len(audio[i][3])
+            chunk = out[at:at + n]
+            at += n
+            pad = chunk[-1] if chunk else 0
+            if 1 <= pad <= 16 and chunk.endswith(bytes([pad]) * pad):
+                chunk = chunk[:-pad]
+            t, ch, sid, _ = plain[i]
+            plain[i] = (t, ch, sid, chunk)
+    return plain
+
+
 def analyse_audio(audio, out):
     if not audio:
         return None
+    audio = clear_audio(audio)
     t0 = audio[0][0]
     media = [(t, len(p)) for t, ch, sid, p in audio if ch == CH_MEDIA and sid == MEDIA_DATA]
     tts = [(t, len(p)) for t, ch, sid, p in audio if ch == CH_TTS and sid == TTS_DATA]
@@ -347,6 +404,42 @@ def analyse_audio(audio, out):
         "first_media_at": round(media[0][0] - t0, 3) if media else None,
         "first_tts_at": round(tts[0][0] - t0, 3) if tts else None,
     }
+
+
+def baidu_size(w, h, new_vehicle=False):
+    wide = new_vehicle and h > 0 and w / h >= 2.3
+    if w < 800:
+        return 768, 432
+    if w < 1024:
+        return (1024, 384) if wide else (848, 480)
+    if w < 1280:
+        return (1024, 384) if wide else (1024, 576)
+    if w < 1920:
+        return (1280, 480) if wide else (1280, 720)
+    if new_vehicle:
+        return (1920, 720) if wide else (1920, 1080)
+    return 1280, 720
+
+
+def pauses(marks, events):
+    out = []
+    for i, (kind, at) in enumerate(events):
+        if kind != "pause":
+            continue
+        back = next((t for k, t in events[i + 1:] if k == "start"), None)
+        if back is None:
+            continue
+        during = [k for t, k in marks if at + 0.3 <= t < back]
+        after = [(t, k) for t, k in marks if t >= back]
+        first_frame = next((t for t, k in after if k == "frame"), None)
+        out.append({
+            "paused_for": round(back - at, 2),
+            "frames_while_paused": during.count("frame"),
+            "heartbeats_while_paused": during.count("beat"),
+            "first_frame_after": round(first_frame - back, 3) if first_frame else None,
+            "heartbeats_before_first_frame": len([1 for t, k in after if k == "beat" and (first_frame is None or t < first_frame)]),
+        })
+    return out
 
 
 def feature_list(encrypt):
@@ -373,6 +466,7 @@ def main():
     ap.add_argument("--out", default="/tmp/ft_carlife")
     ap.add_argument("--listen-seconds", type=float, default=0.0)
     ap.add_argument("--crash-on-song", action="store_true")
+    ap.add_argument("--protocol", default="1.0")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -384,25 +478,40 @@ def main():
     sim = Sim(link, log)
     sim.crash_on_song = a.crash_on_song
     result = {"encrypt": bool(a.encrypt), "ok": False, "checks": {}, "segments": []}
+    major, minor = [int(v) for v in a.protocol.split(".")]
+    new_vehicle = major == 4 or (major == 3 and minor == 2)
+    events = []
     try:
-        sim.send_cmd(HU_PROTOCOL_VERSION, f_varint(1, 1) + f_varint(2, 0))
+        sim.send_cmd(HU_PROTOCOL_VERSION, f_varint(1, major) + f_varint(2, minor))
         _, _, pl = sim.wait_for(PROTOCOL_VERSION_MATCH_STATUS)
         result["checks"]["version_match"] = first(decode(pl), 1) == 1
         t_match = time.time()
+        sim.wait_for(FOREGROUND, timeout=3.0)
+        result["checks"]["foreground_after_match"] = True
+        _, _, pl = sim.wait_for(MD_INFO, timeout=3.0)
+        d = decode(pl)
+        result["checks"]["md_info_before_hu_info"] = first(d, 1, b"").decode() == "Android" and len(first(d, 14, b"")) > 0
+        result["md_model"] = first(d, 14, b"").decode(errors="replace")
+        _, _, pl = sim.wait_for(MODULE_STATUS, timeout=3.0)
+        md = decode(pl)
+        ids = sorted(first(decode(m), 1, 0) for m in md.get(2, []))
+        result["module_list"] = ids
+        result["checks"]["module_list_like_baidu"] = first(md, 1) == 5 and ids == [1, 2, 3, 4, 6]
 
         sim.send_cmd(STATISTIC_INFO, f_str(1, "cuid") + f_str(2, "1.0") + f_varint(3, 1) + f_str(4, "sim") + f_varint(5, 1) + f_varint(6, 1) + f_varint(7, 1))
-        sim.send_cmd(HU_INFO, f_str(1, "FT-HU-SIM") + f_str(2, "desay") + f_str(14, "G6SA"))
-
+        if not new_vehicle:
+            _, _, pl = sim.wait_for(MD_AUTHEN_RESULT)
+            result["checks"]["authen_result_true"] = first(decode(pl), 1) == 1
         sim.wait_for(MD_FEATURE_CONFIG_REQUEST, timeout=3.0)
-        result["checks"]["feature_config_requested"] = True
+        result["checks"]["feature_config_after_statistics"] = True
         sim.send_cmd(HU_FEATURE_CONFIG_RESPONSE, feature_list(a.encrypt))
-
-        _, _, pl = sim.wait_for(MD_INFO)
-        d = decode(pl)
-        result["checks"]["md_info"] = first(d, 1, b"").decode() == "Android" and len(first(d, 14, b"")) > 0
-        result["md_model"] = first(d, 14, b"").decode(errors="replace")
-        _, _, pl = sim.wait_for(MD_AUTHEN_RESULT)
-        result["checks"]["authen_result_true"] = first(decode(pl), 1) == 1
+        sim.send_cmd(HU_INFO, f_str(1, "FT-HU-SIM") + f_str(2, "desay") + f_str(14, "G6SA"))
+        sim.send_cmd(CARLIFE_DATA_SUBSCRIBE, f_varint(1, 1) + f_bytes(2, f_varint(1, 0)))
+        _, _, pl = sim.wait_for(CARLIFE_DATA_SUBSCRIBE_DONE, timeout=3.0)
+        sd = decode(pl)
+        items = [(first(decode(m), 1, -1), first(decode(m), 2, -1)) for m in sd.get(2, [])]
+        result["subscribe_done"] = items
+        result["checks"]["subscribe_answered"] = first(sd, 1) == 1 and items == [(0, 0)]
 
         sim.send_cmd(HU_BT_PAIR_INFO, f_str(1, "00:11:22:33:44:55") + f_str(5, "0000110a-0000-1000-8000-00805f9b34fb") + f_str(6, "FT-HU-SIM") + f_varint(7, 0))
         _, _, pl = sim.wait_for(MD_BT_PAIR_INFO)
@@ -428,21 +537,24 @@ def main():
 
         while time.time() - t_match < a.hold_init:
             sim.drain(0.2)
-        result["heartbeats_before_init"] = sim.heartbeats
-        result["checks"]["heartbeat_before_init"] = sim.heartbeats >= max(1, int(a.hold_init) - 1)
+        result["video_before_start"] = len(sim.marks)
+        result["checks"]["no_video_before_start"] = len(sim.marks) == 0
+        result["md_info_count"] = sim.seen.count(MD_INFO)
+        result["checks"]["md_info_sent_once"] = sim.seen.count(MD_INFO) == 1
 
         init = f_varint(1, a.width) + f_varint(2, a.height) + f_varint(3, a.fps)
         sim.send_cmd(VIDEO_ENCODER_INIT, init)
         _, _, pl = sim.wait_for(VIDEO_ENCODER_INIT_DONE)
-        result["checks"]["init_done_echo"] = pl == init
+        di = decode(pl)
+        want = baidu_size(a.width, a.height, new_vehicle)
+        result["init_done"] = [first(di, 1, -1), first(di, 2, -1), first(di, 3, -1)]
+        result["checks"]["init_done_stream_size"] = (first(di, 1, -1), first(di, 2, -1)) == want and first(di, 3, -1) == a.fps
+        result["stream"] = list(want)
         sim.wait_for(FOREGROUND)
-        _, _, pl = sim.wait_for(MODULE_STATUS)
-        result["checks"]["module_status"] = first(decode(pl), 1) == 6
 
+        sim.send_cmd(LAUNCH_MODE_NORMAL)
         sim.send_cmd(VIDEO_ENCODER_START)
-        _, _, pl = sim.wait_for(MEDIA_INIT)
-        dm = decode(pl)
-        result["checks"]["media_init"] = first(dm, 1) == 48000 and first(dm, 2) == 2 and first(dm, 3) == 16
+        events.append(("start", time.time()))
 
         sim.send_cmd(HU_AUTHEN_REQUEST, f_str(1, "r4nd0m"))
         _, _, pl = sim.wait_for(MD_AUTHEN_RESPONSE)
@@ -452,6 +564,8 @@ def main():
         st = video_stats(sim.video)
         result["video_launcher"] = st
         result["checks"]["video_flowing"] = st["frames"] >= int(a.seconds * 5) and st["sps"] > 0 and st["pps"] > 0 and st["idr"] > 0
+        result["first_frame_nals"] = nal_types(sim.video[0])[:4] if sim.video else []
+        result["checks"]["first_frame_carries_the_header"] = bool(sim.video) and nal_types(sim.video[0])[:3] == [7, 8, 5]
         write_h264(os.path.join(a.out, "launcher.h264"), sim.video)
         log("launcher video: %s" % st)
 
@@ -478,6 +592,26 @@ def main():
                     sid = int(xy[4:], 16)
                     sim.send_cmd(sid, f_varint(1, 3) + f_varint(2, 1) if sid == MODULE_CONTROL else b"")
                     continue
+                if xy == "pause":
+                    events.append(("pause", time.time()))
+                    sim.send_cmd(VIDEO_ENCODER_PAUSE)
+                    continue
+                if xy == "start":
+                    events.append(("start", time.time()))
+                    sim.send_cmd(LAUNCH_MODE_NORMAL)
+                    sim.send_cmd(VIDEO_ENCODER_START)
+                    continue
+                if xy.startswith("music:"):
+                    sim.send_cmd(MODULE_CONTROL, f_varint(1, 3) + f_varint(2, int(xy[6:])))
+                    continue
+                if xy.startswith("points:") or xy.startswith("click:"):
+                    px, py = [int(v) for v in xy.split(":")[1].split(",")]
+                    result.setdefault("tap_clock", []).append([px, py, round(time.time(), 3)])
+                    if xy.startswith("points:"):
+                        sim.tap_points(px, py)
+                    else:
+                        sim.click(px, py)
+                    continue
                 x, y = [int(v) for v in xy.split(",")]
                 marks.append((x, y, len(sim.video)))
                 result.setdefault("tap_clock", []).append([x, y, round(time.time(), 3)])
@@ -502,10 +636,17 @@ def main():
             sim.drain(1.0)
 
         sim.send_cmd(GO_TO_FOREGROUND)
-        sim.wait_for(GO_TO_FOREGROUND_RESPONSE)
-        result["checks"]["go_to_foreground"] = True
+        sim.drain(1.0)
+        result["checks"]["go_to_foreground_left_alone"] = GO_TO_FOREGROUND_RESPONSE not in sim.seen
         result["heartbeats"] = sim.heartbeats
-        result["checks"]["heartbeat"] = sim.heartbeats >= 1
+        result["pauses"] = pauses(sim.marks, events)
+        sps = video_stats(sim.video)["sps"]
+        result["sps_total"] = sps
+        result["checks"]["header_sent_once"] = sps == 1
+        clocks = [ts for t, ts, sid in link.video_clock]
+        now_s = int(time.time())
+        result["checks"]["video_clock_in_seconds"] = bool(clocks) and all(abs(ts - now_s) < 600 for ts in clocks)
+        result["module_events"] = [[round(t - (link.audio[0][0] if link.audio else t), 3), cnt, items] for t, cnt, items in sim.modules]
         if a.encrypt:
             result["plain_after_key"] = link.plain_after_key
             result["checks"]["everything_encrypted_after_key"] = link.plain_after_key == 0

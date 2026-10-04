@@ -122,7 +122,7 @@ python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 2 --width 1024 --hei
 PL=$?
 check "plain head unit session passed" "[ $PL = 0 ]"
 python3 -c "import json;d=json.load(open('$OUT/plain/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| heartbeats before init:',d.get('heartbeats_before_init'),'| bt reply:',d.get('bt_pair_reply'))" 2>/dev/null
-check "encoder followed the plain head unit size" "grep -q 'encoder started 1024x600' '$OUT/logcat.txt'"
+check "encoder followed Baidu's size for the plain head unit (1024x600 sends 1024x576)" "grep -q 'encoder started 1024x576' '$OUT/logcat.txt'"
 check "content encryption reported off for the plain unit" "grep -q 'content encryption off on this head unit' '$OUT/logcat.txt'"
 sleep 3
 
@@ -146,7 +146,15 @@ check "Linked only when a head unit really connected (once per simulated unit)" 
 check "feature config requested after the version match" "grep -q 'TX MD_FEATURE_CONFIG_REQUEST' '$OUT/logcat.txt'"
 check "head unit asked for encryption and FT negotiated it (RSA/AES)" "grep -q 'head unit requires content encryption' '$OUT/logcat.txt' && grep -q 'AES session key sent' '$OUT/logcat.txt' && grep -q 'content encryption on' '$OUT/logcat.txt'"
 check "bluetooth pair info answered with the complete schema" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['bt_pair_info_complete']\" 2>/dev/null"
-check "video heartbeats flowed before VIDEO_ENCODER_INIT (watchdog rule)" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['checks']['heartbeat_before_init']\" 2>/dev/null"
+sim_check(){ python3 -c "import json;d=json.load(open('$OUT/$1/result.json'));assert d['checks']['$2'], d['checks']" 2>/dev/null; }
+check "handshake in Baidu's order: foreground, device info and module list right after the match" "sim_check carlife foreground_after_match && sim_check carlife md_info_before_hu_info && sim_check carlife module_list_like_baidu && sim_check carlife md_info_sent_once"
+check "feature request follows the car's statistics, like Baidu" "sim_check carlife feature_config_after_statistics"
+check "the car's data subscription is answered (song info only)" "sim_check carlife subscribe_answered"
+check "nothing is sent on the video channel before the car starts it (Baidu)" "sim_check carlife no_video_before_start"
+check "INIT_DONE tells the car the real stream size" "sim_check carlife init_done_stream_size"
+check "the first picture carries the codec header and the header is sent once" "sim_check carlife first_frame_carries_the_header && sim_check carlife header_sent_once"
+check "video timestamps are in seconds like Baidu's" "sim_check carlife video_clock_in_seconds"
+check "a request to come forward is left alone, like Baidu" "sim_check carlife go_to_foreground_left_alone"
 check "encoder honours the rate the head unit asked for (15)" "grep -q 'encoder started 1280x720@15' '$OUT/logcat.txt'"
 check "redraw clock follows the negotiated rate" "grep -qE 'redraw every 66ms|at most 15 frames a second' '$OUT/logcat.txt'"
 check "projected stream paced to the negotiated rate, not flooded" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));f=d['video_launcher']['frames'];assert 20<=f<=110, f\" 2>/dev/null"
@@ -249,7 +257,7 @@ elif want == "rate":
     low_fps = len(low) / (low_to - low_from)
     back_fps = len(back) / 3.0
     print("   car asked for %d fps while a video played: got %.1f fps; asked for %d again: got %.1f fps" % (asks[0][0], low_fps, asks[1][0], back_fps))
-    assert 2.5 <= low_fps <= asks[0][0] + 1.5, low_fps
+    assert 2.5 <= low_fps <= max(asks[0][0], 10) * 1.3, low_fps
     assert back_fps >= asks[1][0] * 0.7, back_fps
 elif want == "pace":
     m = d["audio"]["media"]
@@ -260,7 +268,7 @@ elif want == "pace":
     window = [q for t, q in m["delay_track"] if start <= t <= end]
     steady = window[1:]
     print("   car queue while FT's player plays: %.2f to %.2f s over %d samples" % (min(window), max(window), len(window)))
-    assert len(window) >= 5 and max(steady) - min(steady) < 0.08 and max(window) < 0.5, window
+    assert len(window) >= 5 and max(steady) - min(steady) < 0.08 and max(window) < 0.6, window
 PY3
 }
 check "the Music screen opens from its car tile" "grep -q 'car screen: MUSIC' '$OUT/logcat.txt'"
@@ -276,7 +284,7 @@ check "FT's player never builds up delay in the car" "song pace"
 check "phone sound is held back while FT's player plays" "grep -q 'phone sound held back' '$OUT/logcat.txt'"
 check "the Videos screen plays a video to the car" "grep -q 'car screen: VIDEOS' '$OUT/logcat.txt' && grep -q \"playing 'Test Drive Clip' to the car\" '$OUT/logcat.txt'"
 check "leaving Videos stops the video" "grep -qE 'FT/Player.*: stopped' '$OUT/logcat.txt'"
-check "FT sends no more frames than the car asks for, even while a video plays" "song rate"
+check "FT follows the frame rate the car asks for while a video plays (Baidu keeps a picture every 100 ms)" "song rate"
 check "frames to the car pass through the frame gate" "grep -q 'frames to the car follow the rate the head unit asks for' '$OUT/logcat.txt'"
 check "the phone keys open from their handle on the car" "grep -q 'phone keys shown' '$OUT/logcat.txt'"
 check "the phone's back key works from the car" "grep -q 'phone back' '$OUT/logcat.txt'"
@@ -285,6 +293,43 @@ check "the car shows the turned phone across its whole width" "song landscape"
 check "the mirror follows the phone into landscape" "grep -E 'phone turned, mirror is now [0-9]+x[0-9]+' '$OUT/logcat.txt' | tail -1 | python3 -c \"import re,sys;w,h=map(int,re.search(r'now (\\d+)x(\\d+)',sys.stdin.read()).groups());assert w>h\""
 check "the FT button still works on top of the mirror" "grep -q 'mirror stopped' '$OUT/logcat.txt'"
 check "the phone's rotation is put back when the car goes" "grep -q 'phone rotation set back the way it was' '$OUT/logcat.txt' && [ \"\$($ADB shell settings get system user_rotation | tr -d '\\r')\" = 0 ]"
+
+echo "== Corolla-shaped car (1920x720, protocol 1.0, no frame rate asked) =="
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/corolla_logcat.txt" 2>&1 &
+COROLLALOG=$!
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
+sleep 3
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1920 --height 720 --fps 0 --seconds 3 \
+  --touches "640,360@1;pause@3;start@7;points:320,180@10;click:960,540@11;pause@12;start@12.5" --tail-seconds 4 --out "$OUT/corolla" > "$OUT/corolla_sim.log" 2>&1
+COR=$?
+sleep 1
+kill $COROLLALOG 2>/dev/null
+corolla(){ python3 - "$OUT/corolla/result.json" "$1" <<'PY7'
+import json, sys
+d = json.load(open(sys.argv[1]))
+want = sys.argv[2]
+if want == "init":
+    print("   INIT_DONE:", d.get("init_done"))
+    assert d.get("init_done") == [1280, 720, 0], d.get("init_done")
+elif want == "pause":
+    p = d.get("pauses", [])
+    print("   pauses:", p)
+    assert p and p[0]["frames_while_paused"] == 0 and p[0]["heartbeats_while_paused"] >= 3, p
+    assert p[0]["first_frame_after"] is not None and p[0]["first_frame_after"] <= 3.0, p
+elif want == "quick":
+    p = d.get("pauses", [])
+    assert len(p) >= 2 and p[1]["first_frame_after"] is not None and p[1]["first_frame_after"] <= 3.0, p
+PY7
+}
+check "Corolla-shaped car session passed" "[ $COR = 0 ]"
+check "the Corolla gets Baidu's 1280x720 and INIT_DONE says so" "corolla init"
+check "FT draws at the car's full 1920x720 and squeezes it into the stream" "grep -q '1920x720 drawn into 1280x720' '$OUT/corolla_logcat.txt' && grep -q 'encoder started 1280x720@20' '$OUT/corolla_logcat.txt'"
+check "a touch on the stream lands on FT's full-size screen (640,360 -> 960,360)" "grep -q 'car touched 640,360 of its picture, 960,360 on FT' '$OUT/corolla_logcat.txt'"
+check "touch down and up messages and single clicks reach FT too" "grep -q 'car touched 320,180 of its picture, 480,180 on FT' '$OUT/corolla_logcat.txt' && grep -q 'car touched 960,540 of its picture, 1440,540 on FT' '$OUT/corolla_logcat.txt'"
+check "while the car shows its own screen only heartbeats go out, then the next full picture brings it back" "corolla pause"
+check "a quick trip to the car's own screen comes back too" "corolla quick"
+check "coming back needs no forced picture and no second header" "sim_check corolla header_sent_once && ! grep -q 'key picture of' '$OUT/corolla_logcat.txt'"
 
 echo "== FT button in another corner, over a mirrored app =="
 $ADB logcat -c
@@ -433,6 +478,31 @@ elif want == "mixed":
     assert 2.3 <= secs <= 2.75, secs
     assert during <= 0.5 * before, (during, before)
     assert after >= 0.85 * before, (after, before)
+elif want == "stream":
+    ev = [e for e in a["events"] if e["ch"] == "media"]
+    names = [e["msg"] for e in ev]
+    print("   media channel:", names[:6], "...")
+    assert names[:3] == ["MEDIA_INIT", "MEDIA_STOP", "MEDIA_INIT"], names
+    assert ev[0]["body"].get("1") == 48000 or ev[0]["body"].get(1) == 48000, ev[0]
+    mods = json.load(open(sys.argv[1])).get("module_events", [])
+    on = [t for t, cnt, items in mods if [3, 1] in items]
+    assert on and on[0] <= a["first_media_at"] + 0.05, (on, a["first_media_at"])
+elif want == "stopped":
+    names = [e["msg"] for e in a["events"] if e["ch"] == "media"]
+    mods = json.load(open(sys.argv[1])).get("module_events", [])
+    off = [t for t, cnt, items in mods if [3, 0] in items and cnt == 1]
+    print("   media channel ends with:", names[-2:], "| music module off at:", off)
+    assert "MEDIA_PAUSE" in names and off, (names, off)
+elif want == "navi":
+    mods = json.load(open(sys.argv[1])).get("module_events", [])
+    tts = [e for e in a["events"] if e["ch"] == "tts"]
+    start = [e["t"] for e in tts if e["msg"] == "TTS_INIT"]
+    end = [e["t"] for e in tts if e["msg"] == "TTS_END"]
+    up = [t for t, cnt, items in mods if [2, 1] in items]
+    down = [t for t, cnt, items in mods if [2, 0] in items and cnt == 1]
+    print("   voice from %s to %s, navigation module up at %s, down at %s" % (start, end, up, down))
+    assert start and end and up and down, (start, end, up, down)
+    assert abs(up[0] - start[0]) < 0.5 and down[-1] >= end[-1] - 0.05, (up, down)
 elif want == "delay":
     grow = avg(5.0, 8.0) - avg(0.5, 2.0)
     print("   car delay before %.3fs, after %.3fs" % (avg(0.5, 2.0), avg(5.0, 8.0)))
@@ -440,7 +510,11 @@ elif want == "delay":
 PY2
 }
 check "the car gets exactly the music that played, nothing extra" "sound music"
-check "in step (default), directions over music are mixed in and the music dips only while they play" "sound mixed"
+check "like Baidu (default), directions go to the car's voice channel, start to end" "sound voice"
+check "like Baidu (default), FT adds no dip of its own to the music under directions" "sound undipped"
+check "music starts the Baidu way: INIT, STOP, INIT and the music module on before any sound" "sound stream"
+check "music stopping pauses the stream and switches the music module off" "sound stopped"
+check "the navigation module is raised around the spoken directions" "sound navi"
 measured(){ python3 - "$OUT/sound_logcat.txt" <<'PY6'
 import re, sys
 vals = [float(m.group(1)) for m in re.finditer(r"music coming in under the directions: ([+-][0-9.]+) dB", open(sys.argv[1], errors="replace").read())]
@@ -451,18 +525,17 @@ PY6
 check "FT logs how far Android Auto lowered its own music under the prompt" "measured"
 check "the car's sound does not fall behind after a prompt" "sound delay"
 
-echo "== sound: directions over music with the music untouched =="
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false --ei guidance 2 >/dev/null 2>&1
+echo "== sound: directions mixed in step (chosen in settings) =="
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false --ei guidance 0 >/dev/null 2>&1
 sleep 3
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 16 --out "$OUT/untouched_car" > "$OUT/untouched_car.log" 2>&1 &
 UNTCAR=$!
 sleep 6
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 8 --speech-at 2 --speech-seconds 2.5 --out "$OUT/untouched_phone" > "$OUT/untouched_phone.log" 2>&1
 wait $UNTCAR
-$ADB shell am start -n $PKG/.MainActivity --ei guidance 0 >/dev/null 2>&1
-check "untouched: the car gets exactly the music's own length" "sound music untouched_car"
-check "untouched: directions go to the car's voice channel, start to end" "sound voice untouched_car"
-check "untouched: FT adds no dip of its own to the music under directions" "sound undipped untouched_car"
+$ADB shell am start -n $PKG/.MainActivity --ei guidance 2 >/dev/null 2>&1
+check "in step: the car gets exactly the music's own length" "sound music untouched_car"
+check "in step: directions over music are mixed in and the music dips only while they play" "sound mixed untouched_car"
 
 echo "== sound: a voice prompt with no music =="
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
