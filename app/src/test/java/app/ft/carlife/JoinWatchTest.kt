@@ -38,8 +38,8 @@ class JoinWatchTest {
 
     @Test
     fun theFirstRetriesAreQuickThenEveryFiveSeconds() {
-        assertEquals(1_500L, JoinWatch.retryDelayMs(1))
-        assertEquals(1_500L, JoinWatch.retryDelayMs(2))
+        assertEquals(2_500L, JoinWatch.retryDelayMs(1))
+        assertEquals(2_500L, JoinWatch.retryDelayMs(2))
         assertEquals(5_000L, JoinWatch.retryDelayMs(3))
         assertEquals(5_000L, JoinWatch.retryDelayMs(10))
     }

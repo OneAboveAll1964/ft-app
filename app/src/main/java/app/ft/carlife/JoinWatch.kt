@@ -17,5 +17,5 @@ object JoinWatch {
 
     fun renewChannel(failures: Int): Boolean = failures > 0 && failures % RENEW_EVERY == 0
 
-    fun retryDelayMs(failures: Int): Long = if (failures < RENEW_EVERY) 1_500L else STALL_MS
+    fun retryDelayMs(failures: Int): Long = if (failures < RENEW_EVERY) 2_500L else STALL_MS
 }

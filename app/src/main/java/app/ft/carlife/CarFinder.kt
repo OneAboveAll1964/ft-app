@@ -53,7 +53,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             return
         }
         if (channel != null) return
-        val ch = runCatching { m.initialize(context, Looper.getMainLooper()) { DiagLog.w(tag, "channel lost"); channel = null } }.getOrNull()
+        val ch = openChannel()
         if (ch == null) {
             _state.value = "wifi direct unavailable"
             DiagLog.w(tag, "WiFi Direct channel could not be created")
@@ -79,6 +79,26 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             }
         }
         checkExisting()
+    }
+
+    private fun openChannel(): WifiP2pManager.Channel? {
+        val m = manager ?: return null
+        var made: WifiP2pManager.Channel? = null
+        made = runCatching {
+            m.initialize(context, Looper.getMainLooper()) {
+                if (channel !== made) return@initialize
+                DiagLog.w(tag, "WiFi Direct channel lost, opening it again")
+                channel = null
+                scope.launch(Dispatchers.Main) {
+                    delay(1000)
+                    if (channel == null && receiver != null) {
+                        channel = openChannel()
+                        checkExisting()
+                    }
+                }
+            }
+        }.getOrNull()
+        return made
     }
 
     fun search() {
@@ -233,7 +253,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             override fun onFailure(reason: Int) {
                 _state.value = "connect failed ($reason)"
                 DiagLog.w(tag, "connect to ${p.name} failed reason=$reason")
-                restart(p, if (reason == WifiP2pManager.BUSY) "WiFi Direct was busy" else "the request failed ($reason)")
+                restart(p, if (reason == WifiP2pManager.BUSY) "WiFi Direct was busy" else "the request failed ($reason)", cancel = false)
             }
         })
     }
@@ -253,7 +273,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
     }
 
-    private fun restart(p: Peer, why: String) {
+    private fun restart(p: Peer, why: String, cancel: Boolean = true) {
         val m = manager ?: return
         val ch = channel ?: return
         watchdog?.cancel()
@@ -262,7 +282,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         DiagLog.w(tag, "joining ${p.name} stalled ($why), cancelling and trying again (attempt ${failures + 1})")
         onRetry?.invoke(p.name, failures + 1)
         val again = {
-            runCatching { m.removeGroup(ch, null) }
+            if (cancel) runCatching { m.removeGroup(ch, null) }
             if (JoinWatch.renewChannel(failures)) renewChannel()
             connecting = null
             discover()
@@ -274,6 +294,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             }
             Unit
         }
+        if (!cancel) {
+            again()
+            return
+        }
         runCatching {
             m.cancelConnect(ch, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() { again() }
@@ -283,10 +307,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     }
 
     private fun renewChannel() {
-        val m = manager ?: return
-        runCatching { channel?.close() }
-        channel = runCatching { m.initialize(context, Looper.getMainLooper()) { DiagLog.w(tag, "channel lost"); channel = null } }.getOrNull()
-        DiagLog.i(tag, "WiFi Direct reconnected to Android after $failures stalled joins")
+        val old = channel
+        channel = openChannel()
+        runCatching { old?.close() }
+        DiagLog.i(tag, "WiFi Direct channel renewed after $failures failed joins")
     }
 
     fun stop() {
@@ -299,8 +323,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         receiver = null
         val m = manager
         val ch = channel
-        if (m != null && ch != null) runCatching { m.stopPeerDiscovery(ch, null) }
         channel = null
+        if (m != null && ch != null) runCatching { m.stopPeerDiscovery(ch, null) }
+        runCatching { ch?.close() }
         _state.value = "off"
     }
 
