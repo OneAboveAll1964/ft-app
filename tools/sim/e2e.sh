@@ -132,7 +132,7 @@ sleep 3
 
 echo "== run the head unit simulator =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
-  --touches "282,621@0;40,40@2;670,192@4;450,171@6;key:87@11;40,40@14;904,192@16;334,224@18;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;156,651@42;417,651@44;40,40@54" \
+  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;156,651@42;417,651@44;40,40@54" \
   --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
@@ -193,6 +193,10 @@ if want == "info":
     print("   car was told:", x["title"], "/", x["artist"], "/", x["album"], "| cover", x["art_bytes"], "bytes")
     assert x["artist"] == "FT Band" and x["album"] == "Road Tests" and x["art_is_jpeg"] and 1000 < x["art_bytes"] <= 30000, x
     assert any(y["title"] == "Bravo Tone" for y in d["songs"]), d["songs"]
+elif want == "fields":
+    bad = [s for s in d.get("songs", []) if s.get("fields") != list(range(1, 10))]
+    print("   song messages:", len(d.get("songs", [])), "| missing fields in:", [s["title"] for s in bad])
+    assert d.get("songs") and not bad, bad
 elif want == "position":
     p = d.get("positions", [])
     print("   song positions sent:", len(p))
@@ -251,6 +255,9 @@ check "tapping a song plays it to the car" "grep -q \"playing 'Alpha Tone' by FT
 check "the steering wheel's next key moves FT's player on" "grep -q \"steering wheel next track for FT's player\" '$OUT/logcat.txt' && grep -q \"playing 'Bravo Tone'\" '$OUT/logcat.txt'"
 check "the car is told the song, artist, album and cover" "song info"
 check "the car gets the song position as it plays" "song position"
+check "every song message carries all nine fields (a missing cover crashed the Corolla)" "song fields"
+check "All songs goes back to the list from the now playing screen" "grep -q 'music: song list' '$OUT/logcat.txt'"
+check "the Car screen button asks the car for its own screen and FT stays connected" "grep -q 'asked the car to show its own screen' '$OUT/logcat.txt' && python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));assert d['go_to_desktop']>=1\""
 check "the car hears each song and the video, in order (440, 660, 880 Hz)" "song tones"
 check "FT's player never builds up delay in the car" "song pace"
 check "phone sound is held back while FT's player plays" "grep -q 'phone sound held back' '$OUT/logcat.txt'"
@@ -277,6 +284,21 @@ sleep 1
 kill $CORNERLOG 2>/dev/null
 check "a bottom-right FT button is pressable over a mirrored app" "grep -q 'launched com.android.settings' '$OUT/corner_logcat.txt' && grep -q 'mirror stopped' '$OUT/corner_logcat.txt'"
 $ADB shell am start -n $PKG/.MainActivity --ei aaCorner 0 >/dev/null 2>&1
+
+echo "== a car that crashes when it is told the song =="
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/crash_logcat.txt" 2>&1 &
+CRASHLOG=$!
+sleep 2
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --crash-on-song \
+  --touches "670,192@1;450,171@3" --tail-seconds 3 --out "$OUT/crash1" > "$OUT/crash1.log" 2>&1
+sleep 5
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 6 --tail-seconds 1 --out "$OUT/crash2" > "$OUT/crash2.log" 2>&1
+CR2=$?
+sleep 1
+kill $CRASHLOG 2>/dev/null
+check "after the car drops right after a song message, FT stops sending song info" "grep -q 'stops sending song info' '$OUT/crash_logcat.txt'"
+check "the next connection stays up and gets no song message" "[ $CR2 = 0 ] && python3 -c \"import json;d=json.load(open('$OUT/crash2/result.json'));assert not d.get('songs'), d.get('songs')\""
 
 echo "== phone ui =="
 $ADB shell am start -n $PKG/.MainActivity >/dev/null 2>&1; sleep 2

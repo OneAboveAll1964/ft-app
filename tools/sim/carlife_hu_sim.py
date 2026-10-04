@@ -28,6 +28,7 @@ FOREGROUND = 0x0001001B
 GO_TO_FOREGROUND = 0x00018025
 GO_TO_FOREGROUND_RESPONSE = 0x0001004C
 MODULE_STATUS = 0x00010026
+GO_TO_DESKTOP = 0x00010021
 MEDIA_INFO = 0x00010035
 MEDIA_PROGRESS_BAR = 0x00010036
 PAUSE_MEDIA = 0x0001800E
@@ -172,6 +173,7 @@ class Sim:
         self.seen = []
         self.songs = []
         self.positions = []
+        self.crash_on_song = False
 
     def send_cmd(self, sid, payload=b""):
         self.log("HU -> %s %d bytes%s" % (name(sid), len(payload), " (encrypted)" if self.link.aes and payload else ""))
@@ -200,6 +202,9 @@ class Sim:
         if ch == CH_CMD and s == MEDIA_PROGRESS_BAR:
             self.positions.append((time.time(), first(decode(p), 1, 0)))
             return None
+        if ch == CH_CMD and s == MEDIA_INFO and self.crash_on_song:
+            self.log("HU crashes on song info, like the Corolla did on 4 October")
+            raise RuntimeError("simulated head unit crash on song info")
         if ch == CH_CMD and s == MEDIA_INFO:
             d = decode(p)
             song = {
@@ -211,6 +216,7 @@ class Sim:
                 "art_bytes": len(first(d, 5, b"")),
                 "art_is_jpeg": first(d, 5, b"")[:2] == b"\xff\xd8",
                 "duration": first(d, 6, 0),
+                "fields": sorted(d.keys()),
             }
             self.songs.append(song)
             self.log("MD -> song info %s" % {k: v for k, v in song.items() if k != "t"})
@@ -365,6 +371,7 @@ def main():
     ap.add_argument("--hold-init", type=float, default=3.0)
     ap.add_argument("--out", default="/tmp/ft_carlife")
     ap.add_argument("--listen-seconds", type=float, default=0.0)
+    ap.add_argument("--crash-on-song", action="store_true")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -374,6 +381,7 @@ def main():
     p = [int(x) for x in a.ports.split(",")]
     link = WifiLink(a.host, {CH_CMD: p[0], CH_VIDEO: p[1], CH_MEDIA: p[2], CH_TTS: p[3], CH_VR: p[4], CH_CTRL: p[5]})
     sim = Sim(link, log)
+    sim.crash_on_song = a.crash_on_song
     result = {"encrypt": bool(a.encrypt), "ok": False, "checks": {}, "segments": []}
     try:
         sim.send_cmd(HU_PROTOCOL_VERSION, f_varint(1, 1) + f_varint(2, 0))
@@ -498,6 +506,7 @@ def main():
         t_audio0 = link.audio[0][0] if link.audio else 0
         result["songs"] = [dict(x, t=round(x["t"] - t_audio0, 3)) for x in sim.songs]
         result["audio_t0"] = round(t_audio0, 3)
+        result["go_to_desktop"] = sim.seen.count(GO_TO_DESKTOP)
         result["frame_clock"] = [round(t, 3) for t in sim.video_times]
         write_h264(os.path.join(a.out, "all.h264"), sim.video)
         result["positions"] = [(round(t - t_audio0, 3), v) for t, v in sim.positions]
