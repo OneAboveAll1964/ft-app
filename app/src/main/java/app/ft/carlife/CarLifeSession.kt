@@ -333,11 +333,12 @@ class CarLifeSession(
             CarLifeProtocol.CMD_VIDEO_ENCODER_RESET -> DiagLog.i(tag, "head unit asked for a video reset, nothing to redo")
             CarLifeProtocol.CMD_VIDEO_ENCODER_FRAME_RATE_CHANGE -> {
                 val asked = ProtoReader(c.payload).int(1, -1)
-                val f = VideoPlans.rateChange(asked, prefs.videoFps, prefs.videoMinFps)
+                val f = VideoPlans.rateChange(asked, prefs.videoFps, prefs.videoMinFps, fps)
                 if (f == null) {
                     DiagLog.i(tag, "head unit asked for $asked fps, only 3 to 30 are taken")
                     return
                 }
+                if (asked < VideoPlans.LOWEST_PACE && f == fps) DiagLog.i(tag, "head unit asked for $asked fps, FT keeps $fps like Baidu, which never paces below ${VideoPlans.LOWEST_PACE}")
                 if (f != fps) {
                     fps = f
                     onFrameRate?.invoke(f)

@@ -68,9 +68,10 @@ object VideoPlans {
         return maxOf(base, floor).coerceIn(1, 60)
     }
 
-    fun rateChange(asked: Int, forced: Int, floor: Int): Int? {
+    fun rateChange(asked: Int, forced: Int, floor: Int, current: Int): Int? {
         if (asked !in 3..30) return null
         if (forced > 0) return forced.coerceIn(1, 60)
+        if (asked < LOWEST_PACE) return maxOf(current, floor).coerceIn(1, 60)
         return maxOf(asked, floor).coerceIn(1, 60)
     }
 

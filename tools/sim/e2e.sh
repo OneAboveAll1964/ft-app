@@ -259,7 +259,7 @@ elif want == "rate":
     low_fps = len(low) / (low_to - low_from)
     back_fps = len(back) / 3.0
     print("   car asked for %d fps while a video played: got %.1f fps; asked for %d again: got %.1f fps" % (asks[0][0], low_fps, asks[1][0], back_fps))
-    assert 2.5 <= low_fps <= max(asks[0][0], 10) * 1.3, low_fps
+    assert low_fps >= asks[1][0] * 0.7, low_fps
     assert back_fps >= asks[1][0] * 0.7, back_fps
 elif want == "pace":
     m = d["audio"]["media"]
@@ -286,7 +286,7 @@ check "FT's player never builds up delay in the car" "song pace"
 check "phone sound is held back while FT's player plays" "grep -q 'phone sound held back' '$OUT/logcat.txt'"
 check "the Videos screen plays a video to the car" "grep -q 'car screen: VIDEOS' '$OUT/logcat.txt' && grep -q \"playing 'Test Drive Clip' to the car\" '$OUT/logcat.txt'"
 check "leaving Videos stops the video" "grep -qE 'FT/Player.*: stopped' '$OUT/logcat.txt'"
-check "FT follows the frame rate the car asks for while a video plays (Baidu keeps a picture every 100 ms)" "song rate"
+check "a request below 15 fps is answered but FT keeps its pace, like Baidu" "song rate && grep -q 'head unit asked for 5 fps, FT keeps' '$OUT/logcat.txt'"
 check "frames to the car pass through the frame gate" "grep -q 'frames to the car follow the rate the head unit asks for' '$OUT/logcat.txt'"
 check "the phone keys open from their handle on the car" "grep -q 'phone keys shown' '$OUT/logcat.txt'"
 check "the phone's back key works from the car" "grep -q 'phone back' '$OUT/logcat.txt'"

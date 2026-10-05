@@ -62,13 +62,21 @@ class VideoPlanTest {
 
     @Test
     fun rateChangesOutsideThreeToThirtyAreRefused() {
-        assertNull(VideoPlans.rateChange(2, 0, 0))
-        assertNull(VideoPlans.rateChange(31, 0, 0))
-        assertNull(VideoPlans.rateChange(60, 0, 0))
-        assertEquals(3, VideoPlans.rateChange(3, 0, 0))
-        assertEquals(29, VideoPlans.rateChange(29, 0, 0))
-        assertEquals(24, VideoPlans.rateChange(29, 24, 0))
-        assertEquals(20, VideoPlans.rateChange(10, 0, 20))
+        assertNull(VideoPlans.rateChange(2, 0, 0, 20))
+        assertNull(VideoPlans.rateChange(31, 0, 0, 20))
+        assertNull(VideoPlans.rateChange(60, 0, 0, 20))
+        assertEquals(15, VideoPlans.rateChange(15, 0, 0, 20))
+        assertEquals(29, VideoPlans.rateChange(29, 0, 0, 20))
+        assertEquals(24, VideoPlans.rateChange(29, 24, 0, 20))
+        assertEquals(20, VideoPlans.rateChange(16, 0, 20, 30))
+    }
+
+    @Test
+    fun asksBelowFifteenKeepThePaceLikeBaidu() {
+        assertEquals(27, VideoPlans.rateChange(3, 0, 0, 27))
+        assertEquals(20, VideoPlans.rateChange(10, 0, 0, 20))
+        assertEquals(24, VideoPlans.rateChange(5, 0, 24, 20))
+        assertEquals(12, VideoPlans.rateChange(5, 12, 0, 20))
     }
 
     @Test
