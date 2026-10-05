@@ -199,7 +199,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 if (aaInstalled) {
                     AaStartChoice(rememberAaServerOn(), reinstalled = aaStep == AaInstaller.Step.DONE) {
                         if (aaStep != AaInstaller.Step.DONE) {
-                            FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.padding(top = 10.dp)) { Text("Set it up in Settings") }
+                            FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("Set it up in Settings", maxLines = 1) }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
