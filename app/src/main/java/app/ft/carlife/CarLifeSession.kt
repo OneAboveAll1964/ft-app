@@ -159,6 +159,10 @@ class CarLifeSession(
         moduleUpdate(CarLifeProtocol.MODULE_NAVI, 0)
     }
 
+    fun goodbye() {
+        if (matched) cmd(CarLifeProtocol.CMD_MD_MANUAL_DISCONNECT)
+    }
+
     private fun moduleUpdate(module: Int, state: Int) {
         if (!matched) return
         cmd(CarLifeProtocol.CMD_MODULE_STATUS, ProtoWriter().int32(1, 1).message(2, ProtoWriter().int32(1, module).int32(2, state)).toByteArray())

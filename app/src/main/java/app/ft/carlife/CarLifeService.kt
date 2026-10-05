@@ -374,6 +374,7 @@ class CarLifeService : Service() {
         }
         when (intent?.action) {
             ACTION_STOP -> {
+                session?.let { s -> Thread { runCatching { s.goodbye() } }.apply { start(); join(GOODBYE_WAIT_MS) } }
                 teardown()
                 stopSelf()
                 return START_NOT_STICKY
