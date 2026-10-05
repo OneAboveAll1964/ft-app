@@ -10,10 +10,12 @@ import org.junit.Test
 class CarWirelessSetupTest {
     private val sent = ArrayList<ByteArray>()
     private val names = ArrayList<String>()
+    private var ready = 0
 
     private fun setup() = CarWirelessSetup(
         send = { sent.add(it) },
-        onCarWifiName = { names.add(it) }
+        onCarWifiName = { names.add(it) },
+        onCarReady = { ready++ }
     )
 
     private fun ids() = sent.map { Bytes.u32(it, 4) }
@@ -37,6 +39,16 @@ class CarWirelessSetupTest {
         val w = setup()
         w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO, ProtoWriter().int32(1, 2).int32(2, 5745).toByteArray()))
         assertEquals(listOf(CarWirelessSetup.MD_TARGET_INFO_REQUEST), ids())
+    }
+
+    @Test
+    fun aWirelessInfoAfterTheNameTellsFtTheCarIsReady() {
+        val w = setup()
+        w.feed(target("Android_f4ec"))
+        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO, ProtoWriter().int32(1, 3).int32(2, 1).toByteArray()))
+        w.feed(frame(CarWirelessSetup.HU_WIRELESS_INFO, ProtoWriter().int32(1, 1).toByteArray()))
+        assertEquals(1, ready)
+        assertTrue(sent.isEmpty())
     }
 
     @Test

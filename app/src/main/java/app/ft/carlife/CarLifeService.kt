@@ -365,7 +365,8 @@ class CarLifeService : Service() {
         CarWirelessSetup(
             send = { bytes -> bt.send(bytes) },
             onCarWifiName = { name -> onCarRaisedWifiDirect(name) },
-            progress = { text -> step(text) }
+            progress = { text -> step(text) },
+            onCarReady = { if (mode == 1 && wifiLink?.connected != true) finder?.carReady() }
         )
     }
 

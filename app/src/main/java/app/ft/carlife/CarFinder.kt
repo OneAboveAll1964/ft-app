@@ -76,7 +76,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         loop = scope.launch(Dispatchers.Main) {
             while (isActive) {
                 if (searching && _link.value == null && connecting == null) discover()
-                delay(12_000)
+                delay(JoinWatch.DISCOVER_EVERY_MS)
             }
         }
         checkExisting()
@@ -225,6 +225,22 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         connect(p)
     }
 
+    fun carReady() {
+        if (_link.value != null) return
+        val name = prefs.carP2pName.trim()
+        if (name.isEmpty()) return
+        val attempting = connecting != null
+        if (!JoinWatch.interruptForReady(android.os.SystemClock.elapsedRealtime() - attemptAt, attempting)) return
+        val p = _peers.value.firstOrNull { it.name.equals(name, true) }
+        if (p == null) {
+            discover()
+            return
+        }
+        if (p.status == WifiP2pDevice.CONNECTED) return
+        DiagLog.i(tag, "the car says its WiFi Direct is ready, inviting it now")
+        if (attempting) restart(p, "the car said it is ready", declined = true) else connect(p)
+    }
+
     fun connect(p: Peer) {
         val m = manager ?: return
         val ch = channel ?: return
@@ -265,23 +281,30 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         watchdog = scope.launch(Dispatchers.Main) {
             while (isActive && _link.value == null && connecting == p.name) {
                 val waited = android.os.SystemClock.elapsedRealtime() - attemptAt
-                val carConnected = _peers.value.firstOrNull { it.address.equals(p.address, true) }?.status == WifiP2pDevice.CONNECTED
-                if (JoinWatch.next(waited, carConnected, NetUtil.p2pGroupUp()) == JoinWatch.Next.RETRY) {
-                    restart(p, "no answer after ${waited / 1000}s")
-                    return@launch
+                val status = _peers.value.firstOrNull { it.address.equals(p.address, true) }?.status
+                when (JoinWatch.next(waited, status == WifiP2pDevice.CONNECTED, NetUtil.p2pGroupUp(), status == WifiP2pDevice.AVAILABLE)) {
+                    JoinWatch.Next.RETRY -> {
+                        restart(p, "no answer after ${waited / 1000}s")
+                        return@launch
+                    }
+                    JoinWatch.Next.DECLINED -> {
+                        restart(p, "the car turned the invitation down", declined = true)
+                        return@launch
+                    }
+                    JoinWatch.Next.WAIT -> Unit
                 }
                 delay(500)
             }
         }
     }
 
-    private fun restart(p: Peer, why: String, cancel: Boolean = true) {
+    private fun restart(p: Peer, why: String, cancel: Boolean = true, declined: Boolean = false) {
         val m = manager ?: return
         val ch = channel ?: return
         watchdog?.cancel()
         watchdog = null
         failures++
-        DiagLog.w(tag, "joining ${p.name} stalled ($why), cancelling and trying again (attempt ${failures + 1})")
+        DiagLog.w(tag, "joining ${p.name}: $why, trying again (attempt ${failures + 1})")
         onRetry?.invoke(p.name, failures + 1)
         val again = {
             if (cancel) runCatching { m.removeGroup(ch, null) }
@@ -289,7 +312,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             connecting = null
             discover()
             scope.launch(Dispatchers.Main) {
-                delay(JoinWatch.retryDelayMs(failures))
+                delay(JoinWatch.retryDelayMs(failures, declined))
                 if (enabled && _link.value == null && connecting == null) {
                     connect(_peers.value.firstOrNull { it.address.equals(p.address, true) } ?: p)
                 }

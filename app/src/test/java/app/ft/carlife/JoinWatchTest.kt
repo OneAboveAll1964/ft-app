@@ -28,6 +28,22 @@ class JoinWatchTest {
     }
 
     @Test
+    fun aDeclinedInvitationIsRetriedAfterASecond() {
+        assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(800, carConnected = false, groupInterfaceUp = false, carDeclined = true))
+        assertEquals(JoinWatch.Next.DECLINED, JoinWatch.next(1_000, carConnected = false, groupInterfaceUp = false, carDeclined = true))
+        assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(1_500, carConnected = false, groupInterfaceUp = true, carDeclined = true))
+        assertEquals(1_000L, JoinWatch.retryDelayMs(1, declined = true))
+        assertEquals(1_000L, JoinWatch.retryDelayMs(5, declined = true))
+    }
+
+    @Test
+    fun theCarSayingItIsReadyOnlyInterruptsAnAttemptOlderThanTwoSeconds() {
+        assertTrue(JoinWatch.interruptForReady(0, attempting = false))
+        assertFalse(JoinWatch.interruptForReady(1_500, attempting = true))
+        assertTrue(JoinWatch.interruptForReady(2_000, attempting = true))
+    }
+
+    @Test
     fun theWiFiDirectChannelIsRenewedEveryThirdFailure() {
         assertFalse(JoinWatch.renewChannel(0))
         assertFalse(JoinWatch.renewChannel(2))

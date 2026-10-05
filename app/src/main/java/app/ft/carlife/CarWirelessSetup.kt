@@ -8,7 +8,8 @@ import app.ft.core.ProtoWriter
 class CarWirelessSetup(
     private val send: (ByteArray) -> Boolean,
     private val onCarWifiName: (String) -> Unit,
-    private val progress: (String) -> Unit = {}
+    private val progress: (String) -> Unit = {},
+    private val onCarReady: () -> Unit = {}
 ) {
     private val tag = "CarBT"
     private val buffer = ArrayList<Byte>(1024)
@@ -60,8 +61,12 @@ class CarWirelessSetup(
         when (serviceId) {
             HU_WIRELESS_INFO -> {
                 val r = ProtoReader(body)
-                DiagLog.i(tag, "car wireless info: type ${r.int(1, -1)}, ${r.int(2, 0)} MHz")
-                if (carWifiName != null) return
+                val type = r.int(1, -1)
+                DiagLog.i(tag, "car wireless info: type $type, band ${r.int(2, 0)}")
+                if (carWifiName != null) {
+                    if (type in 2..4) onCarReady()
+                    return
+                }
                 progress("Asking the car for its WiFi Direct name")
                 send(CarLifeFraming.cmd(MD_TARGET_INFO_REQUEST))
             }
