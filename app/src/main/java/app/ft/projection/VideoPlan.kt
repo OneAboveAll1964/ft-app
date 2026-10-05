@@ -17,6 +17,8 @@ object VideoPlans {
     const val START_FPS = 20
     const val DEFAULT_BITRATE = 3_000_000
     const val LOWEST_PACE = 15
+    const val UNASKED_FPS = 30
+    const val UNASKED_AFTER_MS = 8_000L
 
     fun plan(
         carWidth: Int,
@@ -73,6 +75,12 @@ object VideoPlans {
         if (forced > 0) return forced.coerceIn(1, 60)
         if (asked < LOWEST_PACE) return maxOf(current, floor).coerceIn(1, 60)
         return maxOf(asked, floor).coerceIn(1, 60)
+    }
+
+    fun unaskedRate(forced: Int, floor: Int, current: Int): Int? {
+        if (forced > 0) return null
+        val f = maxOf(UNASKED_FPS, floor).coerceIn(1, 60)
+        return if (f > current) f else null
     }
 
     fun newVehicle(major: Int, minor: Int): Boolean = major == 4 || (major == 3 && minor == 2)

@@ -73,6 +73,8 @@ class CarLifeSession(
     @Volatile var streamWidth = 1280; private set
     @Volatile var streamHeight = 720; private set
     @Volatile var fps = VideoPlans.START_FPS; private set
+    @Volatile private var carAskedRate = false
+    @Volatile private var streamStartedAt = 0L
     @Volatile var projecting = false; private set
     private var videoTimer: Job? = null
     private var encryptProbe: Job? = null
@@ -106,6 +108,8 @@ class CarLifeSession(
         matched = false
         initSeen = false
         videoReady = false
+        carAskedRate = false
+        streamStartedAt = 0L
         feed.close()
         media.forget()
         unwatchScreen()
@@ -319,6 +323,7 @@ class CarLifeSession(
             CarLifeProtocol.CMD_VIDEO_ENCODER_START -> {
                 val mode = feed.start()
                 projecting = true
+                if (streamStartedAt == 0L) streamStartedAt = android.os.SystemClock.elapsedRealtime()
                 frames = 0
                 _state.value = State.Projecting(link.name, width, height, fps, streamWidth, streamHeight)
                 startVideoTimer()
@@ -342,16 +347,9 @@ class CarLifeSession(
                     DiagLog.i(tag, "head unit asked for $asked fps, only 3 to 30 are taken")
                     return
                 }
+                carAskedRate = true
                 if (asked < VideoPlans.LOWEST_PACE && f == fps) DiagLog.i(tag, "head unit asked for $asked fps, FT keeps $fps like Baidu, which never paces below ${VideoPlans.LOWEST_PACE}")
-                if (f != fps) {
-                    fps = f
-                    onFrameRate?.invoke(f)
-                    when (val st = _state.value) {
-                        is State.Projecting -> _state.value = st.copy(fps = f)
-                        is State.Negotiated -> _state.value = st.copy(fps = f)
-                        else -> Unit
-                    }
-                }
+                applyRate(f)
                 cmd(CarLifeProtocol.CMD_VIDEO_ENCODER_FRAME_RATE_CHANGE_DONE, ProtoWriter().int32(1, asked).toByteArray())
             }
             CarLifeProtocol.CMD_STATISTIC_INFO -> {
@@ -419,6 +417,8 @@ class CarLifeSession(
         cmd(CarLifeProtocol.CMD_PROTOCOL_VERSION_MATCH_STATUS, ProtoWriter().int32(1, 1).toByteArray())
         matched = true
         initSeen = false
+        carAskedRate = false
+        streamStartedAt = 0L
         musicStartSeen = false
         musicEndSeen = false
         if (_state.value == State.Idle) _state.value = State.Linked(link.name)
@@ -566,7 +566,28 @@ class CarLifeSession(
             while (isActive) {
                 delay(VIDEO_POLL_MS)
                 feed.idle(QUIET_FRAMES * 1000L / fps.coerceIn(1, 60))
+                unaskedRate()
             }
+        }
+    }
+
+    private fun unaskedRate() {
+        if (carAskedRate || !projecting || streamStartedAt == 0L) return
+        if (android.os.SystemClock.elapsedRealtime() - streamStartedAt < VideoPlans.UNASKED_AFTER_MS) return
+        carAskedRate = true
+        val f = VideoPlans.unaskedRate(prefs.videoFps, prefs.videoMinFps, fps) ?: return
+        DiagLog.i(tag, "the car has not asked for a frame rate, FT goes to $f frames a second")
+        applyRate(f)
+    }
+
+    private fun applyRate(f: Int) {
+        if (f == fps) return
+        fps = f
+        onFrameRate?.invoke(f)
+        when (val st = _state.value) {
+            is State.Projecting -> _state.value = st.copy(fps = f)
+            is State.Negotiated -> _state.value = st.copy(fps = f)
+            else -> Unit
         }
     }
 

@@ -72,6 +72,14 @@ class VideoPlanTest {
     }
 
     @Test
+    fun aCarThatNeverAsksGetsThirtyUnlessTheRateIsForced() {
+        assertEquals(30, VideoPlans.unaskedRate(0, 0, 20))
+        assertNull(VideoPlans.unaskedRate(0, 0, 30))
+        assertNull(VideoPlans.unaskedRate(24, 0, 20))
+        assertEquals(30, VideoPlans.unaskedRate(0, 25, 20))
+    }
+
+    @Test
     fun asksBelowFifteenKeepThePaceLikeBaidu() {
         assertEquals(27, VideoPlans.rateChange(3, 0, 0, 27))
         assertEquals(20, VideoPlans.rateChange(10, 0, 0, 20))
