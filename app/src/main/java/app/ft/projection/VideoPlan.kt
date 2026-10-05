@@ -31,7 +31,8 @@ object VideoPlans {
         forcedFps: Int,
         floorFps: Int,
         bitrate: Int,
-        qpFloor: Int = 0
+        qpFloor: Int = 0,
+        unaskedStart: Int = START_FPS
     ): VideoPlan {
         val cw = even(if (carWidth > 0) carWidth else 1280).coerceIn(320, 4096)
         val ch = even(if (carHeight > 0) carHeight else 720).coerceIn(240, 2160)
@@ -41,7 +42,7 @@ object VideoPlans {
                 even(customWidth).coerceIn(320, 4096) to even(customHeight).coerceIn(240, 2160)
             else -> baiduSize(cw, ch, newVehicle)
         }
-        return VideoPlan(cw, ch, sw, sh, startFps(askedFps, forcedFps, floorFps), if (bitrate > 0) bitrate else baiduBitrate(sw), qpFloor.coerceIn(0, 51))
+        return VideoPlan(cw, ch, sw, sh, startFps(askedFps, forcedFps, floorFps, unaskedStart), if (bitrate > 0) bitrate else baiduBitrate(sw), qpFloor.coerceIn(0, 51))
     }
 
     fun baiduSize(carWidth: Int, carHeight: Int, newVehicle: Boolean): Pair<Int, Int> {
@@ -64,9 +65,9 @@ object VideoPlans {
         else -> 3_840_000
     }
 
-    fun startFps(asked: Int, forced: Int, floor: Int): Int {
+    fun startFps(asked: Int, forced: Int, floor: Int, unaskedStart: Int = START_FPS): Int {
         if (forced > 0) return forced.coerceIn(1, 60)
-        val base = if (asked > 2) asked else START_FPS
+        val base = if (asked > 2) asked else unaskedStart
         return maxOf(base, floor).coerceIn(1, 60)
     }
 

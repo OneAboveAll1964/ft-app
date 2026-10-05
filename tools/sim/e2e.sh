@@ -326,8 +326,8 @@ PY7
 }
 check "Corolla-shaped car session passed" "[ $COR = 0 ]"
 check "the Corolla gets its own 1920x720 and INIT_DONE says so" "corolla init"
-check "FT sends the Corolla its full 1920x720 at 3 Mbps, starting at 20 frames a second" "grep -q 'sending 1920x720 at 20 fps, 3000 kbps' '$OUT/corolla_logcat.txt' && grep -q 'encoder started 1920x720@20' '$OUT/corolla_logcat.txt'"
-check "a car that never asks for a frame rate gets 30 after 8 seconds" "grep -q 'the car has not asked for a frame rate, FT goes to 30 frames a second' '$OUT/corolla_logcat.txt'"
+check "on Hotspot FT sends the Corolla its full 1920x720 at 3 Mbps and 30 frames a second from the start" "grep -q 'sending 1920x720 at 30 fps, 3000 kbps' '$OUT/corolla_logcat.txt' && grep -q 'encoder started 1920x720@30' '$OUT/corolla_logcat.txt'"
+check "on Hotspot nothing waits 8 seconds for the car to ask" "! grep -q 'the car has not asked for a frame rate' '$OUT/corolla_logcat.txt'"
 check "a touch on the car's own size lands on the same spot on FT's screen (640,360)" "grep -q 'car touched 640,360 of its picture, 640,360 on FT' '$OUT/corolla_logcat.txt'"
 check "touch down and up messages and single clicks reach FT too" "grep -q 'car touched 320,180 of its picture, 320,180 on FT' '$OUT/corolla_logcat.txt' && grep -q 'car touched 960,540 of its picture, 960,540 on FT' '$OUT/corolla_logcat.txt'"
 check "while the car shows its own screen only heartbeats go out, then the next full picture brings it back" "corolla pause"

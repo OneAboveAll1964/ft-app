@@ -731,6 +731,7 @@ class CarLifeService : Service() {
     private fun attachSession(l: CarLifeLink) {
         session?.stop()
         val s = CarLifeSession(this, l, app.prefs, scope)
+        s.hotspot = mode == 0
         session = s
         s.onVideoConfig = { plan -> onVideoConfig(plan) }
         s.onFrameRate = { fps -> carDisplay.setFrameRate(fps) }

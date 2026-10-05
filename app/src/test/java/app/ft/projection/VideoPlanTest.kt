@@ -72,6 +72,16 @@ class VideoPlanTest {
     }
 
     @Test
+    fun onHotspotACarThatSaysNothingStartsAtThirtyButAForcedRateWins() {
+        assertEquals(30, VideoPlans.plan(1920, 720, 0, false, VideoPlans.SIZE_CAR, 0, 0, 0, 0, 0, 22, VideoPlans.UNASKED_FPS).fps)
+        assertEquals(25, VideoPlans.plan(1920, 720, 25, false, VideoPlans.SIZE_CAR, 0, 0, 0, 0, 0, 22, VideoPlans.UNASKED_FPS).fps)
+        assertEquals(24, VideoPlans.plan(1920, 720, 0, false, VideoPlans.SIZE_CAR, 0, 0, 24, 0, 0, 22, VideoPlans.UNASKED_FPS).fps)
+        assertEquals(20, VideoPlans.plan(1920, 720, 0, false, VideoPlans.SIZE_CAR, 0, 0, 0, 0, 0, 22).fps)
+        assertEquals(24, VideoPlans.rateChange(29, 24, 0, 24))
+        assertNull(VideoPlans.unaskedRate(24, 0, 24))
+    }
+
+    @Test
     fun aCarThatNeverAsksGetsThirtyUnlessTheRateIsForced() {
         assertEquals(30, VideoPlans.unaskedRate(0, 0, 20))
         assertNull(VideoPlans.unaskedRate(0, 0, 30))
