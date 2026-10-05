@@ -607,11 +607,16 @@ class CarLifeSession(
                 if (!matched) return
                 when (i.action) {
                     Intent.ACTION_SCREEN_ON -> cmd(CarLifeProtocol.CMD_SCREEN_ON)
-                    Intent.ACTION_USER_PRESENT -> cmd(CarLifeProtocol.CMD_SCREEN_USERPRESENT)
+                    Intent.ACTION_USER_PRESENT -> {
+                        DiagLog.i(tag, "phone unlocked")
+                        cmd(CarLifeProtocol.CMD_SCREEN_USERPRESENT)
+                    }
+                    Intent.ACTION_SCREEN_OFF -> DiagLog.i(tag, "phone screen went off")
                 }
             }
         }
         val f = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         }
