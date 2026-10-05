@@ -167,7 +167,6 @@ object CarAudioBus {
         voiceOpen = false
         voiceLane = -1
         runCatching { voice?.end() }
-        runCatching { onBreak?.invoke("the end of the directions") }
         if (!blending) endMeasure()
     }
 
