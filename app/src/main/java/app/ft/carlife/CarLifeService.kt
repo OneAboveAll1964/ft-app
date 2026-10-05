@@ -101,7 +101,7 @@ class CarLifeService : Service() {
                 DiagLog.i("CarLife", "FT is switched off, nothing starts")
                 return
             }
-            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO))
+            send(context, ACTION_AUTO, foreground = true)
         }
 
         fun switchOn(context: Context) {
@@ -117,12 +117,18 @@ class CarLifeService : Service() {
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, CarLifeService::class.java).setAction(ACTION_STOP))
+            send(context, ACTION_STOP, foreground = false)
+        }
+
+        private fun send(context: Context, action: String, foreground: Boolean) {
+            val intent = Intent(context, CarLifeService::class.java).setAction(action)
+            runCatching { if (foreground) context.startForegroundService(intent) else context.startService(intent) }
+                .onFailure { DiagLog.w("CarLife", "Android would not let FT start right now (${it.javaClass.simpleName}), open FT to connect") }
         }
 
         fun startAudio(context: Context) {
             if (instance == null) return
-            context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUDIO))
+            send(context, ACTION_AUDIO, foreground = true)
         }
 
         fun shareDeclined(context: Context, quiet: Boolean = false) {

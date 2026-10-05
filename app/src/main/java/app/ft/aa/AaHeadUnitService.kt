@@ -62,7 +62,8 @@ class AaHeadUnitService : Service() {
                 DiagLog.i("AA", "FT is switched off, Android Auto is not started")
                 return
             }
-            context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth))
+            runCatching { context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth)) }
+                .onFailure { DiagLog.w("AA", "Android would not let FT start Android Auto right now (${it.javaClass.simpleName})") }
         }
 
         fun feedCarMicrophone(pcm: ByteArray) {
@@ -70,7 +71,7 @@ class AaHeadUnitService : Service() {
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP))
+            runCatching { context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP)) }
         }
     }
 
