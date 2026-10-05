@@ -55,6 +55,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.collectAsState
+import app.ft.ui.components.AaStartChoice
+import app.ft.aa.AaHeadUnitService
+import app.ft.ui.components.Stepper
+import app.ft.ui.components.StepItem
+import app.ft.ui.components.CornerPicker
+import app.ft.ui.car.CarStyles
+import app.ft.aa.AaInstaller
 import app.ft.core.CarAudioBus
 import app.ft.projection.VideoPlans
 
@@ -77,7 +87,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
 }
 
 @Composable
-fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onOpen: (SettingsPage) -> Unit) {
+fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onTakeOverAa: () -> Unit, onOpen: (SettingsPage) -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 24.dp),
@@ -87,6 +97,8 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onOpen: (SettingsPag
             items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
             item { MadeBy() }
         } else {
+            if (page == SettingsPage.ANDROID_AUTO) item { Group { AaSetup(onTakeOverAa) } }
+            if (page == SettingsPage.CAR_SCREEN) item { Group { CornerSetting() } }
             item { Group { PageContent(page) } }
         }
     }
@@ -133,6 +145,70 @@ private fun MadeBy() {
 }
 
 private const val PROFILE = "https://github.com/OneAboveAll1964"
+
+@Composable
+private fun AaSetup(onTakeOverAa: () -> Unit) {
+    val context = LocalContext.current
+    val aa by AaHeadUnitService.state.collectAsState()
+    var resumed by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        resumed++
+        onPauseOrDispose { }
+    }
+    val step = remember(resumed) { AaInstaller.step(context) }
+    val hasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
+    val installed = remember(resumed) { AaInstaller.installed(context) }
+    val serverOn = if (aa.listening) aa.selfServer else FTApp.instance.prefs.aaServerOn
+    if (!installed && !hasCopy) {
+        Text("Android Auto is not on this phone", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Install it from the Play Store, or pick an Android Auto file and FT installs it so it starts by itself.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Stepper(aaSetupSteps(step, hasCopy, onTakeOverAa), running = false)
+        return
+    }
+    AaStartChoice(serverOn, reinstalled = step == AaInstaller.Step.DONE) {
+        if (step != AaInstaller.Step.DONE) {
+            Spacer(Modifier.height(10.dp))
+            Stepper(aaSetupSteps(step, hasCopy, onTakeOverAa), running = false)
+            Text(
+                "Afterwards turn off Play Store auto-update for Android Auto, or an update takes it back from FT and this needs doing again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private fun aaSetupSteps(step: AaInstaller.Step, hasCopy: Boolean, run: () -> Unit): List<StepItem> {
+    val remove = when (step) {
+        AaInstaller.Step.REMOVE_UPDATES -> StepItem("Remove the Android Auto update", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
+        AaInstaller.Step.UNINSTALL -> StepItem("Remove Android Auto", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
+        else -> if (hasCopy) StepItem("Remove the Play Store copy", true) else null
+    }
+    val install = if (hasCopy || remove != null) StepItem("Put Android Auto back", step == AaInstaller.Step.DONE, action = "Put back", onAction = run)
+    else StepItem("Install Android Auto", step == AaInstaller.Step.DONE, hint = "Pick the Android Auto file", action = "Pick file", onAction = run)
+    return listOfNotNull(remove, install)
+}
+
+@Composable
+private fun CornerSetting() {
+    val p = FTApp.instance.prefs
+    var corner by remember { mutableIntStateOf(p.aaCorner) }
+    Text("FT button on the car", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "Where the FT button sits on the car screen over Android Auto, phone apps and FT's own screens. It always takes you back to FT's car home.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    CornerPicker(corner, p.aaWidth, p.aaHeight) {
+        corner = it
+        p.aaCorner = it
+        CarStyles.reload()
+    }
+}
 
 @Composable
 private fun PageContent(page: SettingsPage) {

@@ -6,7 +6,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.Canvas
-import app.ft.ui.car.CarStyles
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -47,7 +46,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -76,24 +74,19 @@ import app.ft.FTApp
 import app.ft.FTTouchService
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaInstaller
+import app.ft.ui.components.Stepper
+import app.ft.ui.components.StepState
+import app.ft.ui.components.StepMark
+import app.ft.ui.components.AaStartChoice
+import app.ft.ui.components.StepItem
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
 
-private data class StepItem(
-    val title: String,
-    val done: Boolean,
-    val hint: String? = null,
-    val action: String? = null,
-    val onAction: (() -> Unit)? = null
-)
-
-private enum class StepState { DONE, NOW, LATER }
-
 private data class Status(val title: String, val detail: String, val level: Int)
 
 @Composable
-fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
+fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onOpenAaSetup: () -> Unit) {
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
@@ -102,7 +95,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     LaunchedEffect(car.running) { if (car.running) autoConnect = true }
     var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
     var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
-    var aaCorner by remember { mutableIntStateOf(app.prefs.aaCorner) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
@@ -113,7 +105,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
     val aaStep = remember(resumed) { AaInstaller.step(context) }
     val aaInstalled = remember(resumed) { AaInstaller.installed(context) }
-    val aaHasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
 
     val on = car.running || autoConnect
     val direct = linkMode == 1
@@ -197,39 +188,33 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
 
         item {
             Section("Android Auto") {
-                if (aaStep != AaInstaller.Step.DONE) {
-                    Stepper(aaSetupSteps(aaStep, aaHasCopy, onTakeOverAa), running = false)
-                    if (aaInstalled) Spacer(Modifier.height(12.dp))
+                if (!aaInstalled) {
+                    Text(
+                        "Android Auto is not on this phone. Install it from the Play Store, or let FT install it in Settings, Android Auto.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = onOpenAaSetup, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Open Settings, Android Auto") }
                 }
                 if (aaInstalled) {
                     val serverOn = if (aa.listening) aa.selfServer else app.prefs.aaServerOn
-                    ServerRow(serverOn) { AaInstaller.openSettings(context) }
+                    AaStartChoice(serverOn, reinstalled = aaStep == AaInstaller.Step.DONE) {
+                        if (aaStep != AaInstaller.Step.DONE) {
+                            FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.padding(top = 10.dp)) { Text("Set it up in Settings") }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
                     SwitchRow("Start with the car", aaAuto) {
                         aaAuto = it
                         app.prefs.aaAutoStart = it
                     }
-                    Text(
-                        "FT button on the car",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
-                    )
-                    CornerPicker(aaCorner, app.prefs.aaWidth, app.prefs.aaHeight) {
-                        aaCorner = it
-                        app.prefs.aaCorner = it
-                        CarStyles.reload()
-                    }
-                    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            onClick = {
-                                AaHeadUnitService.start(context, app.prefs.aaBluetooth)
-                                CarLifeService.startAa()
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Start", maxLines = 1) }
-                        OutlinedButton(onClick = { AaInstaller.openSettings(context) }, modifier = Modifier.weight(1f)) {
-                            Text("Settings", maxLines = 1)
-                        }
-                    }
+                    FilledTonalButton(
+                        onClick = {
+                            AaHeadUnitService.start(context, app.prefs.aaBluetooth)
+                            CarLifeService.startAa()
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                    ) { Text("Start Android Auto on the car", maxLines = 1) }
                 }
             }
         }
@@ -287,16 +272,6 @@ private fun directSteps(
     )
 }
 
-private fun aaSetupSteps(step: AaInstaller.Step, hasCopy: Boolean, run: () -> Unit): List<StepItem> {
-    val remove = when (step) {
-        AaInstaller.Step.REMOVE_UPDATES -> StepItem("Remove the Android Auto update", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
-        AaInstaller.Step.UNINSTALL -> StepItem("Remove Android Auto", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
-        else -> if (hasCopy) StepItem("Remove the Play Store copy", true) else null
-    }
-    val install = if (hasCopy || remove != null) StepItem("Put Android Auto back", step == AaInstaller.Step.DONE, action = "Put back", onAction = run)
-    else StepItem("Install Android Auto", step == AaInstaller.Step.DONE, hint = "Pick the Android Auto file", action = "Pick file", onAction = run)
-    return listOfNotNull(remove, install)
-}
 
 @Composable
 private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> Unit) {
@@ -328,108 +303,6 @@ private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> 
 }
 
 @Composable
-private fun Stepper(steps: List<StepItem>, running: Boolean) {
-    val reached = steps.indexOfLast { it.done }
-    val done = steps.mapIndexed { i, s -> s.done || i < reached }
-    val now = done.indexOfFirst { !it }
-    Column(Modifier.fillMaxWidth().animateContentSize()) {
-        steps.forEachIndexed { i, step ->
-            val state = when {
-                done[i] -> StepState.DONE
-                i == now -> StepState.NOW
-                else -> StepState.LATER
-            }
-            StepRow(i + 1, step, state, last = i == steps.lastIndex, working = running && state == StepState.NOW && step.action == null)
-        }
-    }
-}
-
-@Composable
-private fun StepRow(number: Int, step: StepItem, state: StepState, last: Boolean, working: Boolean) {
-    val scheme = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-        Column(Modifier.width(28.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-            StepMark(number, state, working)
-            if (!last) {
-                Box(
-                    Modifier
-                        .padding(vertical = 4.dp)
-                        .width(2.dp)
-                        .weight(1f)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(if (state == StepState.DONE) scheme.primary else scheme.outlineVariant)
-                )
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f).padding(bottom = if (last) 0.dp else 16.dp)) {
-            Box(Modifier.heightIn(min = 28.dp), contentAlignment = Alignment.CenterStart) {
-                Text(
-                    step.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (state == StepState.NOW) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (state == StepState.LATER) scheme.onSurfaceVariant else scheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (state == StepState.NOW && step.hint != null) {
-                Text(step.hint, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
-            }
-            if (state == StepState.NOW && step.action != null && step.onAction != null) {
-                FilledTonalButton(onClick = step.onAction, modifier = Modifier.padding(top = 8.dp)) { Text(step.action) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepMark(number: Int, state: StepState, working: Boolean) {
-    val scheme = MaterialTheme.colorScheme
-    Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-        when {
-            state == StepState.DONE -> Box(
-                Modifier.fillMaxSize().clip(CircleShape).background(scheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.Check, contentDescription = "Done", tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
-            }
-            working -> CircularProgressIndicator(Modifier.fillMaxSize().padding(2.dp), strokeWidth = 3.dp, color = scheme.primary)
-            state == StepState.NOW -> Box(
-                Modifier.fillMaxSize().border(2.dp, scheme.primary, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                StepNumber(number, scheme.primary, bold = true)
-            }
-            else -> Box(
-                Modifier.fillMaxSize().border(1.5.dp, scheme.outlineVariant, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                if (number > 0) StepNumber(number, scheme.onSurfaceVariant, bold = false)
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepNumber(number: Int, color: Color, bold: Boolean) {
-    val text = number.toString()
-    val textSize = with(LocalDensity.current) { 14.sp.toPx() }
-    val paint = remember(color, bold, textSize) {
-        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            this.textSize = textSize
-            this.color = color.toArgb()
-            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, if (bold) 700 else 500, false)
-        }
-    }
-    Canvas(Modifier.fillMaxSize()) {
-        val ink = android.graphics.Rect()
-        paint.getTextBounds(text, 0, text.length, ink)
-        drawContext.canvas.nativeCanvas.drawText(text, size.width / 2f - ink.exactCenterX(), size.height / 2f - ink.exactCenterY(), paint)
-    }
-}
-
-@Composable
 private fun Notice(text: String, action: String, onAction: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Surface(color = scheme.errorContainer, contentColor = scheme.onErrorContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
@@ -455,25 +328,6 @@ private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
 }
 
 @Composable
-private fun ServerRow(on: Boolean, onOpen: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("Head unit server", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                if (on) "On" else "Off · start it from Android Auto's menu",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (on) scheme.primary else scheme.onSurfaceVariant
-            )
-        }
-        if (!on) {
-            Spacer(Modifier.width(8.dp))
-            FilledTonalButton(onClick = onOpen) { Text("Open") }
-        }
-    }
-}
-
-@Composable
 private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -488,49 +342,6 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
             content()
-        }
-    }
-}
-
-@Composable
-private fun CornerPicker(selected: Int, carWidth: Int, carHeight: Int, onPick: (Int) -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    val shape = if (carHeight > 0) (carWidth.toFloat() / carHeight).coerceIn(1.6f, 3f) else 16f / 9f
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(shape)
-            .clip(RoundedCornerShape(14.dp))
-            .background(scheme.surfaceContainerHighest)
-            .border(2.dp, scheme.outlineVariant, RoundedCornerShape(14.dp))
-    ) {
-        Text(
-            "Car screen",
-            style = MaterialTheme.typography.labelSmall,
-            color = scheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.align(Alignment.Center)
-        )
-        listOf(0 to Alignment.TopStart, 1 to Alignment.TopEnd, 2 to Alignment.BottomStart, 3 to Alignment.BottomEnd).forEach { (value, align) ->
-            val chosen = selected == value
-            Box(
-                Modifier
-                    .align(align)
-                    .padding(8.dp)
-                    .size(width = 46.dp, height = 26.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(if (chosen) scheme.primary else scheme.surfaceContainer)
-                    .border(1.dp, if (chosen) scheme.primary else scheme.outline, RoundedCornerShape(50))
-                    .clickable { onPick(value) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "FT",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Black,
-                    color = if (chosen) scheme.onPrimary else scheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
