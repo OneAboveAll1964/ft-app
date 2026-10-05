@@ -4,8 +4,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.height
-import android.content.Intent
-import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +45,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import app.ft.ui.car.AppCatalog
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +60,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -80,7 +81,6 @@ import kotlinx.coroutines.withContext
 private const val CAR_W = 1280f
 private const val CAR_H = 480f
 
-private data class AppChoice(val pkg: String, val label: String, val icon: ImageBitmap?)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -290,22 +290,11 @@ private fun Swatch(chosen: Boolean, onClick: () -> Unit, content: @Composable ()
 }
 
 @Composable
-private fun installedApps(): List<AppChoice> {
+private fun installedApps(): List<AppCatalog.App> {
     val context = LocalContext.current
-    return remember {
-        val pm = context.packageManager
-        pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), PackageManager.MATCH_ALL)
-            .filter { it.activityInfo.packageName != context.packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .map { info ->
-                AppChoice(
-                    info.activityInfo.packageName,
-                    info.loadLabel(pm).toString(),
-                    runCatching { info.loadIcon(pm).toBitmap(96, 96).asImageBitmap() }.getOrNull()
-                )
-            }
-            .sortedBy { it.label.lowercase() }
-    }
+    val apps by AppCatalog.apps.collectAsState()
+    LaunchedEffect(Unit) { AppCatalog.refresh(context) }
+    return apps.orEmpty()
 }
 
 @Composable
@@ -353,11 +342,17 @@ private fun AppPicker(title: String, onDismiss: () -> Unit, onPick: (String) -> 
 }
 
 @Composable
-private fun AppRow(a: AppChoice, chosen: Boolean, onClick: () -> Unit) {
+private fun AppRow(a: AppCatalog.App, chosen: Boolean, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val px = with(LocalDensity.current) { 32.dp.roundToPx() }
+    val icon by produceState(AppCatalog.cachedIcon(a, px), a, px) {
+        if (value == null) value = AppCatalog.icon(context, a, px)
+    }
     ListItem(
         headlineContent = { Text(a.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingContent = {
-            if (a.icon != null) Image(a.icon, contentDescription = null, modifier = Modifier.size(32.dp))
+            val i = icon
+            if (i != null) Image(i, contentDescription = null, modifier = Modifier.size(32.dp))
             else Icon(CarIcons.Apps, contentDescription = null)
         },
         trailingContent = { if (chosen) Icon(Icons.Filled.Check, contentDescription = null) },

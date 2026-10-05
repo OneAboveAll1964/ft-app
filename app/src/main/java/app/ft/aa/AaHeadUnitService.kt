@@ -54,9 +54,16 @@ class AaHeadUnitService : Service() {
             private set
         @Volatile var micReady = false
             private set
+        @Volatile var running = false
+            private set
 
         fun start(context: Context, bluetooth: Boolean) {
-            context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth))
+            if (!FTApp.instance.prefs.autoConnect) {
+                DiagLog.i("AA", "FT is switched off, Android Auto is not started")
+                return
+            }
+            runCatching { context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth)) }
+                .onFailure { DiagLog.w("AA", "Android would not let FT start Android Auto right now (${it.javaClass.simpleName})") }
         }
 
         fun feedCarMicrophone(pcm: ByteArray) {
@@ -64,7 +71,7 @@ class AaHeadUnitService : Service() {
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP))
+            runCatching { context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP)) }
         }
     }
 
@@ -79,12 +86,17 @@ class AaHeadUnitService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "FT Android Auto", NotificationManager.IMPORTANCE_LOW))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        when (intent.action) {
             ACTION_STOP -> {
                 shutdown()
                 stopSelf()
@@ -161,12 +173,10 @@ class AaHeadUnitService : Service() {
                     }.getOrNull()
                     if (s != null) {
                         _state.update { it.copy(selfServer = true) }
-                        app.prefs.aaServerOn = true
                         DiagLog.i(tag, "Android Auto's head unit server is on, connected to it")
                         onPhone(s, dec)
                     } else {
                         if (_state.value.selfServer) _state.update { it.copy(selfServer = false) }
-                        app.prefs.aaServerOn = false
                         if (!moaned) {
                             DiagLog.d(tag, "Android Auto's head unit server is off; FT will connect as soon as it is switched on")
                             moaned = true
@@ -228,6 +238,7 @@ class AaHeadUnitService : Service() {
     override fun onDestroy() {
         shutdown()
         scope.cancel()
+        running = false
         super.onDestroy()
     }
 

@@ -26,6 +26,7 @@ object CarAudioBus {
     private const val PRIME_BYTES = REAL_TIME * 15 / 100
     private const val PRIME_NS = 150_000_000L
     private const val VOICE_IDLE_NS = 1_500_000_000L
+    private const val PHONE_QUIET_NS = 750_000_000L
     private const val SILENT = 300
     private const val VOICE_TARGET = 29000
     private const val BLEND_TARGET = 20000
@@ -46,6 +47,8 @@ object CarAudioBus {
     private var heardAt = 0L
     private var ownAt = 0L
     private var shadowed = 0L
+    private var phoneLoudAt = 0L
+    private var phoneQuiet = 0L
     private var voiceOpen = false
     private var voiceLane = -1
     private var voiceLoudAt = 0L
@@ -74,7 +77,7 @@ object CarAudioBus {
     var mixTogether = true
 
     @Volatile
-    var guidance = GUIDANCE_IN_STEP
+    var guidance = GUIDANCE_UNTOUCHED
 
     @Volatile
     var voice: Voice? = null
@@ -105,6 +108,7 @@ object CarAudioBus {
                 mainAt = 0
                 heardAt = 0
                 ownAt = 0
+                phoneLoudAt = 0
                 voiceOpen = false
                 voiceLane = -1
                 speaking = false
@@ -364,6 +368,13 @@ object CarAudioBus {
                 shadowed += pcm.size
                 return
             }
+            if (lane == LANE_PHONE) {
+                if (audible) phoneLoudAt = now
+                else if (phoneLoudAt == 0L || now - phoneLoudAt > PHONE_QUIET_NS) {
+                    phoneQuiet += pcm.size
+                    return
+                }
+            }
             if (blending && now - blendLoudAt > VOICE_IDLE_NS) finishBlend()
             if (held > 0 && now - mainAt >= MAIN_ALIVE_NS) {
                 while (true) {
@@ -451,10 +462,12 @@ object CarAudioBus {
             val spoken = if (voiceSent > 0) ", voice channel ${(voiceSent / secs).toInt()} B/s" else ""
             val mixed = if (mixedIn > 0) ", mixed into the music ${(mixedIn / secs).toInt()} B/s" else ""
             val muted = if (shadowed > 0) ", phone sound held back ${(shadowed / secs).toInt()} B/s" else ""
-            line = "to the car ${(sent / secs).toInt()} of $REAL_TIME B/s, dropped ${(dropped / secs).toInt()}$spoken$mixed$muted | $lanes"
+            val hush = if (phoneQuiet > 0) ", phone silence kept back ${(phoneQuiet / secs).toInt()} B/s" else ""
+            line = "to the car ${(sent / secs).toInt()} of $REAL_TIME B/s, dropped ${(dropped / secs).toInt()}$spoken$mixed$muted$hush | $lanes"
             sent = 0
             dropped = 0
             shadowed = 0
+            phoneQuiet = 0
             voiceSent = 0
             mixedIn = 0
             perLane.clear()
@@ -464,23 +477,51 @@ object CarAudioBus {
 
     fun toCarFormat(pcm: ByteArray, rate: Int, channels: Int): ByteArray {
         if (rate == RATE && channels == 2) return pcm
-        val step = RATE / rate.coerceAtLeast(1)
-        val frames = pcm.size / (2 * channels)
-        val result = ByteArray(frames * step * 4)
-        var o = 0
-        for (f in 0 until frames) {
-            val base = f * 2 * channels
-            val lo = pcm[base]
-            val hi = pcm[base + 1]
-            val ro = if (channels > 1) pcm[base + 2] else lo
-            val rh = if (channels > 1) pcm[base + 3] else hi
-            for (r in 0 until step) {
-                result[o++] = lo
-                result[o++] = hi
-                result[o++] = ro
-                result[o++] = rh
+        val ch = channels.coerceAtLeast(1)
+        val r = rate.coerceAtLeast(1)
+        val frames = pcm.size / (2 * ch)
+        if (frames == 0) return ByteArray(0)
+        if (RATE % r == 0) {
+            val step = RATE / r
+            val result = ByteArray(frames * step * 4)
+            var o = 0
+            for (f in 0 until frames) {
+                val base = f * 2 * ch
+                val lo = pcm[base]
+                val hi = pcm[base + 1]
+                val ro = if (ch > 1) pcm[base + 2] else lo
+                val rh = if (ch > 1) pcm[base + 3] else hi
+                for (k in 0 until step) {
+                    result[o++] = lo
+                    result[o++] = hi
+                    result[o++] = ro
+                    result[o++] = rh
+                }
             }
+            return result
+        }
+        val outFrames = (frames.toLong() * RATE / r).toInt()
+        val result = ByteArray(outFrames * 4)
+        for (o in 0 until outFrames) {
+            val pos = o.toDouble() * r / RATE
+            val i = pos.toInt().coerceAtMost(frames - 1)
+            val j = (i + 1).coerceAtMost(frames - 1)
+            val frac = pos - i
+            val left = mixAt(pcm, i, j, 0, ch, frac)
+            val right = if (ch > 1) mixAt(pcm, i, j, 1, ch, frac) else left
+            result[o * 4] = (left and 0xFF).toByte()
+            result[o * 4 + 1] = ((left shr 8) and 0xFF).toByte()
+            result[o * 4 + 2] = (right and 0xFF).toByte()
+            result[o * 4 + 3] = ((right shr 8) and 0xFF).toByte()
         }
         return result
     }
+
+    private fun mixAt(pcm: ByteArray, i: Int, j: Int, c: Int, ch: Int, frac: Double): Int {
+        val a = sample(pcm, (i * ch + c) * 2)
+        val b = sample(pcm, (j * ch + c) * 2)
+        return (a + (b - a) * frac).toInt().coerceIn(-32768, 32767)
+    }
+
+    private fun sample(pcm: ByteArray, at: Int): Int = ((pcm[at + 1].toInt() shl 8) or (pcm[at].toInt() and 0xFF)).toShort().toInt()
 }

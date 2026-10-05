@@ -18,6 +18,17 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import app.ft.ui.car.CarIcons
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.items
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,163 +55,222 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import app.ft.ui.components.AaStartChoice
+import app.ft.ui.components.rememberAaServerOn
+import app.ft.ui.components.Stepper
+import app.ft.ui.components.StepItem
+import app.ft.ui.components.CornerPicker
+import app.ft.ui.car.CarStyles
+import app.ft.aa.AaInstaller
+import app.ft.core.CarAudioBus
+import app.ft.projection.VideoPlans
+
+enum class SettingsPage(val title: String, val about: String) {
+    CAR_SCREEN("Car screen", "Background, colours and the buttons on the car"),
+    PICTURE("Picture", "Size, frame rate and quality of the picture sent to the car"),
+    SOUND("Sound", "Directions over music, bluetooth sound and sharing the phone's sound"),
+    CAR("Car and connection", "Names, WiFi Direct, bluetooth and steering wheel keys"),
+    ANDROID_AUTO("Android Auto", "How Android Auto is drawn on the car"),
+    ADVANCED("Advanced", "CarLife ports the head unit connects to")
+}
+
+private fun SettingsPage.icon(): ImageVector = when (this) {
+    SettingsPage.CAR_SCREEN -> CarIcons.Apps
+    SettingsPage.PICTURE -> CarIcons.Tune
+    SettingsPage.SOUND -> CarIcons.Music
+    SettingsPage.CAR -> Icons.Filled.Share
+    SettingsPage.ANDROID_AUTO -> CarIcons.AndroidAuto
+    SettingsPage.ADVANCED -> Icons.Filled.Build
+}
 
 @Composable
-fun SettingsScreen(pad: PaddingValues) {
-    val p = FTApp.instance.prefs
-    var rev by remember { mutableIntStateOf(0) }
+fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onTakeOverAa: () -> Unit, onOpen: (SettingsPage) -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 12.dp, bottom = pad.calculateBottomPadding() + 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
-            Group("Car screen") {
-                CarLookSettings()
-            }
+        if (page == null) {
+            items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
+            item { MadeBy() }
+        } else {
+            if (page == SettingsPage.ANDROID_AUTO) item { Group { AaSetup(onTakeOverAa) } }
+            if (page == SettingsPage.CAR_SCREEN) item { Group { CornerSetting() } }
+            item { Group { PageContent(page) } }
         }
-        item {
-            Group("Car") {
-                TextSetting("Name shown to the head unit", p.carName) { p.carName = it }
-                TextSetting("WiFi Direct name (blank = any CarLife)", p.carP2pName) { p.carP2pName = it }
-                TextSetting("Bluetooth name for auto-start (blank = any)", p.carBtName) { p.carBtName = it }
-                TextSetting("WiFi Direct PIN (blank = push button)", p.carWpsPin) { p.carWpsPin = it }
-                BoolSetting("Auto-connect at boot and on Bluetooth", p.autoConnect) { p.autoConnect = it }
+    }
+}
+
+@Composable
+private fun PageButton(page: SettingsPage, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+                Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
             }
+            Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(page.title, style = MaterialTheme.typography.titleMedium)
+                Text(page.about, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        item {
-            Group("Steering wheel") {
-                BoolSetting("Swap next and previous", p.swapTrackKeys) { p.swapTrackKeys = it }
+    }
+}
+
+@Composable
+private fun MadeBy() {
+    val context = LocalContext.current
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
+    }
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        TextButton(onClick = {
+            runCatching {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PROFILE)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
+        }) {
+            Text("Made by OneAboveAll1964", style = MaterialTheme.typography.titleSmall)
         }
-        item {
-            Group("Sound") {
-                GuidanceSetting()
-                BoolSetting("Use the car's bluetooth for sound instead", p.soundOverBluetooth) { p.soundOverBluetooth = it }
-                BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
-                QuietShareSetting()
-            }
+        if (version.isNotBlank()) {
+            Text("FT $version", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        item {
-            Group("Picture quality") {
-                Text(
-                    "Presets set everything below. Change any one of them and it becomes Custom.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val current = presetName(p)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PRESETS.forEach { preset ->
-                        val chosen = current == preset.name
-                        if (chosen) {
-                            FilledTonalButton(onClick = { apply(p, preset); rev++ }, modifier = Modifier.weight(1f)) {
-                                Text(preset.name, maxLines = 1, textAlign = TextAlign.Center)
-                            }
-                        } else {
-                            OutlinedButton(onClick = { apply(p, preset); rev++ }, modifier = Modifier.weight(1f)) {
-                                Text(preset.name, maxLines = 1, textAlign = TextAlign.Center)
-                            }
-                        }
-                    }
-                }
-                Text(
-                    when (current) {
-                        CUSTOM -> "Custom settings"
-                        DEFAULT.name -> "The settings FT started with"
-                        else -> "$current quality"
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                OutlinedButton(
-                    onClick = { apply(p, DEFAULT); rev++ },
-                    enabled = current != DEFAULT.name,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (current == DEFAULT.name) "Already back to default" else "Put everything back to default")
-                }
-                Text("Resolution", style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SIZES.take(3).forEach { size ->
-                        SizeChip(size, p.forceWidth, p.forceHeight, Modifier.weight(1f)) {
-                            p.forceWidth = size.w; p.forceHeight = size.h; rev++
-                        }
-                    }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SIZES.drop(3).forEach { size ->
-                        SizeChip(size, p.forceWidth, p.forceHeight, Modifier.weight(1f)) {
-                            p.forceWidth = size.w; p.forceHeight = size.h; rev++
-                        }
-                    }
-                }
-                Text("Frame rate", style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0 to "As the car asks", 24 to "24", 30 to "30", 60 to "60").forEach { (value, label) ->
-                        ValueChip(label, p.forceFps == value, Modifier.weight(1f)) { p.forceFps = value; rev++ }
-                    }
-                }
-                Text("Picture data limit", style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(1_500_000 to "1.5", 3_000_000 to "3", 6_000_000 to "6", 10_000_000 to "10").forEach { (value, label) ->
-                        ValueChip("$label Mbps", p.maxBitrate == value, Modifier.weight(1f)) { p.maxBitrate = value; rev++ }
-                    }
-                }
-                IntSetting("Width, 0 means as the car asks", p.forceWidth, rev) { p.forceWidth = it }
-                IntSetting("Height, 0 means as the car asks", p.forceHeight, rev) { p.forceHeight = it }
-                IntSetting("Frame rate, 0 means as the car asks", p.forceFps, rev) { p.forceFps = it }
-                IntSetting("Lowest frame rate to accept, 0 means no floor", p.minFps, rev) { p.minFps = it }
-                IntSetting("Picture data limit in bits per second", p.maxBitrate, rev) { p.maxBitrate = it }
-                IntSetting("Sharpness of the car screen", p.carDensity, rev) { p.carDensity = it }
-            }
+    }
+}
+
+private const val PROFILE = "https://github.com/OneAboveAll1964"
+
+@Composable
+private fun AaSetup(onTakeOverAa: () -> Unit) {
+    val context = LocalContext.current
+    var resumed by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        resumed++
+        onPauseOrDispose { }
+    }
+    val step = remember(resumed) { AaInstaller.step(context) }
+    val hasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
+    val installed = remember(resumed) { AaInstaller.installed(context) }
+    val serverOn = rememberAaServerOn()
+    if (!installed && !hasCopy) {
+        Text("Android Auto is not on this phone", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Install it from the Play Store, or pick an Android Auto file and FT installs it so it starts by itself.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Stepper(aaSetupSteps(step, hasCopy, onTakeOverAa), running = false)
+        return
+    }
+    AaStartChoice(serverOn, reinstalled = step == AaInstaller.Step.DONE) {
+        if (step != AaInstaller.Step.DONE) {
+            Spacer(Modifier.height(10.dp))
+            Stepper(aaSetupSteps(step, hasCopy, onTakeOverAa), running = false)
+            Text(
+                "Afterwards turn off Play Store auto-update for Android Auto, or an update takes it back from FT and this needs doing again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
-        item {
-            Group("CarLife ports the head unit connects to") {
-                IntSetting("Command", p.cmdPort) { p.cmdPort = it }
-                IntSetting("Video", p.videoPort) { p.videoPort = it }
-                IntSetting("Media", p.mediaPort) { p.mediaPort = it }
-                IntSetting("TTS", p.ttsPort) { p.ttsPort = it }
-                IntSetting("Voice", p.vrPort) { p.vrPort = it }
-                IntSetting("Touch", p.touchPort) { p.touchPort = it }
-            }
+    }
+}
+
+private fun aaSetupSteps(step: AaInstaller.Step, hasCopy: Boolean, run: () -> Unit): List<StepItem> {
+    val remove = when (step) {
+        AaInstaller.Step.REMOVE_UPDATES -> StepItem("Remove the Android Auto update", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
+        AaInstaller.Step.UNINSTALL -> StepItem("Remove Android Auto", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
+        else -> if (hasCopy) StepItem("Remove the Play Store copy", true) else null
+    }
+    val install = if (hasCopy || remove != null) StepItem("Put Android Auto back", step == AaInstaller.Step.DONE, action = "Put back", onAction = run)
+    else StepItem("Install Android Auto", step == AaInstaller.Step.DONE, hint = "Pick the Android Auto file", action = "Pick file", onAction = run)
+    return listOfNotNull(remove, install)
+}
+
+@Composable
+private fun CornerSetting() {
+    val p = FTApp.instance.prefs
+    var corner by remember { mutableIntStateOf(p.aaCorner) }
+    Text("FT button on the car", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "Where the FT button sits on the car screen over Android Auto, phone apps and FT's own screens. It always takes you back to FT's car home.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    CornerPicker(corner, p.aaWidth, p.aaHeight) {
+        corner = it
+        p.aaCorner = it
+        CarStyles.reload()
+    }
+}
+
+@Composable
+private fun PageContent(page: SettingsPage) {
+    val p = FTApp.instance.prefs
+    when (page) {
+        SettingsPage.CAR_SCREEN -> CarLookSettings()
+        SettingsPage.PICTURE -> PictureSettings()
+        SettingsPage.SOUND -> {
+            GuidanceSetting()
+            BoolSetting("Use the car's bluetooth for sound instead", p.soundOverBluetooth) { p.soundOverBluetooth = it }
+            BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
+            QuietShareSetting()
         }
-        item {
-            Group("Android Auto head unit") {
-                BoolSetting("Draw at the car's own size", p.aaMatchCar) { p.aaMatchCar = it }
-                BoolSetting("Put its controls on the left", p.aaControlsLeft) { p.aaControlsLeft = it }
-                IntSetting("TCP port", p.aaPort, rev) { p.aaPort = it }
-                IntSetting("Video width", p.aaWidth, rev) { p.aaWidth = it }
-                IntSetting("Video height", p.aaHeight, rev) { p.aaHeight = it }
-                IntSetting("Frame rate", p.aaFps, rev) { p.aaFps = it }
-                IntSetting("Density", p.aaDensity, rev) { p.aaDensity = it }
-                BoolSetting("Start the head unit at launch", p.autoStartAa) { p.autoStartAa = it }
-            }
+        SettingsPage.CAR -> {
+            TextSetting("Name shown to the head unit", p.carName) { p.carName = it }
+            TextSetting("WiFi Direct name (blank = any CarLife)", p.carP2pName) { p.carP2pName = it }
+            TextSetting("Bluetooth name for auto-start (blank = any)", p.carBtName) { p.carBtName = it }
+            TextSetting("WiFi Direct PIN (blank = push button)", p.carWpsPin) { p.carWpsPin = it }
+            BoolSetting("Swap the steering wheel's next and previous", p.swapTrackKeys) { p.swapTrackKeys = it }
+        }
+        SettingsPage.ANDROID_AUTO -> {
+            BoolSetting("Draw at the car's own size", p.aaMatchCar) { p.aaMatchCar = it }
+            BoolSetting("Put its controls on the left", p.aaControlsLeft) { p.aaControlsLeft = it }
+            IntSetting("TCP port", p.aaPort) { p.aaPort = it }
+            IntSetting("Video width", p.aaWidth) { p.aaWidth = it }
+            IntSetting("Video height", p.aaHeight) { p.aaHeight = it }
+            IntSetting("Frame rate", p.aaFps) { p.aaFps = it }
+            IntSetting("Density", p.aaDensity) { p.aaDensity = it }
+        }
+        SettingsPage.ADVANCED -> {
+            Text("Ports the head unit connects to", style = MaterialTheme.typography.labelLarge)
+            IntSetting("Command", p.cmdPort) { p.cmdPort = it }
+            IntSetting("Video", p.videoPort) { p.videoPort = it }
+            IntSetting("Media", p.mediaPort) { p.mediaPort = it }
+            IntSetting("TTS", p.ttsPort) { p.ttsPort = it }
+            IntSetting("Voice", p.vrPort) { p.vrPort = it }
+            IntSetting("Touch", p.touchPort) { p.touchPort = it }
         }
     }
 }
 
 private val GUIDANCE = listOf(
-    "In step" to "The music dips exactly while directions speak. On drives where the car holds the music longer, directions wait for it.",
-    "On time" to "Directions speak the moment they arrive and the music dips with them, which on some drives reaches the car late.",
-    "Untouched" to "Directions speak the moment they arrive, over the music as it is."
+    Triple(CarAudioBus.GUIDANCE_UNTOUCHED, "Like Baidu", "Directions go to the car on their own channel the moment they arrive and the car decides how the music sits under them, the way Baidu CarLife does it."),
+    Triple(CarAudioBus.GUIDANCE_IN_STEP, "In step", "FT mixes directions into the music and dips the music exactly while they speak. On drives where the car holds the music longer, directions wait for it."),
+    Triple(CarAudioBus.GUIDANCE_DIP, "On time", "Directions speak the moment they arrive and FT dips the music with them, which on some drives reaches the car late.")
 )
 
 @Composable
 private fun GuidanceSetting() {
     val p = FTApp.instance.prefs
-    var mode by remember { mutableIntStateOf(p.guidanceMode.coerceIn(0, GUIDANCE.size - 1)) }
+    var mode by remember { mutableIntStateOf(p.guidanceMode) }
+    val chosen = GUIDANCE.firstOrNull { it.first == mode } ?: GUIDANCE.first()
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Directions over music", style = MaterialTheme.typography.bodyLarge)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GUIDANCE.forEachIndexed { i, (label, _) ->
-                ValueChip(label, mode == i, Modifier.weight(1f)) {
-                    mode = i
-                    p.guidanceMode = i
-                    app.ft.core.CarAudioBus.guidance = i
+            GUIDANCE.forEach { (value, label, _) ->
+                ValueChip(label, chosen.first == value, Modifier.weight(1f)) {
+                    mode = value
+                    p.guidanceMode = value
+                    CarAudioBus.guidance = value
                 }
             }
         }
-        Text(GUIDANCE[mode].second, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(chosen.third, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -256,10 +326,9 @@ private fun QuietShareSetting() {
 }
 
 @Composable
-private fun Group(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun Group(content: @Composable ColumnScope.() -> Unit) {
     Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             content()
         }
     }
@@ -299,51 +368,88 @@ private fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> 
     }
 }
 
-private const val CUSTOM = "Custom"
-
-private data class Preset(val name: String, val w: Int, val h: Int, val fps: Int, val bitrate: Int, val density: Int, val minFps: Int = 0)
-
-private data class Size(val label: String, val w: Int, val h: Int)
-
-private val DEFAULT = Preset("Default", 0, 0, 0, 3_000_000, 160)
-
-private val PRESETS = listOf(
-    Preset("Low", 1280, 720, 24, 1_500_000, 160),
-    Preset("Medium", 0, 0, 30, 3_000_000, 160),
-    Preset("High", 0, 0, 60, 8_000_000, 200)
+private val SIZE_CHOICES = listOf(
+    VideoPlans.SIZE_BAIDU to "Like Baidu",
+    VideoPlans.SIZE_CAR to "Car's own",
+    VideoPlans.SIZE_CUSTOM to "Custom"
 )
 
-private val SIZES = listOf(
-    Size("As the car", 0, 0),
-    Size("800×480", 800, 480),
-    Size("1280×720", 1280, 720),
-    Size("1600×720", 1600, 720),
-    Size("1920×720", 1920, 720),
-    Size("1920×1080", 1920, 1080)
-)
+private val FPS_CHOICES = listOf(0 to "Like Baidu", 15 to "15", 20 to "20", 24 to "24", 30 to "30")
 
-private fun matches(p: app.ft.core.Prefs, preset: Preset) =
-    preset.w == p.forceWidth && preset.h == p.forceHeight && preset.fps == p.forceFps &&
-        preset.bitrate == p.maxBitrate && preset.density == p.carDensity && preset.minFps == p.minFps
+private val RATE_CHOICES = listOf(0 to "Like Baidu", 1_500_000 to "1.5", 2_500_000 to "2.5", 4_000_000 to "4", 6_000_000 to "6")
 
-private fun presetName(p: app.ft.core.Prefs): String =
-    (listOf(DEFAULT) + PRESETS).firstOrNull { matches(p, it) }?.name ?: CUSTOM
-
-private fun apply(p: app.ft.core.Prefs, preset: Preset) {
-    p.minFps = preset.minFps
-    p.forceWidth = preset.w
-    p.forceHeight = preset.h
-    p.forceFps = preset.fps
-    p.maxBitrate = preset.bitrate
-    p.carDensity = preset.density
-    p.aaFps = if (preset.fps == 0) 30 else preset.fps
-    p.aaDensity = preset.density
-}
+private val FLOOR_CHOICES = listOf(0 to "Off", 18 to "18", 22 to "22", 26 to "26")
 
 @Composable
-private fun SizeChip(size: Size, w: Int, h: Int, modifier: Modifier, onPick: () -> Unit) {
-    ValueChip(size.label, w == size.w && h == size.h, modifier, onPick)
+private fun PictureSettings() {
+    val p = FTApp.instance.prefs
+    var rev by remember { mutableIntStateOf(0) }
+    var size by remember(rev) { mutableIntStateOf(p.videoSize) }
+    var fps by remember(rev) { mutableIntStateOf(p.videoFps) }
+    var rate by remember(rev) { mutableIntStateOf(p.videoBitrate) }
+    var floor by remember(rev) { mutableIntStateOf(p.videoQpFloor) }
+    val baidu = size == VideoPlans.SIZE_BAIDU && fps == 0 && rate == 0 && p.videoMinFps == 0 && floor == DEFAULT_FLOOR
+    Text(
+        if (baidu) "FT sends the car its picture the way Baidu CarLife does: 1280×720 to a 1920×720 car like the Corolla, starting at 20 frames a second and following what the car asks for."
+        else "Changes take effect the next time the car connects.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Text("Size sent to the car", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SIZE_CHOICES.forEach { (value, label) ->
+            ValueChip(label, size == value, Modifier.weight(1f)) { size = value; p.videoSize = value }
+        }
+    }
+    if (size == VideoPlans.SIZE_CUSTOM) {
+        IntSetting("Width", p.videoWidth, rev) { p.videoWidth = it }
+        IntSetting("Height", p.videoHeight, rev) { p.videoHeight = it }
+    }
+    Text("Frames a second", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FPS_CHOICES.forEach { (value, label) ->
+            ValueChip(label, fps == value, Modifier.weight(if (value == 0) 2f else 1f)) { fps = value; p.videoFps = value }
+        }
+    }
+    Text("Picture data in Mbps", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RATE_CHOICES.forEach { (value, label) ->
+            ValueChip(label, rate == value, Modifier.weight(if (value == 0) 2f else 1f)) { rate = value; p.videoBitrate = value }
+        }
+    }
+    Text("Quality floor", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FLOOR_CHOICES.forEach { (value, label) ->
+            ValueChip(label, floor == value, Modifier.weight(1f)) { floor = value; p.videoQpFloor = value }
+        }
+    }
+    Text(
+        "Keeps every full picture small enough for the car to take, so the screen comes back after the car shows its own screens. Baidu does this on its newest phones. Lower numbers are sharper and bigger, Off sends whatever the phone makes.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    IntSetting("Lowest frame rate to accept, 0 means no floor", p.videoMinFps, rev) { p.videoMinFps = it }
+    IntSetting("Sharpness of apps on the car screen", p.carDensity, rev) { p.carDensity = it }
+    OutlinedButton(
+        onClick = {
+            p.videoSize = VideoPlans.SIZE_BAIDU
+            p.videoWidth = 0
+            p.videoHeight = 0
+            p.videoFps = 0
+            p.videoMinFps = 0
+            p.videoBitrate = 0
+            p.videoQpFloor = DEFAULT_FLOOR
+            p.carDensity = 160
+            rev++
+        },
+        enabled = !baidu || p.carDensity != 160,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(if (baidu && p.carDensity == 160) "Already at the defaults" else "Put everything back to the defaults")
+    }
 }
+
+private const val DEFAULT_FLOOR = 22
 
 @Composable
 private fun ValueChip(label: String, chosen: Boolean, modifier: Modifier, onPick: () -> Unit) {

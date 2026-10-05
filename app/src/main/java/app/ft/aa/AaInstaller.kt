@@ -36,6 +36,21 @@ object AaInstaller {
 
     fun installed(context: Context) = info(context) != null
 
+    fun serverRunning(port: Int): Boolean {
+        val probe = java.net.ServerSocket()
+        return try {
+            probe.reuseAddress = false
+            probe.bind(java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), port), 1)
+            false
+        } catch (_: java.net.BindException) {
+            true
+        } catch (_: Throwable) {
+            false
+        } finally {
+            runCatching { probe.close() }
+        }
+    }
+
     fun openSettings(context: Context) {
         val settings = Intent()
             .setClassName(GEARHEAD, "com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity")

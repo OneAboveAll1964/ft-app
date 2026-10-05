@@ -40,6 +40,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -79,8 +82,8 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
     var tab by remember { mutableStateOf(MusicTab.SONGS) }
     var album by remember { mutableStateOf<Album?>(null) }
     val allowed = remember { canReadMusic(context) }
-    val songs by produceState<List<Track>?>(null) { value = MediaLibrary.songs(context) }
-    val albums by produceState<List<Album>?>(null, songs) {
+    val songs by produceState(MediaLibrary.lastSongs) { value = MediaLibrary.songs(context) }
+    val albums by produceState(MediaLibrary.lastAlbums, songs) {
         value = songs?.let { list -> MediaLibrary.albums(context, list.map { it.albumId }.toSet()) }
     }
 
@@ -161,7 +164,17 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
 
 @Composable
 private fun SongList(list: List<Track>, current: Track?, onPlay: (Int) -> Unit) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val context = LocalContext.current
+    val state = rememberLazyListState()
+    val px = artSize(with(LocalDensity.current) { 52.dp.roundToPx() })
+    LaunchedEffect(list, state) {
+        snapshotFlow { state.isScrollInProgress to (state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) }
+            .collect { (moving, last) ->
+                if (moving || last < 0 || last + 1 >= list.size) return@collect
+                MediaLibrary.prefetch(context, list.subList(last + 1, minOf(list.size, last + 13)).map { MediaLibrary.artUri(it) }, px)
+            }
+    }
+    LazyColumn(state = state, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         itemsIndexed(list, key = { _, t -> t.id }) { i, t ->
             val now = current?.id == t.id && !current.video
             Row(
@@ -173,7 +186,7 @@ private fun SongList(list: List<Track>, current: Track?, onPlay: (Int) -> Unit) 
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Artwork(t.uri, albumUri(t.albumId), 52.dp, 10.dp, CarIcons.Music)
+                Artwork(MediaLibrary.artUri(t), t.uri, 52.dp, 10.dp, CarIcons.Music)
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                     Text(
                         t.title,
@@ -199,7 +212,7 @@ private fun SongList(list: List<Track>, current: Track?, onPlay: (Int) -> Unit) 
 @Composable
 fun NowPlaying(pad: PaddingValues, player: CarPlayer.State, onClose: () -> Unit) {
     val t = player.track ?: return
-    val art = rememberArt(t.uri, albumUri(t.albumId), 512)
+    val art = rememberArt(MediaLibrary.artUri(t), t.uri, 512)
     Box(Modifier.fillMaxSize()) {
         art?.let {
             Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().blur(48.dp).alpha(0.45f))
@@ -323,7 +336,7 @@ fun artSize(px: Int?): Int = if (px == null) 320 else ART_SIZES.firstOrNull { it
 fun rememberArt(uri: Uri?, fallback: Uri?, px: Int): ImageBitmap? {
     val context = LocalContext.current
     val art by produceState<ImageBitmap?>(null, uri, fallback, px) {
-        value = (uri?.let { MediaLibrary.thumbnail(context, it, px) } ?: fallback?.let { MediaLibrary.thumbnail(context, it, px) })?.asImageBitmap()
+        value = (uri?.let { MediaLibrary.thumbnail(context, it, px) } ?: fallback?.takeIf { it != uri }?.let { MediaLibrary.thumbnail(context, it, px) })?.asImageBitmap()
     }
     return art
 }

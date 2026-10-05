@@ -21,6 +21,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -62,6 +67,7 @@ import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
+import app.ft.ui.settings.SettingsPage
 import app.ft.ui.settings.SettingsScreen
 import app.ft.ui.theme.FTTheme
 
@@ -123,8 +129,7 @@ class MainActivity : ComponentActivity() {
         registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
-        if (app.prefs.autoConnect || app.prefs.autoStartWifi) CarLifeService.startAuto(this)
-        if (app.prefs.autoStartAa) AaHeadUnitService.start(this, app.prefs.aaBluetooth)
+        if (app.prefs.autoConnect) CarLifeService.startAuto(this)
         setContent {
             FTTheme {
                 FTRoot(
@@ -148,8 +153,8 @@ class MainActivity : ComponentActivity() {
             CarStyles.reload()
         }
         if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
-        if (intent.getBooleanExtra("wifi", false)) CarLifeService.startWifi(this)
-        if (intent.getBooleanExtra("auto", false)) CarLifeService.startAuto(this)
+        if (intent.getBooleanExtra("off", false)) CarLifeService.switchOff(this)
+        if (intent.getBooleanExtra("wifi", false) || intent.getBooleanExtra("auto", false)) CarLifeService.switchOn(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)
         if (intent.getBooleanExtra("mirror", false)) requestMirror()
         intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }
@@ -174,7 +179,7 @@ class MainActivity : ComponentActivity() {
         }
         if (intent.hasExtra("carSongInfo")) app.prefs.carSongInfo = intent.getBooleanExtra("carSongInfo", true)
         if (intent.hasExtra("guidance")) {
-            app.prefs.guidanceMode = intent.getIntExtra("guidance", CarAudioBus.GUIDANCE_IN_STEP)
+            app.prefs.guidanceMode = intent.getIntExtra("guidance", CarAudioBus.GUIDANCE_UNTOUCHED)
             CarAudioBus.guidance = app.prefs.guidanceMode
         }
         if (intent.hasExtra("carClock24")) {
@@ -248,26 +253,29 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
-    BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
+    var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    val inPage = screen == Screen.SETTINGS && settingsPage != null
+    BackHandler(enabled = screen != Screen.HOME) { if (inPage) settingsPage = null else screen = Screen.HOME }
     val barState = rememberTopAppBarState()
     val scroll = TopAppBarDefaults.pinnedScrollBehavior(barState)
-    LaunchedEffect(screen) { barState.contentOffset = 0f }
+    LaunchedEffect(screen, settingsPage) { barState.contentOffset = 0f }
     Scaffold(
         modifier = Modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = {
-                    AnimatedContent(targetState = screen, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { s ->
+                    val heading = if (inPage) settingsPage?.title.orEmpty() else screen.label
+                    AnimatedContent(targetState = screen to heading, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { (s, text) ->
                         if (s == Screen.HOME) Image(
                             painter = painterResource(R.drawable.ft_logo),
                             contentDescription = "FT",
                             modifier = Modifier.height(40.dp)
                         )
-                        else Text(s.label, style = MaterialTheme.typography.titleLarge)
+                        else Text(text, style = MaterialTheme.typography.titleLarge)
                     }
                 },
                 navigationIcon = {
-                    if (screen != Screen.HOME) IconButton(onClick = { screen = Screen.HOME }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    if (inPage) IconButton(onClick = { settingsPage = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     if (screen == Screen.LOG) IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = "Clear") }
@@ -276,28 +284,52 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
             )
         },
         bottomBar = {
-            NavigationBar {
-                Screen.entries.forEach { s ->
-                    NavigationBarItem(
-                        selected = screen == s,
-                        onClick = { screen = s },
-                        icon = { Icon(s.icon, contentDescription = s.label) },
-                        label = { Text(s.label) }
-                    )
+            AnimatedVisibility(visible = !inPage, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                NavigationBar {
+                    Screen.entries.forEach { s ->
+                        NavigationBarItem(
+                            selected = screen == s,
+                            onClick = {
+                                if (s == Screen.SETTINGS) settingsPage = null
+                                screen = s
+                            },
+                            icon = { Icon(s.icon, contentDescription = s.label) },
+                            label = { Text(s.label) }
+                        )
+                    }
                 }
             }
         }
     ) { pad ->
-        AnimatedContent(targetState = screen, modifier = Modifier.fillMaxSize(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { s ->
+        AnimatedContent(
+            targetState = screen to settingsPage,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                val (from, fromPage) = initialState
+                val (to, toPage) = targetState
+                val inSettings = from == Screen.SETTINGS && to == Screen.SETTINGS
+                when {
+                    inSettings && fromPage == null && toPage != null ->
+                        (slideInHorizontally { it } + fadeIn()) togetherWith (slideOutHorizontally { -it / 4 } + fadeOut())
+                    inSettings && fromPage != null && toPage == null ->
+                        (slideInHorizontally { -it / 4 } + fadeIn()) togetherWith (slideOutHorizontally { it } + fadeOut())
+                    else -> fadeIn() togetherWith fadeOut()
+                }
+            },
+            label = "screen"
+        ) { (s, page) ->
             when (s) {
                 Screen.HOME -> HomeScreen(
                     pad = pad,
                     onOpenAccessibility = onOpenAccessibility,
                     onOpenOverlay = onOpenOverlay,
-                    onTakeOverAa = onTakeOverAa
+                    onOpenAaSetup = {
+                        settingsPage = SettingsPage.ANDROID_AUTO
+                        screen = Screen.SETTINGS
+                    }
                 )
                 Screen.LOG -> DiagnosticsScreen(pad)
-                Screen.SETTINGS -> SettingsScreen(pad)
+                Screen.SETTINGS -> SettingsScreen(pad, page, onTakeOverAa) { settingsPage = it }
             }
         }
     }

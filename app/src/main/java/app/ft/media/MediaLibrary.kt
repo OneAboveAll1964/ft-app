@@ -38,12 +38,26 @@ object MediaLibrary {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
     private val missing = HashSet<String>()
-    private val loader = Executors.newFixedThreadPool(2) { r ->
+    private val loader = Executors.newFixedThreadPool(4) { r ->
         Thread({
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
             r.run()
         }, "FT-Art").apply { isDaemon = true }
     }
+    private val ahead = Executors.newSingleThreadExecutor { r ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_LOWEST)
+            r.run()
+        }, "FT-ArtAhead").apply { isDaemon = true }
+    }
+    private val queued = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    @Volatile var lastSongs: List<Track>? = null
+        private set
+    @Volatile var lastAlbums: List<Album>? = null
+        private set
+    @Volatile var lastVideos: List<Track>? = null
+        private set
 
     private val chatFolders = listOf("whatsapp", "telegram")
 
@@ -80,6 +94,7 @@ object MediaLibrary {
                 }
             }
         }.onFailure { DiagLog.w("Media", "could not read music: ${it.message}") }
+        lastSongs = out
         out
     }
 
@@ -105,6 +120,7 @@ object MediaLibrary {
                 }
             }
         }.onFailure { DiagLog.w("Media", "could not read albums: ${it.message}") }
+        if (keep != null) lastAlbums = out
         out
     }
 
@@ -131,6 +147,7 @@ object MediaLibrary {
                 }
             }
         }.onFailure { DiagLog.w("Media", "could not read videos: ${it.message}") }
+        lastVideos = out
         out
     }
 
@@ -152,6 +169,26 @@ object MediaLibrary {
             }
         }
     }
+
+    fun prefetch(context: Context, uris: List<Uri>, size: Int) {
+        for (uri in uris) {
+            val key = "$uri@$size"
+            if (art.get(key) != null || synchronized(missing) { key in missing } || !queued.add(key)) continue
+            ahead.execute {
+                try {
+                    if (art.get(key) == null) {
+                        val b = runCatching { context.contentResolver.loadThumbnail(uri, Size(size, size), null) }.getOrNull()
+                        if (b != null) art.put(key, b) else synchronized(missing) { missing += key }
+                    }
+                } finally {
+                    queued.remove(key)
+                }
+            }
+        }
+    }
+
+    fun artUri(track: Track): Uri =
+        if (track.video || track.albumId <= 0) track.uri else ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, track.albumId)
 
     suspend fun artBytes(context: Context, track: Track, size: Int = 240): ByteArray? {
         val b = thumbnail(context, track.uri, size) ?: thumbnail(context, ContentUris.withAppendedId(MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, track.albumId), size)

@@ -10,10 +10,22 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 private val Mint = Color(0xFF5FE3C0)
 private val Deep = Color(0xFF0B1D2A)
@@ -73,7 +85,7 @@ fun FTTheme(dark: Boolean = isSystemInDarkTheme(), dynamic: Boolean = true, cont
     }
     MaterialExpressiveTheme(
         colorScheme = scheme,
-        typography = FTTypography,
+        typography = rememberCenteredTypography(FTTypography),
         motionScheme = MotionScheme.expressive(),
         content = content
     )
@@ -83,8 +95,66 @@ fun FTTheme(dark: Boolean = isSystemInDarkTheme(), dynamic: Boolean = true, cont
 fun CarTheme(accent: Color = Mint, content: @Composable () -> Unit) {
     MaterialExpressiveTheme(
         colorScheme = app.ft.ui.car.carScheme(DarkScheme, accent),
-        typography = FTTypography,
+        typography = rememberCenteredTypography(FTTypography),
         motionScheme = MotionScheme.expressive(),
         content = content
     )
 }
+
+@Composable
+private fun rememberCenteredTypography(base: Typography): Typography {
+    val resolver = LocalFontFamilyResolver.current
+    val density = LocalDensity.current
+    return remember(base, resolver, density) { base.map { it.digitsCentered(resolver, density) } }
+}
+
+private fun Typography.map(fix: (TextStyle) -> TextStyle) = copy(
+    displayLarge = fix(displayLarge), displayMedium = fix(displayMedium), displaySmall = fix(displaySmall),
+    headlineLarge = fix(headlineLarge), headlineMedium = fix(headlineMedium), headlineSmall = fix(headlineSmall),
+    titleLarge = fix(titleLarge), titleMedium = fix(titleMedium), titleSmall = fix(titleSmall),
+    bodyLarge = fix(bodyLarge), bodyMedium = fix(bodyMedium), bodySmall = fix(bodySmall),
+    labelLarge = fix(labelLarge), labelMedium = fix(labelMedium), labelSmall = fix(labelSmall),
+    displayLargeEmphasized = fix(displayLargeEmphasized), displayMediumEmphasized = fix(displayMediumEmphasized),
+    displaySmallEmphasized = fix(displaySmallEmphasized), headlineLargeEmphasized = fix(headlineLargeEmphasized),
+    headlineMediumEmphasized = fix(headlineMediumEmphasized), headlineSmallEmphasized = fix(headlineSmallEmphasized),
+    titleLargeEmphasized = fix(titleLargeEmphasized), titleMediumEmphasized = fix(titleMediumEmphasized),
+    titleSmallEmphasized = fix(titleSmallEmphasized), bodyLargeEmphasized = fix(bodyLargeEmphasized),
+    bodyMediumEmphasized = fix(bodyMediumEmphasized), bodySmallEmphasized = fix(bodySmallEmphasized),
+    labelLargeEmphasized = fix(labelLargeEmphasized), labelMediumEmphasized = fix(labelMediumEmphasized),
+    labelSmallEmphasized = fix(labelSmallEmphasized)
+)
+
+private fun TextStyle.digitsCentered(resolver: FontFamily.Resolver, density: Density): TextStyle {
+    if (!fontSize.isSp || !lineHeight.isSp) return this
+    val typeface = runCatching {
+        resolver.resolve(fontFamily, fontWeight ?: FontWeight.Normal, fontStyle ?: FontStyle.Normal, fontSynthesis ?: FontSynthesis.All).value
+    }.getOrNull() as? android.graphics.Typeface ?: return this
+    val paint = android.graphics.Paint().apply {
+        this.typeface = typeface
+        textSize = with(density) { fontSize.toPx() }
+    }
+    val metrics = paint.fontMetricsInt
+    val ink = android.graphics.RectF()
+    android.graphics.Path().also { paint.getTextPath(DIGITS, 0, DIGITS.length, 0f, 0f, it) }.computeBounds(ink, true)
+    if (ink.isEmpty) return this
+    val line = ceil(with(density) { lineHeight.toPx() }).toInt()
+    val spare = line - (metrics.descent - metrics.ascent)
+    if (spare <= 0) return this
+    val current = lineHeightStyle ?: LineHeightStyle.Default
+    if (current.trim == LineHeightStyle.Trim.None) {
+        val below = (line / 2f - metrics.descent + ink.centerY()).roundToInt().coerceIn(0, spare)
+        return copy(lineHeightStyle = current.copy(alignment = LineHeightStyle.Alignment(below.belowRatio(spare))))
+    }
+    val low = (-metrics.ascent - metrics.descent) / 2f + ink.centerY()
+    val grow = (2 * abs(low)).roundToInt().coerceAtMost(spare)
+    if (grow == 0) return this
+    return if (low > 0) {
+        copy(lineHeightStyle = current.copy(alignment = LineHeightStyle.Alignment(grow.belowRatio(spare)), trim = LineHeightStyle.Trim.FirstLineTop))
+    } else {
+        copy(lineHeightStyle = current.copy(alignment = LineHeightStyle.Alignment((spare - grow).belowRatio(spare)), trim = LineHeightStyle.Trim.LastLineBottom))
+    }
+}
+
+private fun Int.belowRatio(spare: Int) = (1f - (this - 0.5f) / spare).coerceIn(0f, 1f)
+
+private const val DIGITS = "0123456789"
