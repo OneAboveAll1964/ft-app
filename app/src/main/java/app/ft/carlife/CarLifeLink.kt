@@ -137,6 +137,10 @@ class WifiChannelLink(
         all.forEach { runCatching { it.close() } }
     }
 
+    @Volatile private var progressAt = 0L
+
+    private fun sinceProgress(): Long = android.os.SystemClock.elapsedRealtime() - progressAt
+
     private fun watchCar(scope: CoroutineScope, s: Socket) {
         watch?.cancel()
         watch = scope.launch(Dispatchers.IO) {
@@ -145,16 +149,17 @@ class WifiChannelLink(
                 delay(REACH_EVERY_MS)
                 if (s.isClosed || synchronized(sockets) { sockets[CarLifeProtocol.CH_CMD] !== s }) break
                 val reachable = runCatching { s.inetAddress.isReachable(REACH_TIMEOUT_MS) }.getOrDefault(true)
-                if (reachable) {
+                if (CarWatch.alive(reachable, sinceProgress())) {
+                    if (!reachable) DiagLog.i(tag, "the head unit did not answer a ping but is still taking data, keeping the connection")
                     misses = 0
                     continue
                 }
                 misses++
-                DiagLog.w(tag, "the head unit did not answer a ping ($misses)")
+                DiagLog.w(tag, "the head unit did not answer a ping and took no data for ${sinceProgress() / 1000}s ($misses)")
                 if (misses < 2) {
                     delay(REACH_RETRY_MS)
                     val again = runCatching { s.inetAddress.isReachable(REACH_TIMEOUT_MS) }.getOrDefault(true)
-                    if (again) {
+                    if (CarWatch.alive(again, sinceProgress())) {
                         misses = 0
                         continue
                     }
@@ -179,6 +184,7 @@ class WifiChannelLink(
                 if (len < 0 || len > CarLifeFraming.maxBody(channel)) throw IllegalStateException("bad body length $len")
                 val body = ByteArray(len)
                 Bytes.readFully(i, body)
+                progressAt = android.os.SystemClock.elapsedRealtime()
                 onMessage(channel, head, body)
             }
         } catch (t: Throwable) {
@@ -205,6 +211,7 @@ class WifiChannelLink(
                 val o = s.getOutputStream()
                 o.write(inner)
                 o.flush()
+                progressAt = android.os.SystemClock.elapsedRealtime()
                 true
             } catch (t: Throwable) {
                 DiagLog.e(tag, "WIFI ${CarLifeProtocol.channelName(channel)} write failed", t)
@@ -327,4 +334,10 @@ object NetUtil {
         }
         return true
     }
+}
+
+internal object CarWatch {
+    const val TAKING_DATA_MS = 15_000L
+
+    fun alive(answeredPing: Boolean, sinceProgressMs: Long): Boolean = answeredPing || sinceProgressMs < TAKING_DATA_MS
 }
