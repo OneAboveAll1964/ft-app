@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
             CarStyles.reload()
         }
         if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
+        if (intent.getBooleanExtra("off", false)) CarLifeService.switchOff(this)
         if (intent.getBooleanExtra("wifi", false) || intent.getBooleanExtra("auto", false)) CarLifeService.switchOn(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)
         if (intent.getBooleanExtra("mirror", false)) requestMirror()

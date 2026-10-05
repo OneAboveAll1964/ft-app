@@ -20,6 +20,8 @@ $ADB devices | sed -n '2p'
 
 echo "== install =="
 $ADB install -r -g "$APK" >/dev/null 2>&1 && ok "apk installed" || ko "apk install"
+$ADB shell am start -n $PKG/.MainActivity --ez off true >/dev/null 2>&1
+sleep 2
 $ADB shell appops set $PKG SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1
 $ADB shell settings put secure enabled_accessibility_services $PKG/$PKG.FTTouchService >/dev/null 2>&1
 $ADB shell settings put secure accessibility_enabled 1 >/dev/null 2>&1
