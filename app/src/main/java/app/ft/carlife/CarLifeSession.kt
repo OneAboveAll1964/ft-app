@@ -349,6 +349,7 @@ class CarLifeSession(
                     return
                 }
                 carAskedRate = true
+                DiagLog.i(tag, "head unit asked for $asked fps")
                 if (asked < VideoPlans.LOWEST_PACE && f == fps) DiagLog.i(tag, "head unit asked for $asked fps, FT keeps $fps like Baidu, which never paces below ${VideoPlans.LOWEST_PACE}")
                 applyRate(f)
                 cmd(CarLifeProtocol.CMD_VIDEO_ENCODER_FRAME_RATE_CHANGE_DONE, ProtoWriter().int32(1, asked).toByteArray())

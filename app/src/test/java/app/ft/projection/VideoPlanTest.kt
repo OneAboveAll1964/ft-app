@@ -82,6 +82,18 @@ class VideoPlanTest {
     }
 
     @Test
+    fun aHotPhoneSendsFewerFrames() {
+        assertEquals(0, VideoPlans.thermalCap(0))
+        assertEquals(0, VideoPlans.thermalCap(2))
+        assertEquals(24, VideoPlans.thermalCap(3))
+        assertEquals(20, VideoPlans.thermalCap(4))
+        assertEquals(20, VideoPlans.thermalCap(6))
+        assertEquals(30, VideoPlans.withinCap(30, 0))
+        assertEquals(24, VideoPlans.withinCap(30, 24))
+        assertEquals(15, VideoPlans.withinCap(15, 24))
+    }
+
+    @Test
     fun aCarThatNeverAsksGetsThirtyUnlessTheRateIsForced() {
         assertEquals(30, VideoPlans.unaskedRate(0, 0, 20))
         assertNull(VideoPlans.unaskedRate(0, 0, 30))

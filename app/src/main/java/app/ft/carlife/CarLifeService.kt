@@ -36,6 +36,7 @@ import app.ft.projection.CarTouchZones
 import app.ft.projection.MirrorSink
 import app.ft.projection.PhoneMirror
 import app.ft.projection.VideoPlan
+import app.ft.projection.VideoPlans
 import app.ft.ui.car.CarScreen
 import app.ft.ui.theme.CarTheme
 import kotlinx.coroutines.CoroutineScope
@@ -230,6 +231,24 @@ class CarLifeService : Service() {
         return true
     }
 
+    @Volatile private var thermalCap = 0
+    private val heatListener = PowerManager.OnThermalStatusChangedListener { status -> onHeat(status) }
+
+    private fun watchHeat() {
+        val pm = getSystemService(PowerManager::class.java) ?: return
+        runCatching { pm.addThermalStatusListener(mainExecutor, heatListener) }
+        onHeat(pm.currentThermalStatus)
+    }
+
+    private fun onHeat(status: Int) {
+        val cap = VideoPlans.thermalCap(status)
+        if (cap == thermalCap) return
+        thermalCap = cap
+        DiagLog.i(tag, if (cap > 0) "the phone is getting hot (thermal status $status), sending at most $cap frames a second to cool it"
+            else "the phone has cooled down (thermal status $status), back to the full frame rate")
+        session?.let { s -> if (s.projecting) carDisplay.setFrameRate(VideoPlans.withinCap(s.fps, cap)) }
+    }
+
     private fun catchUp(reason: String) {
         var dropped = 0L
         while (true) {
@@ -400,6 +419,7 @@ class CarLifeService : Service() {
         }
         CarPlayer.onBreak = { reason -> catchUp(reason) }
         CarAudioBus.onBreak = { reason -> catchUp(reason) }
+        watchHeat()
         MirrorSink.onGone = { surface -> if (mirror.isShowing(surface)) mirror.hide() }
         watchCarBluetoothAudio()
         progressJob = scope.launch {
@@ -734,7 +754,7 @@ class CarLifeService : Service() {
         s.hotspot = mode == 0
         session = s
         s.onVideoConfig = { plan -> onVideoConfig(plan) }
-        s.onFrameRate = { fps -> carDisplay.setFrameRate(fps) }
+        s.onFrameRate = { fps -> carDisplay.setFrameRate(VideoPlans.withinCap(fps, thermalCap)) }
         s.onStopVideo = { onStopVideo() }
         s.onTouch = { t -> routeTouch(t) }
         s.onHardKey = { k -> onHardKey(k) }
@@ -832,6 +852,7 @@ class CarLifeService : Service() {
         ) {
             CarTheme { CarScreen() }
         }
+        if (thermalCap > 0) carDisplay.setFrameRate(VideoPlans.withinCap(plan.fps, thermalCap))
         updateNotification("Projecting ${plan.streamWidth}×${plan.streamHeight} to the car")
         startAudioToCar()
     }
@@ -1782,6 +1803,7 @@ class CarLifeService : Service() {
         CarPlayer.onTrack = null
         CarPlayer.onBreak = null
         CarAudioBus.onBreak = null
+        runCatching { getSystemService(PowerManager::class.java)?.removeThermalStatusListener(heatListener) }
         scope.cancel()
         writer?.interrupt()
         writer = null

@@ -107,9 +107,9 @@ class CarDisplay(private val context: Context) {
         val g = gate
         if (g != null) {
             g.setRate(f)
-            DiagLog.i(tag, "head unit asked for $f fps, sending at most $f frames a second")
+            DiagLog.i(tag, "frame rate now $f, sending at most $f frames a second")
         } else {
-            DiagLog.i(tag, "head unit asked for $f fps, redrawing every ${interval}ms")
+            DiagLog.i(tag, "frame rate now $f, redrawing every ${interval}ms")
         }
     }
 

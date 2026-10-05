@@ -78,6 +78,14 @@ object VideoPlans {
         return maxOf(asked, floor).coerceIn(1, 60)
     }
 
+    fun thermalCap(status: Int): Int = when {
+        status >= android.os.PowerManager.THERMAL_STATUS_CRITICAL -> 20
+        status >= android.os.PowerManager.THERMAL_STATUS_SEVERE -> 24
+        else -> 0
+    }
+
+    fun withinCap(fps: Int, cap: Int): Int = if (cap > 0) minOf(fps, cap) else fps
+
     fun unaskedRate(forced: Int, floor: Int, current: Int): Int? {
         if (forced > 0) return null
         val f = maxOf(UNASKED_FPS, floor).coerceIn(1, 60)
