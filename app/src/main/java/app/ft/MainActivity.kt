@@ -63,6 +63,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaInstaller
 import app.ft.carlife.CarLifeService
+import app.ft.projection.VideoPlans
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
@@ -153,6 +154,7 @@ class MainActivity : ComponentActivity() {
             CarStyles.reload()
         }
         if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
+        if (intent.hasExtra("pictureSize")) app.prefs.videoSize = intent.getIntExtra("pictureSize", VideoPlans.SIZE_CAR)
         if (intent.getBooleanExtra("off", false)) CarLifeService.switchOff(this)
         if (intent.getBooleanExtra("wifi", false) || intent.getBooleanExtra("auto", false)) CarLifeService.switchOn(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)

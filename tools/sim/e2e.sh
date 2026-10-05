@@ -96,7 +96,7 @@ check "Home shows the connection steps and no setup left to do" "grep -q 'text=\
 check "Home no longer asks for screen sharing up front" "! grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect, Android Auto auto-start on) =="
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings --ez carSongInfo true --ei guidance 2 \
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei pictureSize 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings --ez carSongInfo true --ei guidance 2 \
   --es carTiles music,videos,youtube,maps,browser,apps --es carBackground deep --ei carAccent -10492992 --ez carClock24 true >/dev/null 2>&1
 sleep 7
 check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt'"
@@ -124,7 +124,7 @@ python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 2 --width 1024 --hei
 PL=$?
 check "plain head unit session passed" "[ $PL = 0 ]"
 python3 -c "import json;d=json.load(open('$OUT/plain/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| heartbeats before init:',d.get('heartbeats_before_init'),'| bt reply:',d.get('bt_pair_reply'))" 2>/dev/null
-check "encoder followed Baidu's size for the plain head unit (1024x600 sends 1024x576)" "grep -q 'encoder started 1024x576' '$OUT/logcat.txt'"
+check "encoder followed Baidu's size for the plain head unit (1024x600 sends 1024x576)" "grep -q 'encoder started 1024x576' '$OUT/logcat.txt' && grep -q '1024x600 drawn into 1024x576' '$OUT/logcat.txt'"
 check "content encryption reported off for the plain unit" "grep -q 'content encryption off on this head unit' '$OUT/logcat.txt'"
 sleep 3
 
@@ -300,9 +300,9 @@ echo "== Corolla-shaped car (1920x720, protocol 1.0, no frame rate asked) =="
 $ADB logcat -c
 $ADB logcat -v time > "$OUT/corolla_logcat.txt" 2>&1 &
 COROLLALOG=$!
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei pictureSize 1 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
 sleep 3
-python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1920 --height 720 --fps 0 --seconds 3 \
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1920 --height 720 --fps 0 --seconds 3 --stream own \
   --touches "640,360@1;pause@3;start@7;points:320,180@10;click:960,540@11;pause@12;start@12.5" --tail-seconds 4 --out "$OUT/corolla" > "$OUT/corolla_sim.log" 2>&1
 COR=$?
 sleep 1
@@ -313,7 +313,7 @@ d = json.load(open(sys.argv[1]))
 want = sys.argv[2]
 if want == "init":
     print("   INIT_DONE:", d.get("init_done"))
-    assert d.get("init_done") == [1280, 720, 0], d.get("init_done")
+    assert d.get("init_done") == [1920, 720, 0], d.get("init_done")
 elif want == "pause":
     p = d.get("pauses", [])
     print("   pauses:", p)
@@ -325,10 +325,10 @@ elif want == "quick":
 PY7
 }
 check "Corolla-shaped car session passed" "[ $COR = 0 ]"
-check "the Corolla gets Baidu's 1280x720 and INIT_DONE says so" "corolla init"
-check "FT draws at the car's full 1920x720 and squeezes it into the stream" "grep -q '1920x720 drawn into 1280x720' '$OUT/corolla_logcat.txt' && grep -q 'encoder started 1280x720@20' '$OUT/corolla_logcat.txt'"
-check "a touch on the stream lands on FT's full-size screen (640,360 -> 960,360)" "grep -q 'car touched 640,360 of its picture, 960,360 on FT' '$OUT/corolla_logcat.txt'"
-check "touch down and up messages and single clicks reach FT too" "grep -q 'car touched 320,180 of its picture, 480,180 on FT' '$OUT/corolla_logcat.txt' && grep -q 'car touched 960,540 of its picture, 1440,540 on FT' '$OUT/corolla_logcat.txt'"
+check "the Corolla gets its own 1920x720 and INIT_DONE says so" "corolla init"
+check "FT sends the Corolla its full 1920x720 at 3 Mbps, starting at 20 frames a second" "grep -q 'sending 1920x720 at 20 fps, 3000 kbps' '$OUT/corolla_logcat.txt' && grep -q 'encoder started 1920x720@20' '$OUT/corolla_logcat.txt'"
+check "a touch on the car's own size lands on the same spot on FT's screen (640,360)" "grep -q 'car touched 640,360 of its picture, 640,360 on FT' '$OUT/corolla_logcat.txt'"
+check "touch down and up messages and single clicks reach FT too" "grep -q 'car touched 320,180 of its picture, 320,180 on FT' '$OUT/corolla_logcat.txt' && grep -q 'car touched 960,540 of its picture, 960,540 on FT' '$OUT/corolla_logcat.txt'"
 check "while the car shows its own screen only heartbeats go out, then the next full picture brings it back" "corolla pause"
 check "a quick trip to the car's own screen comes back too" "corolla quick"
 check "coming back needs no forced picture and no second header" "sim_check corolla header_sent_once && ! grep -q 'key picture of' '$OUT/corolla_logcat.txt'"

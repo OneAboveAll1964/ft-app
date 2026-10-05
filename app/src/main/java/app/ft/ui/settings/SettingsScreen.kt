@@ -369,14 +369,14 @@ private fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> 
 }
 
 private val SIZE_CHOICES = listOf(
-    VideoPlans.SIZE_BAIDU to "Like Baidu",
     VideoPlans.SIZE_CAR to "Car's own",
+    VideoPlans.SIZE_BAIDU to "Like Baidu",
     VideoPlans.SIZE_CUSTOM to "Custom"
 )
 
-private val FPS_CHOICES = listOf(0 to "Like Baidu", 15 to "15", 20 to "20", 24 to "24", 30 to "30")
+private val FPS_CHOICES = listOf(0 to "Auto", 15 to "15", 20 to "20", 24 to "24", 30 to "30")
 
-private val RATE_CHOICES = listOf(0 to "Like Baidu", 1_500_000 to "1.5", 2_500_000 to "2.5", 4_000_000 to "4", 6_000_000 to "6")
+private val RATE_CHOICES = listOf(2_000_000 to "2", 2_560_000 to "2.56", 3_000_000 to "3", 3_840_000 to "3.84", 5_000_000 to "5")
 
 private val FLOOR_CHOICES = listOf(0 to "Off", 18 to "18", 22 to "22", 26 to "26")
 
@@ -388,9 +388,9 @@ private fun PictureSettings() {
     var fps by remember(rev) { mutableIntStateOf(p.videoFps) }
     var rate by remember(rev) { mutableIntStateOf(p.videoBitrate) }
     var floor by remember(rev) { mutableIntStateOf(p.videoQpFloor) }
-    val baidu = size == VideoPlans.SIZE_BAIDU && fps == 0 && rate == 0 && p.videoMinFps == 0 && floor == DEFAULT_FLOOR
+    val defaults = size == VideoPlans.SIZE_CAR && fps == 0 && rate == VideoPlans.DEFAULT_BITRATE && p.videoMinFps == 0 && floor == DEFAULT_FLOOR
     Text(
-        if (baidu) "FT sends the car its picture the way Baidu CarLife does: 1280×720 to a 1920×720 car like the Corolla, starting at 20 frames a second and following what the car asks for."
+        if (defaults) "FT sends the car its own screen size, 1920×720 on a Corolla, with 3 Mbps of picture data. That is the most the Corolla has been tested with, and it kept up at 30 frames a second. FT starts at 20 frames a second and follows what the car asks for."
         else "Changes take effect the next time the car connects.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -408,15 +408,20 @@ private fun PictureSettings() {
     Text("Frames a second", style = MaterialTheme.typography.labelLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FPS_CHOICES.forEach { (value, label) ->
-            ValueChip(label, fps == value, Modifier.weight(if (value == 0) 2f else 1f)) { fps = value; p.videoFps = value }
+            ValueChip(label, fps == value, Modifier.weight(1f)) { fps = value; p.videoFps = value }
         }
     }
     Text("Picture data in Mbps", style = MaterialTheme.typography.labelLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         RATE_CHOICES.forEach { (value, label) ->
-            ValueChip(label, rate == value, Modifier.weight(if (value == 0) 2f else 1f)) { rate = value; p.videoBitrate = value }
+            ValueChip(label, rate == value, Modifier.weight(1f)) { rate = value; p.videoBitrate = value }
         }
     }
+    Text(
+        "Baidu sends a Corolla 2.56. Anything above 3 is untested on the Corolla; if it is too much, the car asks for fewer frames a second.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
     Text("Quality floor", style = MaterialTheme.typography.labelLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FLOOR_CHOICES.forEach { (value, label) ->
@@ -432,20 +437,20 @@ private fun PictureSettings() {
     IntSetting("Sharpness of apps on the car screen", p.carDensity, rev) { p.carDensity = it }
     OutlinedButton(
         onClick = {
-            p.videoSize = VideoPlans.SIZE_BAIDU
+            p.videoSize = VideoPlans.SIZE_CAR
             p.videoWidth = 0
             p.videoHeight = 0
             p.videoFps = 0
             p.videoMinFps = 0
-            p.videoBitrate = 0
+            p.videoBitrate = VideoPlans.DEFAULT_BITRATE
             p.videoQpFloor = DEFAULT_FLOOR
             p.carDensity = 160
             rev++
         },
-        enabled = !baidu || p.carDensity != 160,
+        enabled = !defaults || p.carDensity != 160,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(if (baidu && p.carDensity == 160) "Already at the defaults" else "Put everything back to the defaults")
+        Text(if (defaults && p.carDensity == 160) "Already at the defaults" else "Put everything back to the defaults")
     }
 }
 

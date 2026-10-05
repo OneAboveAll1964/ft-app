@@ -15,6 +15,8 @@ object VideoPlans {
     const val SIZE_CAR = 1
     const val SIZE_CUSTOM = 2
     const val START_FPS = 20
+    const val DEFAULT_BITRATE = 3_000_000
+    const val LOWEST_PACE = 15
 
     fun plan(
         carWidth: Int,

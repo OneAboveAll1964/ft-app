@@ -455,6 +455,7 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--ports", default="7240,8240,9240,9241,9242,9340")
     ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--stream", choices=["baidu", "own"], default="baidu")
     ap.add_argument("--height", type=int, default=720)
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--seconds", type=float, default=4.0)
@@ -546,7 +547,7 @@ def main():
         sim.send_cmd(VIDEO_ENCODER_INIT, init)
         _, _, pl = sim.wait_for(VIDEO_ENCODER_INIT_DONE)
         di = decode(pl)
-        want = baidu_size(a.width, a.height, new_vehicle)
+        want = (a.width, a.height) if a.stream == "own" else baidu_size(a.width, a.height, new_vehicle)
         result["init_done"] = [first(di, 1, -1), first(di, 2, -1), first(di, 3, -1)]
         result["checks"]["init_done_stream_size"] = (first(di, 1, -1), first(di, 2, -1)) == want and first(di, 3, -1) == a.fps
         result["stream"] = list(want)

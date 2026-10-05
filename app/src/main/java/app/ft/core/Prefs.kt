@@ -2,6 +2,7 @@ package app.ft.core
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.ft.projection.VideoPlans
 
 class Prefs(context: Context) {
     private val sp: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
@@ -29,12 +30,12 @@ class Prefs(context: Context) {
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
     var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)
 
-    var videoSize: Int get() = int("videoSize", 0); set(v) = set("videoSize", v)
+    var videoSize: Int get() = int("pictureSize", VideoPlans.SIZE_CAR); set(v) = set("pictureSize", v)
     var videoWidth: Int get() = int("videoWidth", 0); set(v) = set("videoWidth", v)
     var videoHeight: Int get() = int("videoHeight", 0); set(v) = set("videoHeight", v)
     var videoFps: Int get() = int("videoFps", 0); set(v) = set("videoFps", v)
     var videoMinFps: Int get() = int("videoMinFps", 0); set(v) = set("videoMinFps", v)
-    var videoBitrate: Int get() = int("videoBitrate", 0); set(v) = set("videoBitrate", v)
+    var videoBitrate: Int get() = int("pictureBitrate", VideoPlans.DEFAULT_BITRATE); set(v) = set("pictureBitrate", v)
     var videoQpFloor: Int get() = int("videoQpFloor", 22); set(v) = set("videoQpFloor", v)
     var carDensity: Int get() = int("carDensity", 160); set(v) = set("carDensity", v)
     var carSizedApps: Boolean get() = bool("carSizedApps", false); set(v) = set("carSizedApps", v)
