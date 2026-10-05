@@ -21,6 +21,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -271,7 +276,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
                     }
                 },
                 navigationIcon = {
-                    if (screen != Screen.HOME) IconButton(onClick = { if (inPage) settingsPage = null else screen = Screen.HOME }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    if (inPage) IconButton(onClick = { settingsPage = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     if (screen == Screen.LOG) IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = "Clear") }
@@ -280,31 +285,52 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
             )
         },
         bottomBar = {
-            NavigationBar {
-                Screen.entries.forEach { s ->
-                    NavigationBarItem(
-                        selected = screen == s,
-                        onClick = {
-                            if (s == Screen.SETTINGS) settingsPage = null
-                            screen = s
-                        },
-                        icon = { Icon(s.icon, contentDescription = s.label) },
-                        label = { Text(s.label) }
-                    )
+            AnimatedVisibility(visible = !inPage, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                NavigationBar {
+                    Screen.entries.forEach { s ->
+                        NavigationBarItem(
+                            selected = screen == s,
+                            onClick = {
+                                if (s == Screen.SETTINGS) settingsPage = null
+                                screen = s
+                            },
+                            icon = { Icon(s.icon, contentDescription = s.label) },
+                            label = { Text(s.label) }
+                        )
+                    }
                 }
             }
         }
     ) { pad ->
-        AnimatedContent(targetState = screen to settingsPage, modifier = Modifier.fillMaxSize(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "screen") { (s, page) ->
+        AnimatedContent(
+            targetState = screen to settingsPage,
+            modifier = Modifier.fillMaxSize(),
+            transitionSpec = {
+                val (from, fromPage) = initialState
+                val (to, toPage) = targetState
+                val inSettings = from == Screen.SETTINGS && to == Screen.SETTINGS
+                when {
+                    inSettings && fromPage == null && toPage != null ->
+                        (slideInHorizontally { it } + fadeIn()) togetherWith (slideOutHorizontally { -it / 4 } + fadeOut())
+                    inSettings && fromPage != null && toPage == null ->
+                        (slideInHorizontally { -it / 4 } + fadeIn()) togetherWith (slideOutHorizontally { it } + fadeOut())
+                    else -> fadeIn() togetherWith fadeOut()
+                }
+            },
+            label = "screen"
+        ) { (s, page) ->
             when (s) {
                 Screen.HOME -> HomeScreen(
                     pad = pad,
                     onOpenAccessibility = onOpenAccessibility,
                     onOpenOverlay = onOpenOverlay,
-                    onTakeOverAa = onTakeOverAa
+                    onOpenAaSetup = {
+                        settingsPage = SettingsPage.ANDROID_AUTO
+                        screen = Screen.SETTINGS
+                    }
                 )
                 Screen.LOG -> DiagnosticsScreen(pad)
-                Screen.SETTINGS -> SettingsScreen(pad, page) { settingsPage = it }
+                Screen.SETTINGS -> SettingsScreen(pad, page, onTakeOverAa) { settingsPage = it }
             }
         }
     }
