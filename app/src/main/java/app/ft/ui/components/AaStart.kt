@@ -45,6 +45,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Velocity
 import app.ft.R
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -98,10 +111,7 @@ fun AaStartChoice(serverOn: Boolean?, reinstalled: Boolean, reinstall: @Composab
         )
         if (!on) {
             val context = LocalContext.current
-            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = { help = true }) { Text("Show me how") }
-                OutlinedButton(onClick = { AaInstaller.openSettings(context) }) { Text("Open Android Auto") }
-            }
+            ButtonPair("Show me how", { help = true }, "Open Android Auto", { AaInstaller.openSettings(context) })
         }
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -118,6 +128,31 @@ fun AaStartChoice(serverOn: Boolean?, reinstalled: Boolean, reinstall: @Composab
         reinstall()
     }
     if (help) ServerHelpSheet { help = false }
+}
+
+@Composable
+private fun ButtonPair(first: String, onFirst: () -> Unit, second: String, onSecond: () -> Unit) {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    val side = 16.dp
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        val widest = remember(first, second, style, density) {
+            with(density) { maxOf(measurer.measure(first, style).size.width, measurer.measure(second, style).size.width).toDp() }
+        }
+        val pad = PaddingValues(horizontal = side, vertical = 10.dp)
+        if (widest + side * 2 + 2.dp <= (maxWidth - 8.dp) / 2) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = onFirst, contentPadding = pad, modifier = Modifier.weight(1f)) { Text(first, maxLines = 1) }
+                OutlinedButton(onClick = onSecond, contentPadding = pad, modifier = Modifier.weight(1f)) { Text(second, maxLines = 1) }
+            }
+        } else {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = onFirst, contentPadding = pad, modifier = Modifier.fillMaxWidth()) { Text(first, maxLines = 1) }
+                OutlinedButton(onClick = onSecond, contentPadding = pad, modifier = Modifier.fillMaxWidth()) { Text(second, maxLines = 1) }
+            }
+        }
+    }
 }
 
 @Composable
@@ -171,11 +206,22 @@ private fun OptionCard(
 fun ServerHelpSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scroll = rememberScrollState()
+    val calm = remember(scroll) { ScrollFirst(scroll) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .pointerInput(calm) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val e = awaitPointerEvent(PointerEventPass.Initial)
+                            if (e.type == PointerEventType.Press) calm.startedAtTop = scroll.value == 0
+                        }
+                    }
+                }
+                .nestedScroll(calm)
+                .verticalScroll(scroll)
                 .padding(horizontal = 20.dp)
                 .navigationBarsPadding()
                 .padding(bottom = 24.dp),
@@ -208,6 +254,16 @@ fun ServerHelpSheet(onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+private class ScrollFirst(private val scroll: ScrollState) : NestedScrollConnection {
+    var startedAtTop = true
+
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+        if (available.y > 0 && (!startedAtTop || source != NestedScrollSource.UserInput)) available else Offset.Zero
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+        if (available.y > 0 && !startedAtTop) available else Velocity.Zero
 }
 
 @Composable
