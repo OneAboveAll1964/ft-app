@@ -110,7 +110,13 @@ class WifiChannelLink(
         runCatching { s.keepAlive = true }
         runCatching { s.setSoLinger(true, 0) }
         runCatching { s.receiveBufferSize = BUFFER }
-        runCatching { s.sendBufferSize = if (channel == CarLifeProtocol.CH_TTS) VOICE_BUFFER else BUFFER }
+        runCatching {
+            s.sendBufferSize = when (channel) {
+                CarLifeProtocol.CH_TTS -> VOICE_BUFFER
+                CarLifeProtocol.CH_MEDIA -> MUSIC_BUFFER
+                else -> BUFFER
+            }
+        }
         trafficClass(channel)?.let { tc -> runCatching { s.trafficClass = tc } }
     }
 
@@ -211,6 +217,7 @@ class WifiChannelLink(
     companion object {
         private const val BUFFER = 327_680
         private const val VOICE_BUFFER = 8 * 1024
+        private const val MUSIC_BUFFER = 64 * 1024
         private const val TOS_VOICE = 0xB8
         private const val TOS_VIDEO = 0x88
         private const val REACH_EVERY_MS = 180_000L

@@ -87,6 +87,10 @@ class CarLifeService : Service() {
         private const val VOICE_DATA = 1
         private const val VOICE_END = 2
         private const val VOICE_BACKLOG_BYTES = 64_000L
+        private const val SOUND_BYTES_PER_SECOND = 192_000
+        private const val MAX_QUEUED_SOUND = SOUND_BYTES_PER_SECOND / 2
+        private const val SOUND_REPORT_MS = 10_000L
+        private const val GOODBYE_WAIT_MS = 300L
 
         private val _state = MutableStateFlow(CarState())
         val state: StateFlow<CarState> = _state
@@ -194,13 +198,18 @@ class CarLifeService : Service() {
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> CarAudioBus.write(CarAudioBus.LANE_PHONE, pcm) }
-    private val outbound = java.util.concurrent.ArrayBlockingQueue<ByteArray>(24)
+    private val outbound = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
+    private val queuedBytes = java.util.concurrent.atomic.AtomicInteger(0)
+    private val skippedBytes = java.util.concurrent.atomic.AtomicLong(0)
     @Volatile private var writer: Thread? = null
     private val carAudio: (ByteArray) -> Unit = { pcm ->
         startWriter()
-        if (!outbound.offer(pcm)) {
-            outbound.poll()
-            outbound.offer(pcm)
+        outbound.offer(pcm)
+        var queued = queuedBytes.addAndGet(pcm.size)
+        while (queued > MAX_QUEUED_SOUND) {
+            val old = outbound.poll() ?: break
+            queued = queuedBytes.addAndGet(-old.size)
+            skippedBytes.addAndGet(old.size.toLong())
         }
     }
 
@@ -208,20 +217,38 @@ class CarLifeService : Service() {
         if (writer?.isAlive == true) return
         writer = Thread {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+            var windowAt = android.os.SystemClock.elapsedRealtime()
+            var mostQueued = 0
+            var slowestWrite = 0L
+            var reportedSkip = 0L
             while (!Thread.currentThread().isInterrupted) {
+                mostQueued = maxOf(mostQueued, queuedBytes.get())
                 val pcm = try {
                     outbound.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS)
                 } catch (_: InterruptedException) {
                     break
                 }
+                if (pcm != null) queuedBytes.addAndGet(-pcm.size)
                 val s = session ?: continue
                 if (pcm == null) {
                     if (s.mediaIdle()) DiagLog.i(tag, "sound to the car stopped, told the car the music paused")
                     continue
                 }
                 val first = !s.musicOpen
+                val writeAt = System.nanoTime()
                 s.sendAudio(pcm)
+                slowestWrite = maxOf(slowestWrite, (System.nanoTime() - writeAt) / 1_000_000)
                 if (first && s.musicOpen) DiagLog.i(tag, "sound to the car started, told the car the music is playing")
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - windowAt >= SOUND_REPORT_MS) {
+                    val skipped = skippedBytes.get()
+                    DiagLog.i(tag, "sound waited on the phone up to ${mostQueued * 1000L / SOUND_BYTES_PER_SECOND} ms, slowest write ${slowestWrite} ms" +
+                        if (skipped > reportedSkip) ", skipped ${(skipped - reportedSkip) * 1000L / SOUND_BYTES_PER_SECOND} ms the car was not taking" else "")
+                    reportedSkip = skipped
+                    windowAt = now
+                    mostQueued = 0
+                    slowestWrite = 0L
+                }
             }
         }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-audio-out"; start() }
     }
@@ -1711,6 +1738,7 @@ class CarLifeService : Service() {
         writer?.interrupt()
         writer = null
         outbound.clear()
+        queuedBytes.set(0)
         CarAudioBus.voice = null
         stopWatchingCalls()
         voiceWriter?.interrupt()
