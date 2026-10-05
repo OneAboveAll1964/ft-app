@@ -97,7 +97,23 @@ class CarLifeService : Service() {
         fun startWifi(context: Context) = startAuto(context)
 
         fun startAuto(context: Context) {
+            if (!FTApp.instance.prefs.autoConnect) {
+                DiagLog.i("CarLife", "FT is switched off, nothing starts")
+                return
+            }
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUTO))
+        }
+
+        fun switchOn(context: Context) {
+            FTApp.instance.prefs.autoConnect = true
+            startAuto(context)
+        }
+
+        fun switchOff(context: Context) {
+            FTApp.instance.prefs.autoConnect = false
+            DiagLog.i("CarLife", "FT switched off")
+            stop(context)
+            AaHeadUnitService.stop(context)
         }
 
         fun stop(context: Context) {
@@ -105,6 +121,7 @@ class CarLifeService : Service() {
         }
 
         fun startAudio(context: Context) {
+            if (instance == null) return
             context.startForegroundService(Intent(context, CarLifeService::class.java).setAction(ACTION_AUDIO))
         }
 
@@ -318,6 +335,10 @@ class CarLifeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null && !app.prefs.autoConnect) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_STOP -> {
                 teardown()
@@ -1395,6 +1416,7 @@ class CarLifeService : Service() {
     }
 
     private fun teardown() {
+        if (AaHeadUnitService.running) runCatching { AaHeadUnitService.stop(this) }
         stopLink()
         stopSoundWatch()
         stopWatchingTurning()

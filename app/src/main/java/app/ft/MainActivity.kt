@@ -129,8 +129,7 @@ class MainActivity : ComponentActivity() {
         registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
-        if (app.prefs.autoConnect || app.prefs.autoStartWifi) CarLifeService.startAuto(this)
-        if (app.prefs.autoStartAa) AaHeadUnitService.start(this, app.prefs.aaBluetooth)
+        if (app.prefs.autoConnect) CarLifeService.startAuto(this)
         setContent {
             FTTheme {
                 FTRoot(
@@ -154,8 +153,7 @@ class MainActivity : ComponentActivity() {
             CarStyles.reload()
         }
         if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
-        if (intent.getBooleanExtra("wifi", false)) CarLifeService.startWifi(this)
-        if (intent.getBooleanExtra("auto", false)) CarLifeService.startAuto(this)
+        if (intent.getBooleanExtra("wifi", false) || intent.getBooleanExtra("auto", false)) CarLifeService.switchOn(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)
         if (intent.getBooleanExtra("mirror", false)) requestMirror()
         intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }

@@ -42,8 +42,6 @@ class Prefs(context: Context) {
     var soundOverBluetooth: Boolean get() = bool("soundOverBluetooth", false); set(v) = set("soundOverBluetooth", v)
     var hideChatAudio: Boolean get() = bool("hideChatAudio", true); set(v) = set("hideChatAudio", v)
 
-    var autoStartWifi: Boolean get() = bool("autoStartWifi", false); set(v) = set("autoStartWifi", v)
-    var autoStartAa: Boolean get() = bool("autoStartAa", false); set(v) = set("autoStartAa", v)
     var aaBluetooth: Boolean get() = bool("aaBluetooth", false); set(v) = set("aaBluetooth", v)
     var aaPackage: String get() = str("aaPackage", "com.google.android.projection.gearhead"); set(v) = set("aaPackage", v)
     var aaAutoStart: Boolean get() = bool("aaAutoStart", false); set(v) = set("aaAutoStart", v)

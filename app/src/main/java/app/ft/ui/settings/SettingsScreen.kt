@@ -225,7 +225,6 @@ private fun PageContent(page: SettingsPage) {
             TextSetting("WiFi Direct name (blank = any CarLife)", p.carP2pName) { p.carP2pName = it }
             TextSetting("Bluetooth name for auto-start (blank = any)", p.carBtName) { p.carBtName = it }
             TextSetting("WiFi Direct PIN (blank = push button)", p.carWpsPin) { p.carWpsPin = it }
-            BoolSetting("Auto-connect at boot and on Bluetooth", p.autoConnect) { p.autoConnect = it }
             BoolSetting("Swap the steering wheel's next and previous", p.swapTrackKeys) { p.swapTrackKeys = it }
         }
         SettingsPage.ANDROID_AUTO -> {
@@ -236,7 +235,6 @@ private fun PageContent(page: SettingsPage) {
             IntSetting("Video height", p.aaHeight) { p.aaHeight = it }
             IntSetting("Frame rate", p.aaFps) { p.aaFps = it }
             IntSetting("Density", p.aaDensity) { p.aaDensity = it }
-            BoolSetting("Start the head unit at launch", p.autoStartAa) { p.autoStartAa = it }
         }
         SettingsPage.ADVANCED -> {
             Text("Ports the head unit connects to", style = MaterialTheme.typography.labelLarge)

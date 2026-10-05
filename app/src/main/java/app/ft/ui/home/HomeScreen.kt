@@ -72,7 +72,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
 import app.ft.FTTouchService
-import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaInstaller
 import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepState
@@ -145,8 +144,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         item {
             StatusCard(status, on) { want ->
                 autoConnect = want
-                app.prefs.autoConnect = want
-                if (want) CarLifeService.startAuto(context) else CarLifeService.stop(context)
+                if (want) CarLifeService.switchOn(context) else CarLifeService.switchOff(context)
             }
         }
 
@@ -208,12 +206,19 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                         app.prefs.aaAutoStart = it
                     }
                     FilledTonalButton(
-                        onClick = {
-                            AaHeadUnitService.start(context, app.prefs.aaBluetooth)
-                            CarLifeService.startAa()
-                        },
+                        onClick = { CarLifeService.startAa() },
+                        enabled = projecting,
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                     ) { Text("Start Android Auto on the car", maxLines = 1) }
+                    if (!projecting) {
+                        Text(
+                            if (on) "Works once FT is on the car screen." else "Turn FT on first.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }

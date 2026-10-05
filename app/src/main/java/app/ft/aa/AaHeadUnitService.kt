@@ -54,8 +54,14 @@ class AaHeadUnitService : Service() {
             private set
         @Volatile var micReady = false
             private set
+        @Volatile var running = false
+            private set
 
         fun start(context: Context, bluetooth: Boolean) {
+            if (!FTApp.instance.prefs.autoConnect) {
+                DiagLog.i("AA", "FT is switched off, Android Auto is not started")
+                return
+            }
             context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth))
         }
 
@@ -79,12 +85,17 @@ class AaHeadUnitService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "FT Android Auto", NotificationManager.IMPORTANCE_LOW))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        when (intent.action) {
             ACTION_STOP -> {
                 shutdown()
                 stopSelf()
@@ -226,6 +237,7 @@ class AaHeadUnitService : Service() {
     override fun onDestroy() {
         shutdown()
         scope.cancel()
+        running = false
         super.onDestroy()
     }
 
