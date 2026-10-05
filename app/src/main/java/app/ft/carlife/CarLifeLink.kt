@@ -227,7 +227,7 @@ class WifiChannelLink(
         private const val BUFFER = 327_680
         private val OFF_MAIN = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ft-link-main-sends").apply { isDaemon = true } }
         private const val VOICE_BUFFER = 8 * 1024
-        private const val MUSIC_BUFFER = 64 * 1024
+        private const val MUSIC_BUFFER = 16 * 1024
         private const val TOS_VOICE = 0xB8
         private const val TOS_VIDEO = 0x88
         private const val REACH_EVERY_MS = 180_000L
