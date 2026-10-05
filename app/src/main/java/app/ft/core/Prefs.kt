@@ -48,7 +48,6 @@ class Prefs(context: Context) {
     var aaPackage: String get() = str("aaPackage", "com.google.android.projection.gearhead"); set(v) = set("aaPackage", v)
     var aaAutoStart: Boolean get() = bool("aaAutoStart", false); set(v) = set("aaAutoStart", v)
     var aaCorner: Int get() = int("aaCorner", 0); set(v) = set("aaCorner", v)
-    var aaServerOn: Boolean get() = bool("aaServerOn", false); set(v) = set("aaServerOn", v)
     var carBackground: String get() = str("carBackground", "deep"); set(v) = set("carBackground", v)
     var carAccent: Int get() = int("carAccent", 0xFF5FE3C0.toInt()); set(v) = set("carAccent", v)
     var carTiles: String get() = str("carTiles", "music,videos,youtube,maps,browser,apps"); set(v) = set("carTiles", v)

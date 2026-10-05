@@ -57,9 +57,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.runtime.collectAsState
 import app.ft.ui.components.AaStartChoice
-import app.ft.aa.AaHeadUnitService
+import app.ft.ui.components.rememberAaServerOn
 import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepItem
 import app.ft.ui.components.CornerPicker
@@ -149,7 +148,6 @@ private const val PROFILE = "https://github.com/OneAboveAll1964"
 @Composable
 private fun AaSetup(onTakeOverAa: () -> Unit) {
     val context = LocalContext.current
-    val aa by AaHeadUnitService.state.collectAsState()
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
@@ -158,7 +156,7 @@ private fun AaSetup(onTakeOverAa: () -> Unit) {
     val step = remember(resumed) { AaInstaller.step(context) }
     val hasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
     val installed = remember(resumed) { AaInstaller.installed(context) }
-    val serverOn = if (aa.listening) aa.selfServer else FTApp.instance.prefs.aaServerOn
+    val serverOn = rememberAaServerOn()
     if (!installed && !hasCopy) {
         Text("Android Auto is not on this phone", style = MaterialTheme.typography.titleMedium)
         Text(

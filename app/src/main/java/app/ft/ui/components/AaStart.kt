@@ -46,10 +46,35 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.ft.R
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import app.ft.FTApp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import app.ft.aa.AaInstaller
 
 @Composable
-fun AaStartChoice(serverOn: Boolean, reinstalled: Boolean, reinstall: @Composable ColumnScope.() -> Unit) {
+fun rememberAaServerOn(): Boolean? {
+    val port = FTApp.instance.prefs.aaSelfPort
+    var on by remember { mutableStateOf<Boolean?>(null) }
+    val scope = rememberCoroutineScope()
+    LifecycleResumeEffect(port) {
+        val job = scope.launch {
+            while (isActive) {
+                on = withContext(Dispatchers.IO) { AaInstaller.serverRunning(port) }
+                delay(2000)
+            }
+        }
+        onPauseOrDispose { job.cancel() }
+    }
+    return on
+}
+
+@Composable
+fun AaStartChoice(serverOn: Boolean?, reinstalled: Boolean, reinstall: @Composable ColumnScope.() -> Unit) {
     var help by remember { mutableStateOf(false) }
     if (reinstalled) {
         OptionCard(1, "FT's own copy of Android Auto", active = true, status = "Ready") {
@@ -64,13 +89,14 @@ fun AaStartChoice(serverOn: Boolean, reinstalled: Boolean, reinstall: @Composabl
     }
     Text("Pick one of these two ways to start it", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(10.dp))
-    OptionCard(1, "Switch on its head unit server", active = serverOn, status = if (serverOn) "On" else "Off", onInfo = if (serverOn) null else ({ help = true })) {
+    val on = serverOn == true
+    OptionCard(1, "Switch on its head unit server", active = on, status = when (serverOn) { true -> "On"; false -> "Off"; null -> "Checking" }, onInfo = if (on) null else ({ help = true })) {
         Text(
             "Quick to do in Android Auto's settings. Android Auto switches it off again when the phone restarts or Android Auto updates.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (!serverOn) {
+        if (!on) {
             val context = LocalContext.current
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = { help = true }) { Text("Show me how") }

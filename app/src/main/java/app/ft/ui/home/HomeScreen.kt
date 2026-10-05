@@ -78,6 +78,7 @@ import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepState
 import app.ft.ui.components.StepMark
 import app.ft.ui.components.AaStartChoice
+import app.ft.ui.components.rememberAaServerOn
 import app.ft.ui.components.StepItem
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
@@ -90,7 +91,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
-    val aa by AaHeadUnitService.state.collectAsState()
     var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
     LaunchedEffect(car.running) { if (car.running) autoConnect = true }
     var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
@@ -197,8 +197,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                     TextButton(onClick = onOpenAaSetup, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Open Settings, Android Auto") }
                 }
                 if (aaInstalled) {
-                    val serverOn = if (aa.listening) aa.selfServer else app.prefs.aaServerOn
-                    AaStartChoice(serverOn, reinstalled = aaStep == AaInstaller.Step.DONE) {
+                    AaStartChoice(rememberAaServerOn(), reinstalled = aaStep == AaInstaller.Step.DONE) {
                         if (aaStep != AaInstaller.Step.DONE) {
                             FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.padding(top = 10.dp)) { Text("Set it up in Settings") }
                         }
