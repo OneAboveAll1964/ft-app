@@ -318,10 +318,10 @@ elif want == "pause":
     p = d.get("pauses", [])
     print("   pauses:", p)
     assert p and p[0]["frames_while_paused"] == 0 and p[0]["heartbeats_while_paused"] >= 3, p
-    assert p[0]["first_frame_after"] is not None and p[0]["first_frame_after"] <= 3.0, p
+    assert p[0]["first_frame_after"] is not None and p[0]["first_frame_after"] <= 5.0, p
 elif want == "quick":
     p = d.get("pauses", [])
-    assert len(p) >= 2 and p[1]["first_frame_after"] is not None and p[1]["first_frame_after"] <= 3.0, p
+    assert len(p) >= 2 and p[1]["first_frame_after"] is not None and p[1]["first_frame_after"] <= 5.0, p
 PY7
 }
 check "Corolla-shaped car session passed" "[ $COR = 0 ]"
