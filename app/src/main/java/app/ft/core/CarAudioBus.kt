@@ -123,6 +123,8 @@ object CarAudioBus {
             }
         }
 
+    @Volatile var onBreak: ((String) -> Unit)? = null
+
     val open: Boolean get() = out != null
 
     fun clear(lane: Int) {
@@ -144,6 +146,7 @@ object CarAudioBus {
     }
 
     fun end(lane: Int) {
+        if (lane == LANE_MEDIA || lane == LANE_PLAYER) onBreak?.invoke("the music stopping")
         synchronized(lock) {
             if (lane == LANE_SPEECH) speaking = false
             if (blending && blendLane == lane) finishBlend()
@@ -164,6 +167,7 @@ object CarAudioBus {
         voiceOpen = false
         voiceLane = -1
         runCatching { voice?.end() }
+        runCatching { onBreak?.invoke("the end of the directions") }
         if (!blending) endMeasure()
     }
 

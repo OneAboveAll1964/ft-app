@@ -88,7 +88,9 @@ class CarLifeService : Service() {
         private const val VOICE_END = 2
         private const val VOICE_BACKLOG_BYTES = 64_000L
         private const val SOUND_BYTES_PER_SECOND = 192_000
-        private const val MAX_QUEUED_SOUND = SOUND_BYTES_PER_SECOND / 10
+        private const val MAX_QUEUED_SOUND = SOUND_BYTES_PER_SECOND * 3 / 2
+        private const val CATCH_UP_AFTER = SOUND_BYTES_PER_SECOND * 15 / 100
+        private const val QUIET_LEVEL = 300
         private const val SOUND_REPORT_MS = 10_000L
         private const val GOODBYE_WAIT_MS = 300L
 
@@ -201,16 +203,41 @@ class CarLifeService : Service() {
     private val outbound = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
     private val queuedBytes = java.util.concurrent.atomic.AtomicInteger(0)
     private val skippedBytes = java.util.concurrent.atomic.AtomicLong(0)
+    private val caughtUpBytes = java.util.concurrent.atomic.AtomicLong(0)
     @Volatile private var writer: Thread? = null
     private val carAudio: (ByteArray) -> Unit = { pcm ->
         startWriter()
-        outbound.offer(pcm)
-        var queued = queuedBytes.addAndGet(pcm.size)
-        while (queued > MAX_QUEUED_SOUND) {
-            val old = outbound.poll() ?: break
-            queued = queuedBytes.addAndGet(-old.size)
-            skippedBytes.addAndGet(old.size.toLong())
+        if (queuedBytes.get() > CATCH_UP_AFTER && quiet(pcm)) {
+            caughtUpBytes.addAndGet(pcm.size.toLong())
+        } else {
+            outbound.offer(pcm)
+            var queued = queuedBytes.addAndGet(pcm.size)
+            while (queued > MAX_QUEUED_SOUND) {
+                val old = outbound.poll() ?: break
+                queued = queuedBytes.addAndGet(-old.size)
+                skippedBytes.addAndGet(old.size.toLong())
+            }
         }
+    }
+
+    private fun quiet(pcm: ByteArray): Boolean {
+        var i = 0
+        while (i + 1 < pcm.size) {
+            val v = ((pcm[i + 1].toInt() shl 8) or (pcm[i].toInt() and 0xFF)).toShort().toInt()
+            if (v > QUIET_LEVEL || v < -QUIET_LEVEL) return false
+            i += 2
+        }
+        return true
+    }
+
+    private fun catchUp(reason: String) {
+        var dropped = 0L
+        while (true) {
+            val old = outbound.poll() ?: break
+            queuedBytes.addAndGet(-old.size)
+            dropped += old.size
+        }
+        if (dropped >= SOUND_BYTES_PER_SECOND / 50) DiagLog.i(tag, "caught up ${dropped * 1000L / SOUND_BYTES_PER_SECOND} ms of waiting sound at $reason")
     }
 
     private fun startWriter() {
@@ -221,6 +248,8 @@ class CarLifeService : Service() {
             var mostQueued = 0
             var slowestWrite = 0L
             var reportedSkip = 0L
+            var reportedCatchUp = 0L
+            var lostSeen = skippedBytes.get()
             while (!Thread.currentThread().isInterrupted) {
                 mostQueued = maxOf(mostQueued, queuedBytes.get())
                 val pcm = try {
@@ -238,13 +267,21 @@ class CarLifeService : Service() {
                 val writeAt = System.nanoTime()
                 s.sendAudio(pcm)
                 slowestWrite = maxOf(slowestWrite, (System.nanoTime() - writeAt) / 1_000_000)
+                val lost = skippedBytes.get()
+                if (lost > lostSeen) {
+                    lostSeen = lost
+                    catchUp("the car taking sound again after a long pause")
+                }
                 if (first && s.musicOpen) DiagLog.i(tag, "sound to the car started, told the car the music is playing")
                 val now = android.os.SystemClock.elapsedRealtime()
                 if (now - windowAt >= SOUND_REPORT_MS) {
                     val skipped = skippedBytes.get()
+                    val caughtUp = caughtUpBytes.get()
                     DiagLog.i(tag, "sound waited on the phone up to ${mostQueued * 1000L / SOUND_BYTES_PER_SECOND} ms, slowest write ${slowestWrite} ms" +
+                        (if (caughtUp > reportedCatchUp) ", caught up ${(caughtUp - reportedCatchUp) * 1000L / SOUND_BYTES_PER_SECOND} ms on silence" else "") +
                         if (skipped > reportedSkip) ", dropped ${(skipped - reportedSkip) * 1000L / SOUND_BYTES_PER_SECOND} ms the car was not taking in time" else "")
                     reportedSkip = skipped
+                    reportedCatchUp = caughtUp
                     windowAt = now
                     mostQueued = 0
                     slowestWrite = 0L
@@ -357,7 +394,12 @@ class CarLifeService : Service() {
         CarAudioBus.voice = carVoice
         CarAudioBus.sink = carAudio
         watchCalls()
-        CarPlayer.onTrack = { t -> if (!t.video) scope.launch { tellCarTheSong(t) } }
+        CarPlayer.onTrack = { t ->
+            catchUp("a new song")
+            if (!t.video) scope.launch { tellCarTheSong(t) }
+        }
+        CarPlayer.onBreak = { reason -> catchUp(reason) }
+        CarAudioBus.onBreak = { reason -> catchUp(reason) }
         MirrorSink.onGone = { surface -> if (mirror.isShowing(surface)) mirror.hide() }
         watchCarBluetoothAudio()
         progressJob = scope.launch {
@@ -1124,6 +1166,7 @@ class CarLifeService : Service() {
                     mapped in AA_KEYS -> {
                         DiagLog.i(tag, "steering wheel key $key sent to Android Auto as ${keyName(mapped)}")
                         aa.sendKey(mapped)
+                        if (mapped == 87 || mapped == 88) catchUp(keyName(mapped))
                     }
                     else -> DiagLog.w(tag, "steering wheel key $key has no Android Auto action yet")
                 }
@@ -1736,6 +1779,8 @@ class CarLifeService : Service() {
         btWatch = null
         progressJob?.cancel()
         CarPlayer.onTrack = null
+        CarPlayer.onBreak = null
+        CarAudioBus.onBreak = null
         scope.cancel()
         writer?.interrupt()
         writer = null

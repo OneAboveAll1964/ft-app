@@ -53,6 +53,7 @@ object CarPlayer {
     @Volatile private var rate = CAR_RATE
     @Volatile private var sentToCar = 0L
     var onTrack: ((Track) -> Unit)? = null
+    var onBreak: ((String) -> Unit)? = null
     private val pacer = PcmPacer(CAR_BYTES_PER_SECOND, 150, 2000, 3840, "player") { pcm ->
         sentToCar += pcm.size
         CarAudioBus.write(CarAudioBus.LANE_PLAYER, pcm)
@@ -157,6 +158,7 @@ object CarPlayer {
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 pacer.hold(!playWhenReady)
+                if (!playWhenReady) onBreak?.invoke("a pause")
                 publish()
             }
 
@@ -259,6 +261,7 @@ object CarPlayer {
     fun seekTo(ms: Long) = onMain {
         val p = player ?: return@onMain
         pacer.clear()
+        onBreak?.invoke("a jump in the song")
         p.seekTo(ms.coerceAtLeast(0))
     }
 
