@@ -30,12 +30,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MotionScheme
@@ -112,7 +110,7 @@ fun AaStartChoice(serverOn: Boolean?, reinstalled: Boolean, reinstall: @Composab
     Text("Pick one of these two ways to start it", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(10.dp))
     val on = serverOn == true
-    OptionCard(1, "Switch on its head unit server", active = on, status = when (serverOn) { true -> "On"; false -> "Off"; null -> "Checking" }, onInfo = if (on) null else ({ help = true })) {
+    OptionCard(1, "Switch on its head unit server", active = on, status = when (serverOn) { true -> "On"; false -> "Off"; null -> "Checking" }) {
         Text(
             "Quick to do in Android Auto's settings. Android Auto switches it off again when the phone restarts or Android Auto updates.",
             style = MaterialTheme.typography.bodyMedium,
@@ -170,7 +168,6 @@ private fun OptionCard(
     title: String,
     active: Boolean,
     status: String?,
-    onInfo: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -186,16 +183,11 @@ private fun OptionCard(
                     contentAlignment = Alignment.Center
                 ) {
                     if (active) Icon(Icons.Filled.Check, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
-                    else Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                    else StepNumber(number, scheme.onSurfaceVariant, bold = false)
                 }
                 Spacer(Modifier.width(12.dp))
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 if (status != null) StatusChip(status, active)
-                if (onInfo != null) {
-                    IconButton(onClick = onInfo, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Outlined.Info, contentDescription = "How to switch on the head unit server", tint = scheme.primary)
-                    }
-                }
             }
             Spacer(Modifier.height(6.dp))
             content()
@@ -349,9 +341,7 @@ private fun HelpStep(number: Int, title: String, detail: String? = null, visual:
     val scheme = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(28.dp).clip(CircleShape).border(2.dp, scheme.primary, CircleShape), contentAlignment = Alignment.Center) {
-                Text(number.toString(), style = MaterialTheme.typography.labelLarge, color = scheme.primary, fontWeight = FontWeight.Bold)
-            }
+            StepMark(number, StepState.NOW, working = false)
             Spacer(Modifier.width(12.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         }

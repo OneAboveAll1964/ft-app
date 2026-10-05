@@ -135,7 +135,7 @@ fun StepMark(number: Int, state: StepState, working: Boolean) {
 }
 
 @Composable
-private fun StepNumber(number: Int, color: Color, bold: Boolean) {
+fun StepNumber(number: Int, color: Color, bold: Boolean) {
     val text = number.toString()
     val textSize = with(LocalDensity.current) { 14.sp.toPx() }
     val paint = remember(color, bold, textSize) {
