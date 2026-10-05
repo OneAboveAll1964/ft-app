@@ -579,6 +579,20 @@ kill $QUIETLOG 2>/dev/null
 $ADB shell appops set $PKG PROJECT_MEDIA default >/dev/null 2>&1
 check "with sharing allowed ahead, a car tile mirrors an app and nothing is asked on the phone" "grep -q 'screen sharing allowed without asking' '$OUT/quiet_logcat.txt' && grep -q 'launched com.android.settings' '$OUT/quiet_logcat.txt' && ! grep -q 'asking on the phone for screen sharing' '$OUT/quiet_logcat.txt'"
 
+echo "== phone screen off and on during a drive =="
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/screen_logcat.txt" 2>&1 &
+SCREENLOG=$!
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
+sleep 3
+( sleep 5; $ADB shell input keyevent KEYCODE_SLEEP; sleep 2; $ADB shell input keyevent KEYCODE_WAKEUP ) &
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 10 --tail-seconds 1 --out "$OUT/screen" > "$OUT/screen_sim.log" 2>&1
+SCR=$?
+sleep 1
+kill $SCREENLOG 2>/dev/null
+$ADB shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
+check "the phone screen going off and on mid-drive keeps the car connected" "[ $SCR = 0 ] && [ \$(grep -c 'TX SCREEN_ON' '$OUT/screen_logcat.txt') -ge 2 ] && ! grep -q 'NetworkOnMainThreadException' '$OUT/screen_logcat.txt'"
+
 BUMBLE_PY="${BUMBLE_PY:-}"
 PHONE_BT="${PHONE_BT:-$($ADB shell settings get secure bluetooth_address 2>/dev/null | tr -d '\r')}"
 if [ -n "$BUMBLE_PY" ] && [ -x "$BUMBLE_PY" ] && [ -n "$PHONE_BT" ] && [ "$PHONE_BT" != "null" ]; then

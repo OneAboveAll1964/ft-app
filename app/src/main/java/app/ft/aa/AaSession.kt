@@ -16,6 +16,8 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
+private val OFF_MAIN = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ft-aa-main-sends").apply { isDaemon = true } }
+
 class AaSession(
     context: Context,
     private val input: InputStream,
@@ -81,12 +83,16 @@ class AaSession(
     private fun sendEnc(channel: Int, id: Int, body: ByteArray, control: Boolean = false) = send(channel, id, body, true, control)
 
     private fun send(channel: Int, id: Int, body: ByteArray, encrypted: Boolean, control: Boolean) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            OFF_MAIN.execute { send(channel, id, body, encrypted, control) }
+            return
+        }
         val payload = ByteArray(2 + body.size)
         Bytes.putU16(id, payload, 0)
         System.arraycopy(body, 0, payload, 2, body.size)
-        val frames = AaFraming.encode(channel, payload, encrypted, control) { if (encrypted) crypto.encrypt(it) else it }
         synchronized(outLock) {
             try {
+                val frames = AaFraming.encode(channel, payload, encrypted, control) { if (encrypted) crypto.encrypt(it) else it }
                 frames.forEach { output.write(it) }
                 output.flush()
             } catch (t: Throwable) {

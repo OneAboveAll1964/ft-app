@@ -189,6 +189,15 @@ class WifiChannelLink(
     }
 
     override fun send(channel: Int, inner: ByteArray): Boolean {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            if (synchronized(sockets) { sockets[channel] } == null) return false
+            OFF_MAIN.execute { write(channel, inner) }
+            return true
+        }
+        return write(channel, inner)
+    }
+
+    private fun write(channel: Int, inner: ByteArray): Boolean {
         val s = synchronized(sockets) { sockets[channel] } ?: return false
         val lock = locks[channel] ?: Any()
         synchronized(lock) {
@@ -216,6 +225,7 @@ class WifiChannelLink(
 
     companion object {
         private const val BUFFER = 327_680
+        private val OFF_MAIN = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ft-link-main-sends").apply { isDaemon = true } }
         private const val VOICE_BUFFER = 8 * 1024
         private const val MUSIC_BUFFER = 64 * 1024
         private const val TOS_VOICE = 0xB8
