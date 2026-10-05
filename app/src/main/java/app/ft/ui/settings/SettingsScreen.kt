@@ -89,7 +89,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
 fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onTakeOverAa: () -> Unit, onOpen: (SettingsPage) -> Unit) {
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 12.dp, bottom = pad.calculateBottomPadding() + 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (page == null) {
