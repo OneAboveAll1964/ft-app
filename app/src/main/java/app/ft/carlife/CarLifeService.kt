@@ -30,6 +30,8 @@ import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
+import app.ft.core.Root
+import app.ft.core.RootPrep
 import app.ft.media.CarPlayer
 import app.ft.projection.CarDisplay
 import app.ft.projection.CarTouchZones
@@ -468,6 +470,7 @@ class CarLifeService : Service() {
                 DiagLog.i(tag, "screen sharing was declined on the phone")
             }
             ACTION_AUTO, ACTION_WIFI -> {
+                scope.launch { RootPrep.grants(this@CarLifeService) }
                 val wanted = if (app.prefs.linkMode == 1) 1 else 0
                 if (mode != -1 && mode != wanted) {
                     DiagLog.i(tag, "switching to ${if (wanted == 1) "WiFi + BL" else "Hotspot"}, the other way is closed")
@@ -557,6 +560,11 @@ class CarLifeService : Service() {
     }
 
     private fun startHotspot() {
+        if (Root.granted) scope.launch {
+            RootPrep.ensureHotspot(this@CarLifeService, NetUtil.hotspotIpv4() != null)
+            delay(3000)
+            RootPrep.poke()
+        }
         step("Waiting for the car to join the hotspot")
         updateBeacon()
     }
@@ -962,6 +970,7 @@ class CarLifeService : Service() {
         }
         DiagLog.i(tag, "bridging this phone's Android Auto onto the car, waiting for it to start projecting")
         scope.launch {
+            if (Root.granted && Root.aaDevExists() && !Root.aaWirelessReady()) Root.enableAaWireless()
             delay(1500)
             askAndroidAutoToConnect()
         }

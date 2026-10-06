@@ -7,6 +7,7 @@ import app.ft.core.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class FTApp : Application() {
@@ -24,6 +25,9 @@ class FTApp : Application() {
         DiagLog.attach(getExternalFilesDir("logs"))
         app.ft.ui.car.CarStyles.reload()
         DiagLog.i("App", "FT ${runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""} ready")
+        scope.launch(Dispatchers.IO) {
+            if (app.ft.core.Root.ensure()) app.ft.core.RootPrep.grants(this@FTApp)
+        }
     }
 
     companion object {
