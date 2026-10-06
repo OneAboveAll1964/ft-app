@@ -110,48 +110,76 @@ object Root {
 
     fun stopHotspot() = ok("cmd wifi stop-softap")
 
-    private const val GEARHEAD = "com.google.android.projection.gearhead"
-    private const val AA_DEV = "/data/user/0/$GEARHEAD/shared_prefs/action_developer_settings.xml"
-    private val AA_KEYS = listOf("allow_unknown_sources", "enable_wireless_projection")
+    private const val AA_SETTINGS = "com.google.android.projection.gearhead/com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity"
 
-    fun aaDevExists(): Boolean = run("[ -f $AA_DEV ] && echo yes")?.stdout?.contains("yes") == true
-
-    private fun aaBool(key: String, xml: String): Boolean? = when {
-        Regex("$key\" value=\"true").containsMatchIn(xml) -> true
-        Regex("$key\" value=\"false").containsMatchIn(xml) -> false
-        else -> null
+    fun aaServerUp(): Boolean {
+        val out = run("cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -i ' 0A ' | grep -ci ':149D'") ?: return false
+        return (out.stdout.trim().toIntOrNull() ?: 0) > 0
     }
 
-    fun aaWirelessReady(): Boolean {
-        val xml = run("cat $AA_DEV")?.takeIf { it.ok }?.stdout ?: return false
-        return AA_KEYS.all { aaBool(it, xml) == true }
-    }
+    fun startAaServer(): Boolean = toggleAaServer(start = true)
 
-    fun enableAaWireless(): Boolean = setAaKeys(AA_KEYS.associateWith { true }, "let Android Auto accept FT as a wireless head unit, no server needed")
+    fun stopAaServer(): Boolean = toggleAaServer(start = false)
 
-    fun revertAaWireless(): Boolean = setAaKeys(mapOf("allow_unknown_sources" to false), "set Android Auto back to not accepting unknown head units")
-
-    private fun setAaKeys(targets: Map<String, Boolean>, logLine: String): Boolean {
+    private fun toggleAaServer(start: Boolean): Boolean {
         if (!granted) return false
-        val xml = run("cat $AA_DEV")?.takeIf { it.ok }?.stdout ?: return false
-        val needed = targets.filter { (k, v) -> aaBool(k, xml) != v }
-        if (needed.isEmpty()) return true
-        val tmp = "/data/local/tmp/.ft_aa_dev"
-        val edits = needed.entries.joinToString(" | ") { (key, v) ->
-            val want = if (v) "true" else "false"
-            if (aaBool(key, xml) == null) "sed 's#</map>#    <boolean name=\"$key\" value=\"$want\" />\\n</map>#'"
-            else "sed 's#\\($key\" value=\"\\)[a-z]*#\\1$want#'"
+        if (aaServerUp() == start) return true
+        run("input keyevent KEYCODE_WAKEUP", "wm dismiss-keyguard")
+        Thread.sleep(300)
+        run("am start -n $AA_SETTINGS")
+        val menu = waitForNode("content-desc", "More options", 5000) ?: run { back(); return aaServerUp() }
+        tap(menu)
+        Thread.sleep(700)
+        var xml = dumpUi()
+        var tries = 0
+        while (xml != null && !xml.contains("head unit server") && tries++ < 3) { Thread.sleep(400); xml = dumpUi() }
+        val wanted = if (start) "Start head unit server" else "Stop head unit server"
+        val item = xml?.let { nodeBounds(it, "text", wanted) }
+        if (item == null) {
+            // the opposite label means we are already in the desired state
+            val opposite = xml?.contains(if (start) "Stop head unit server" else "Start head unit server") == true
+            back()
+            return if (opposite) start else aaServerUp()
         }
-        val result = run(
-            "$edits < $AA_DEV > $tmp",
-            "cat $tmp > $AA_DEV",
-            "rm -f $tmp",
-            "pidof $GEARHEAD >/dev/null 2>&1 && am force-stop $GEARHEAD; true"
-        )
-        val after = run("cat $AA_DEV")?.stdout.orEmpty()
-        val applied = result?.ok == true && needed.all { (k, v) -> aaBool(k, after) == v }
-        if (applied) DiagLog.i("Root", logLine)
-        return applied
+        tap(item)
+        Thread.sleep(1500)
+        back()
+        val ok = aaServerUp() == start
+        if (ok) DiagLog.i("Root", if (start) "started Android Auto's head unit server" else "stopped Android Auto's head unit server")
+        else DiagLog.w("Root", "could not ${if (start) "start" else "stop"} Android Auto's head unit server")
+        return ok
+    }
+
+    private fun back() { run("input keyevent KEYCODE_HOME") }
+
+    private fun tap(p: IntArray) { run("input tap ${p[0]} ${p[1]}") }
+
+    private fun dumpUi(): String? {
+        repeat(3) {
+            val d = run("uiautomator dump /data/local/tmp/ft_ui.xml >/dev/null 2>&1; cat /data/local/tmp/ft_ui.xml")
+            val xml = d?.takeIf { it.ok }?.stdout
+            if (xml != null && xml.contains("<node")) return xml
+            Thread.sleep(400)
+        }
+        return null
+    }
+
+    private fun waitForNode(attr: String, value: String, timeoutMs: Long): IntArray? {
+        val end = android.os.SystemClock.elapsedRealtime() + timeoutMs
+        while (android.os.SystemClock.elapsedRealtime() < end) {
+            val xml = dumpUi()
+            val b = xml?.let { nodeBounds(it, attr, value) }
+            if (b != null) return b
+            Thread.sleep(300)
+        }
+        return null
+    }
+
+    private fun nodeBounds(xml: String, attr: String, value: String): IntArray? {
+        val tag = Regex("<node\\b[^>]*\\b$attr=\"${Regex.escape(value)}\"[^>]*>").find(xml)?.value ?: return null
+        val m = Regex("bounds=\"\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]\"").find(tag) ?: return null
+        val (x1, y1, x2, y2) = m.destructured
+        return intArrayOf((x1.toInt() + x2.toInt()) / 2, (y1.toInt() + y2.toInt()) / 2)
     }
 
     private fun probe(): Out? {

@@ -970,7 +970,10 @@ class CarLifeService : Service() {
         }
         DiagLog.i(tag, "bridging this phone's Android Auto onto the car, waiting for it to start projecting")
         scope.launch {
-            if (Root.granted && Root.aaDevExists() && !Root.aaWirelessReady()) Root.enableAaWireless()
+            if (Root.granted && !Root.aaServerUp()) {
+                DiagLog.i(tag, "starting Android Auto's head unit server with root")
+                Root.startAaServer()
+            }
             delay(1500)
             askAndroidAutoToConnect()
         }
