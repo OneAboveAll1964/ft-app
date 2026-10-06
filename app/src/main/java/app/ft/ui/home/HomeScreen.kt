@@ -77,6 +77,8 @@ import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepState
 import app.ft.ui.components.StepMark
 import app.ft.ui.components.AaStartChoice
+import app.ft.ui.components.rememberRootGranted
+import app.ft.core.RootPrep
 import app.ft.ui.components.rememberAaServerOn
 import app.ft.ui.components.StepItem
 import app.ft.carlife.CarLifeService
@@ -99,6 +101,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         resumed++
         onPauseOrDispose { }
     }
+    LaunchedEffect(Unit) { RootPrep.revision.collect { resumed++ } }
     val radios = rememberRadios(context, resumed)
     val touchOn = remember(resumed) { FTTouchService.enabled }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
@@ -195,12 +198,14 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                     TextButton(onClick = onOpenAaSetup, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Open Settings, Android Auto") }
                 }
                 if (aaInstalled) {
-                    AaStartChoice(rememberAaServerOn(), reinstalled = aaStep == AaInstaller.Step.DONE) {
-                        if (aaStep != AaInstaller.Step.DONE) {
-                            FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("Set it up in Settings", maxLines = 1) }
+                    if (!rememberRootGranted()) {
+                        AaStartChoice(rememberAaServerOn(), reinstalled = aaStep == AaInstaller.Step.DONE) {
+                            if (aaStep != AaInstaller.Step.DONE) {
+                                FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("Set it up in Settings", maxLines = 1) }
+                            }
                         }
+                        Spacer(Modifier.height(8.dp))
                     }
-                    Spacer(Modifier.height(8.dp))
                     SwitchRow("Start with the car", aaAuto) {
                         aaAuto = it
                         app.prefs.aaAutoStart = it

@@ -58,6 +58,7 @@ import app.ft.carlife.QuietShare
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import app.ft.ui.components.AaStartChoice
+import app.ft.ui.components.rememberRootGranted
 import app.ft.ui.components.rememberAaServerOn
 import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepItem
@@ -87,6 +88,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
 
 @Composable
 fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onTakeOverAa: () -> Unit, onOpen: (SettingsPage) -> Unit) {
+    val root = rememberRootGranted()
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 12.dp, bottom = pad.calculateBottomPadding() + 24.dp),
@@ -96,7 +98,7 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onTakeOverAa: () -> 
             items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
             item { MadeBy() }
         } else {
-            if (page == SettingsPage.ANDROID_AUTO) item { Group { AaSetup(onTakeOverAa) } }
+            if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup(onTakeOverAa) } }
             if (page == SettingsPage.CAR_SCREEN) item { Group { CornerSetting() } }
             item { Group { PageContent(page) } }
         }

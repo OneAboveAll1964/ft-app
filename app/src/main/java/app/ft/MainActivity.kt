@@ -70,6 +70,7 @@ import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
 import app.ft.ui.settings.SettingsPage
 import app.ft.ui.settings.SettingsScreen
+import app.ft.ui.components.RootChip
 import app.ft.ui.theme.FTTheme
 
 enum class Screen(val label: String, val icon: ImageVector) {
@@ -281,6 +282,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
                 },
                 actions = {
                     if (screen == Screen.LOG) IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = "Clear") }
+                    RootChip()
                 },
                 scrollBehavior = scroll
             )

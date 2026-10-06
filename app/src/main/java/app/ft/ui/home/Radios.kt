@@ -77,6 +77,7 @@ fun rememberRadios(context: Context, refresh: Int): Radios {
         onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
     LaunchedEffect(refresh) { radios = readRadios(context) }
+    LaunchedEffect(Unit) { app.ft.core.RootPrep.revision.collect { radios = readRadios(context) } }
     return radios
 }
 
