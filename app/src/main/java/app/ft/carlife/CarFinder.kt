@@ -150,6 +150,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                     { instance, type, device -> onService("dns-sd", instance.orEmpty(), type.orEmpty(), device) },
                     { domain, txt, device -> DiagLog.i(tag, "WiFi Direct service record from '${device?.deviceName}' (${device?.deviceAddress}): $domain $txt") })
                 m.setUpnpServiceResponseListener(ch) { names, device -> onService("upnp", names.orEmpty().joinToString(), "", device) }
+                m.clearServiceRequests(ch, null)
                 m.addServiceRequest(ch, android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest.newInstance(), null)
                 m.addServiceRequest(ch, android.net.wifi.p2p.nsd.WifiP2pUpnpServiceRequest.newInstance(), null)
                 servicesChannel = ch
@@ -158,7 +159,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
         m.discoverServices(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() = Unit
-            override fun onFailure(reason: Int) { DiagLog.d(tag, "discoverServices failed reason=$reason") }
+            override fun onFailure(reason: Int) {
+                DiagLog.d(tag, "discoverServices failed reason=$reason (${failureName(reason)})")
+                if (reason == WifiP2pManager.NO_SERVICE_REQUESTS) servicesChannel = null
+            }
         })
     }
 
@@ -219,6 +223,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
                 val on = i.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1) == WifiP2pManager.WIFI_P2P_STATE_ENABLED
                 enabled = on
+                if (on) servicesChannel = null
                 DiagLog.i(tag, if (on) "WiFi Direct enabled" else "WiFi Direct disabled")
                 if (!on) _state.value = "wifi direct off"
             }
