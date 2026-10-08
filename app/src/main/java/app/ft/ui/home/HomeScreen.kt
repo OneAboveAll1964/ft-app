@@ -109,26 +109,36 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val aaInstalled = remember(resumed) { AaInstaller.installed(context) }
 
     val on = car.running || autoConnect
-    val direct = linkMode == 1
-    val running = car.running && car.direct == direct
+    val cable = car.usb || linkMode == 2
+    val direct = !cable && linkMode == 1
+    val running = car.running && if (cable) car.usb else !car.usb && car.direct == direct
     val session = car.session
     val connected = session !is CarLifeSession.State.Idle
     val projecting = session is CarLifeSession.State.Projecting
-    val steps = if (direct) directSteps(context, radios, car, running, connected, projecting)
-    else hotspotSteps(context, radios, running, connected, projecting)
+    val steps = when {
+        cable -> usbSteps(running, connected, projecting)
+        direct -> directSteps(context, radios, car, running, connected, projecting)
+        else -> hotspotSteps(context, radios, running, connected, projecting)
+    }
+    val way = when {
+        car.usb -> "Using USB"
+        car.running -> if (car.direct) "Using WiFi + BL" else "Using Hotspot"
+        else -> when (linkMode) { 1 -> "Using WiFi + BL"; 2 -> "Using USB"; else -> "Using Hotspot" }
+    }
     val status = when {
         projecting -> Status(
             "Connected",
             when {
                 car.aaOverlay -> "Android Auto is on the car"
                 car.mirroring -> "Your app is on the car"
+                car.usb -> "FT is on the car screen over USB"
                 else -> "FT is on the car screen"
             },
             3
         )
-        connected -> Status("Connecting", "Starting the car screen", 2)
-        car.running -> Status("Waiting for your car", if (car.direct) "Using WiFi + BL" else "Using Hotspot", 1)
-        on -> Status("Starting", if (direct) "Using WiFi + BL" else "Using Hotspot", 1)
+        connected -> Status("Connecting", if (car.usb) "Starting the car screen over USB" else "Starting the car screen", 2)
+        car.running -> Status("Waiting for your car", way, 1)
+        on -> Status("Starting", way, 1)
         else -> Status("Off", "Turn on to connect to your car", 0)
     }
 
@@ -154,20 +164,28 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         item {
             Section("Connection") {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    listOf(0 to "Hotspot", 1 to "WiFi + BL").forEachIndexed { i, (value, label) ->
+                    listOf(0 to "Hotspot", 1 to "WiFi + BL", 2 to "USB").forEachIndexed { i, (value, label) ->
                         SegmentedButton(
                             selected = linkMode == value,
                             onClick = { pickMode(value) },
-                            shape = SegmentedButtonDefaults.itemShape(i, 2)
+                            shape = SegmentedButtonDefaults.itemShape(i, 3)
                         ) { Text(label, maxLines = 1) }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                AnimatedContent(targetState = direct, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "steps") { _ ->
+                AnimatedContent(targetState = if (cable) 2 else if (direct) 1 else 0, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "steps") { _ ->
                     Stepper(steps, running)
                 }
+                if (car.usb && linkMode != 2) {
+                    Text(
+                        "The car is on the USB cable. FT goes back to ${if (linkMode == 1) "WiFi + BL" else "Hotspot"} when it is unplugged.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
                 val refused = car.refused
-                AnimatedVisibility(visible = refused.isNotBlank() && !connected) {
+                AnimatedVisibility(visible = refused.isNotBlank() && !connected && !cable) {
                     Notice(refused, if (direct) "Use Hotspot" else "Use WiFi + BL") { pickMode(if (direct) 0 else 1) }
                 }
                 if (direct && running && !connected) {
@@ -229,6 +247,11 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         }
     }
 }
+
+private fun usbSteps(running: Boolean, connected: Boolean, projecting: Boolean) = listOf(
+    StepItem("Cable to the car", connected, hint = if (running) "Plug into the car's USB and open CarLife there. If the phone asks, pick FT and tap Always" else null),
+    StepItem("On the car screen", projecting, hint = if (connected) "Starting the picture" else null)
+)
 
 private fun hotspotSteps(
     context: android.content.Context,

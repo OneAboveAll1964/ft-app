@@ -73,7 +73,7 @@ class CarLifeSession(
     @Volatile var streamWidth = 1280; private set
     @Volatile var streamHeight = 720; private set
     @Volatile var fps = VideoPlans.START_FPS; private set
-    @Volatile var hotspot = false
+    @Volatile var fullRateStart = false
     @Volatile private var carAskedRate = false
     @Volatile private var streamStartedAt = 0L
     @Volatile var projecting = false; private set
@@ -449,7 +449,7 @@ class CarLifeSession(
             carW, carH, asked, newVehicle,
             prefs.videoSize, prefs.videoWidth, prefs.videoHeight,
             prefs.videoFps, prefs.videoMinFps, prefs.videoBitrate, prefs.videoQpFloor,
-            if (hotspot) VideoPlans.UNASKED_FPS else VideoPlans.START_FPS
+            if (fullRateStart) VideoPlans.UNASKED_FPS else VideoPlans.START_FPS
         )
         width = plan.contentWidth
         height = plan.contentHeight
