@@ -145,6 +145,16 @@ class WifiLink:
             self.plain_after_key += 1
             return payload
 
+    def _deliver(self, ch, head, body):
+        sid, payload = parse_inner(ch, head, body)
+        if ch == CH_VIDEO:
+            self.video_clock.append((time.time(), struct.unpack(">I", head[4:8])[0], sid))
+        if ch in (CH_MEDIA, CH_TTS):
+            self.audio.append((time.time(), ch, sid, payload, self.aes))
+            if sid in (MEDIA_DATA, TTS_DATA):
+                return
+        self.q.put((ch, sid, self._unwrap(ch, payload)))
+
     def _reader(self, ch, s):
         hl = head_len(ch)
         try:
@@ -152,14 +162,7 @@ class WifiLink:
                 head = read_exact(s, hl)
                 ln = struct.unpack(">H", head[:2])[0] if hl == 8 else struct.unpack(">I", head[:4])[0]
                 body = read_exact(s, ln) if ln else b""
-                sid, payload = parse_inner(ch, head, body)
-                if ch == CH_VIDEO:
-                    self.video_clock.append((time.time(), struct.unpack(">I", head[4:8])[0], sid))
-                if ch in (CH_MEDIA, CH_TTS):
-                    self.audio.append((time.time(), ch, sid, payload, self.aes))
-                    if sid in (MEDIA_DATA, TTS_DATA):
-                        continue
-                self.q.put((ch, sid, self._unwrap(ch, payload)))
+                self._deliver(ch, head, body)
         except Exception as e:
             self.q.put((ch, -1, str(e).encode()))
 
@@ -174,6 +177,162 @@ class WifiLink:
                 s.close()
             except Exception:
                 pass
+
+
+class TcpPipe:
+    def __init__(self, host, port):
+        self.s = socket.create_connection((host, port), timeout=10)
+        self.s.settimeout(None)
+        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+    def read(self):
+        return self.s.recv(16384)
+
+    def write(self, data):
+        self.s.sendall(data)
+
+    def close(self):
+        try:
+            self.s.close()
+        except Exception:
+            pass
+
+
+class UsbPipe:
+    STRINGS = ["Baidu", "CarLife", "Baidu CarLife", "1.0.0", "http://carlife.baidu.com/", "0720SerialNo."]
+    ACCESSORY = (0x2D00, 0x2D01, 0x2D04, 0x2D05)
+
+    def __init__(self, log, model="CarLife", wait=15.0):
+        import usb.core
+        import usb.util
+        self.usb = usb
+        self.log = log
+        strings = list(self.STRINGS)
+        strings[1] = model
+        dev = self._accessory()
+        if dev is None:
+            phone = self._phone()
+            if phone is None:
+                raise RuntimeError("no Android phone on the Mac's USB")
+            proto = phone.ctrl_transfer(0xC0, 51, 0, 0, 2)
+            version = proto[0] | (proto[1] << 8)
+            log("phone %04x:%04x speaks accessory protocol %d, switching it to %s" % (phone.idVendor, phone.idProduct, version, model))
+            for i, s in enumerate(strings):
+                phone.ctrl_transfer(0x40, 52, 0, i, s.encode() + b"\0")
+            phone.ctrl_transfer(0x40, 53, 0, 0, None)
+            usb.util.dispose_resources(phone)
+            end = time.time() + wait
+            while dev is None and time.time() < end:
+                time.sleep(0.25)
+                dev = self._accessory()
+            if dev is None:
+                raise RuntimeError("the phone did not come back as an accessory")
+        log("phone is an accessory now (%04x:%04x)" % (dev.idVendor, dev.idProduct))
+        self.dev = dev
+        cfg = dev.get_active_configuration()
+        intf = cfg[(0, 0)]
+        try:
+            usb.util.claim_interface(dev, intf.bInterfaceNumber)
+        except usb.core.USBError as e:
+            raise RuntimeError("could not claim the accessory interface: %s" % e)
+        self.ep_in = usb.util.find_descriptor(intf, custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN)
+        self.ep_out = usb.util.find_descriptor(intf, custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT)
+        self.max_packet = self.ep_out.wMaxPacketSize
+        self.closed = False
+
+    def _accessory(self):
+        for pid in self.ACCESSORY:
+            d = self.usb.core.find(idVendor=0x18D1, idProduct=pid)
+            if d is not None:
+                return d
+        return None
+
+    def _phone(self):
+        for d in self.usb.core.find(find_all=True):
+            try:
+                for cfg in d:
+                    for intf in cfg:
+                        if (intf.bInterfaceClass, intf.bInterfaceSubClass, intf.bInterfaceProtocol) == (0xFF, 0x42, 0x01):
+                            return d
+            except Exception:
+                continue
+        return None
+
+    def read(self):
+        while not self.closed:
+            try:
+                return bytes(self.ep_in.read(16384, timeout=1000))
+            except self.usb.core.USBTimeoutError:
+                continue
+        return b""
+
+    def write(self, data):
+        self.ep_out.write(data, timeout=5000)
+        if data and len(data) % self.max_packet == 0:
+            self.ep_out.write(b"", timeout=5000)
+
+    def close(self):
+        self.closed = True
+        try:
+            self.usb.util.dispose_resources(self.dev)
+        except Exception:
+            pass
+
+
+class AoaLink(WifiLink):
+    def __init__(self, pipe):
+        self.socks = {}
+        self.q = queue.Queue()
+        self.aes = None
+        self.plain_after_key = 0
+        self.audio = []
+        self.video_clock = []
+        self.pipe = pipe
+        self.wlock = threading.Lock()
+        self.inner = {}
+        threading.Thread(target=self._aoa_reader, daemon=True).start()
+
+    def _aoa_reader(self):
+        buf = bytearray()
+        try:
+            while True:
+                chunk = self.pipe.read()
+                if not chunk:
+                    raise EOFError("closed")
+                buf += chunk
+                while len(buf) >= 8:
+                    ch, ln = struct.unpack(">II", bytes(buf[:8]))
+                    if len(buf) < 8 + ln:
+                        break
+                    payload = bytes(buf[8:8 + ln])
+                    del buf[:8 + ln]
+                    self._inner(ch, payload)
+        except Exception as e:
+            self.q.put((CH_CMD, -1, str(e).encode()))
+
+    def _inner(self, ch, payload):
+        s = self.inner.setdefault(ch, bytearray())
+        s += payload
+        hl = head_len(ch)
+        while len(s) >= hl:
+            ln = struct.unpack(">H", bytes(s[:2]))[0] if hl == 8 else struct.unpack(">I", bytes(s[:4]))[0]
+            if len(s) < hl + ln:
+                break
+            head = bytes(s[:hl])
+            body = bytes(s[hl:hl + ln])
+            del s[:hl + ln]
+            self._deliver(ch, head, body)
+
+    def send(self, ch, sid, payload=b""):
+        if self.aes is not None and payload and ch in (CH_CMD, CH_CTRL):
+            payload = aes_ecb(self.aes, payload)
+        msg = cmd_msg(sid, payload)
+        with self.wlock:
+            self.pipe.write(struct.pack(">II", ch, len(msg)))
+            self.pipe.write(msg)
+
+    def close(self):
+        self.pipe.close()
 
 
 class Sim:
@@ -468,14 +627,23 @@ def main():
     ap.add_argument("--listen-seconds", type=float, default=0.0)
     ap.add_argument("--crash-on-song", action="store_true")
     ap.add_argument("--protocol", default="1.0")
+    ap.add_argument("--aoa-tcp", default="", help="host:port of FT's USB test cable (debug builds)")
+    ap.add_argument("--usb", action="store_true", help="act as the car over a real USB cable to the phone")
+    ap.add_argument("--usb-model", default="CarLife")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
     def log(m):
         print("[carlife-sim] " + m, flush=True)
 
-    p = [int(x) for x in a.ports.split(",")]
-    link = WifiLink(a.host, {CH_CMD: p[0], CH_VIDEO: p[1], CH_MEDIA: p[2], CH_TTS: p[3], CH_VR: p[4], CH_CTRL: p[5]})
+    if a.usb:
+        link = AoaLink(UsbPipe(log, a.usb_model))
+    elif a.aoa_tcp:
+        h, port = a.aoa_tcp.rsplit(":", 1)
+        link = AoaLink(TcpPipe(h, int(port)))
+    else:
+        p = [int(x) for x in a.ports.split(",")]
+        link = WifiLink(a.host, {CH_CMD: p[0], CH_VIDEO: p[1], CH_MEDIA: p[2], CH_TTS: p[3], CH_VR: p[4], CH_CTRL: p[5]})
     sim = Sim(link, log)
     sim.crash_on_song = a.crash_on_song
     result = {"encrypt": bool(a.encrypt), "ok": False, "checks": {}, "segments": []}

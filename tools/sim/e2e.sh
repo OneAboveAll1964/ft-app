@@ -625,6 +625,23 @@ if [ -n "$BUMBLE_PY" ] && [ -x "$BUMBLE_PY" ] && [ -n "$PHONE_BT" ] && [ "$PHONE
   check "switching to Hotspot closes the bluetooth side" "grep -q 'switching to Hotspot, the other way is closed' '$OUT/bt_logcat.txt'"
 fi
 
+echo "== USB cable =="
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/usb_logcat.txt" 2>&1 &
+USBLOG=$!
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
+sleep 4
+$ADB forward tcp:7300 tcp:7300 >/dev/null 2>&1
+python3 "$SIMDIR/carlife_hu_sim.py" --aoa-tcp 127.0.0.1:7300 --encrypt 1 --hold-init 2 --width 1280 --height 720 --fps 30 --seconds 4 --touches "640,360@1" --tail-seconds 2 --out "$OUT/usb" > "$OUT/usb_sim.log" 2>&1
+USB=$?
+sleep 4
+kill $USBLOG 2>/dev/null
+$ADB forward --remove tcp:7300 >/dev/null 2>&1
+check "a car on the USB cable gets the whole CarLife session (handshake, encryption, picture, touch)" "[ $USB = 0 ]"
+check "the cable takes over from the hotspot and the session runs over USB" "grep -q 'USB: a car came in on the test cable' '$OUT/usb_logcat.txt' && grep -q 'session start via USB' '$OUT/usb_logcat.txt' && grep -q 'head unit connected over USB' '$OUT/usb_logcat.txt'"
+check "the picture flows over the cable after a tap" "python3 -c \"import json;d=json.load(open('$OUT/usb/result.json'));assert d['checks']['video_flowing'] and d['checks']['video_after_tap1']\" 2>/dev/null"
+check "when the cable link ends FT goes back to the hotspot" "awk '/USB: the cable link ended/{e=1} e && /Waiting for the car to join the hotspot/{f=1} END{exit !f}' '$OUT/usb_logcat.txt'"
+
 echo "== crashes =="
 check "no FT crash in logcat" "! grep -A3 'FATAL EXCEPTION' '$OUT/logcat.txt' | grep -q 'app.ft'"
 grep -E 'FT/' "$OUT/logcat.txt" | sed -E 's/^.*FT\//FT\//' > "$OUT/ft_log.txt"
