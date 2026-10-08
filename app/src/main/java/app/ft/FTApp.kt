@@ -23,8 +23,15 @@ class FTApp : Application() {
         instance = this
         prefs = Prefs(this)
         DiagLog.attach(getExternalFilesDir("logs"))
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { DiagLog.crash(thread, error) }
+            previous?.uncaughtException(thread, error)
+        }
         app.ft.ui.car.CarStyles.reload()
         DiagLog.i("App", "FT ${runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""} ready")
+        DiagLog.i("App", "phone ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (${android.os.Build.DEVICE}), Android ${android.os.Build.VERSION.RELEASE} SDK ${android.os.Build.VERSION.SDK_INT}, " +
+            "chip ${if (android.os.Build.VERSION.SDK_INT >= 31) "${android.os.Build.SOC_MANUFACTURER} ${android.os.Build.SOC_MODEL}" else android.os.Build.HARDWARE}, build ${android.os.Build.DISPLAY}")
         scope.launch(Dispatchers.IO) {
             if (app.ft.core.Root.ensure()) app.ft.core.RootPrep.grants(this@FTApp)
         }

@@ -61,10 +61,55 @@ object DiagLog {
     fun w(tag: String, text: String) = add(tag, text, Log.WARN)
     fun d(tag: String, text: String) = add(tag, text, Log.DEBUG)
     fun e(tag: String, text: String, t: Throwable? = null) =
-        add(tag, if (t != null) "$text: ${t.javaClass.simpleName} ${t.message ?: ""}" else text, Log.ERROR)
+        add(tag, if (t != null) "$text: ${t.javaClass.simpleName} ${t.message ?: ""}\n${trace(t)}" else text, Log.ERROR)
 
-    fun rx(tag: String, what: String, data: ByteArray) = add(tag, "RX $what  ${Bytes.hex(data)}", Log.DEBUG)
-    fun tx(tag: String, what: String, data: ByteArray) = add(tag, "TX $what  ${Bytes.hex(data)}", Log.DEBUG)
+    fun rx(tag: String, what: String, data: ByteArray) = add(tag, "RX $what  ${Bytes.hex(data, PAYLOAD_LIMIT)}", Log.DEBUG)
+    fun tx(tag: String, what: String, data: ByteArray) = add(tag, "TX $what  ${Bytes.hex(data, PAYLOAD_LIMIT)}", Log.DEBUG)
+
+    fun trace(t: Throwable, maxFrames: Int = 40): String {
+        val sb = StringBuilder()
+        var cause: Throwable? = t
+        var depth = 0
+        while (cause != null && depth < 6) {
+            if (depth > 0) sb.append("Caused by: ${cause.javaClass.name}: ${cause.message ?: ""}\n")
+            cause.stackTrace.take(maxFrames).forEach { sb.append("    at ").append(it).append('\n') }
+            if (cause.stackTrace.size > maxFrames) sb.append("    … ${cause.stackTrace.size - maxFrames} more\n")
+            cause = cause.cause.takeIf { it !== cause }
+            depth++
+        }
+        return sb.toString().trimEnd()
+    }
+
+    fun crash(thread: Thread, t: Throwable) {
+        val text = "FT crashed on thread '${thread.name}': ${t.javaClass.name}: ${t.message ?: ""}\n${trace(t, 80)}"
+        Log.println(Log.ERROR, "FT/Crash", text)
+        val d = dir ?: return
+        runCatching {
+            val stamp = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+            val queued = ArrayList<DiagEntry>().also { pending.drainTo(it) }
+            File(d, "ft.log").appendText(
+                queued.joinToString("") { e -> "${stamp.format(Date(e.time))} ${levelName(e.level)} ${e.tag}: ${e.text}\n" } +
+                    "${stamp.format(Date())} E Crash: $text\n"
+            )
+        }
+    }
+
+    fun files(): List<File> {
+        val d = dir ?: return emptyList()
+        return (FILES_KEPT + 1 downTo 1).map { File(d, "ft.$it.log") }.filter { it.exists() } + listOfNotNull(File(d, "ft.log").takeIf { it.exists() })
+    }
+
+    fun flush(timeoutMs: Long = 1500) {
+        val end = System.currentTimeMillis() + timeoutMs
+        while (pending.isNotEmpty() && System.currentTimeMillis() < end) Thread.sleep(25)
+        Thread.sleep(60)
+    }
+
+    private fun levelName(level: Int) = when (level) {
+        Log.DEBUG -> "D"; Log.WARN -> "W"; Log.ERROR -> "E"; else -> "I"
+    }
+
+    private const val PAYLOAD_LIMIT = 1024
 
     private fun add(tag: String, text: String, level: Int) {
         Log.println(level, "FT/$tag", text)
