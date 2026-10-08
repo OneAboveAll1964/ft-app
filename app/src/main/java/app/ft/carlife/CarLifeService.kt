@@ -30,6 +30,7 @@ import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
+import app.ft.core.DiagSnapshot
 import app.ft.core.Root
 import app.ft.core.RootPrep
 import app.ft.media.CarPlayer
@@ -424,6 +425,7 @@ class CarLifeService : Service() {
         watchHeat()
         MirrorSink.onGone = { surface -> if (mirror.isShowing(surface)) mirror.hide() }
         watchCarBluetoothAudio()
+        watchUsb()
         progressJob = scope.launch {
             CarPlayer.state.collect { st -> songPosition(st) }
         }
@@ -470,7 +472,15 @@ class CarLifeService : Service() {
                 DiagLog.i(tag, "screen sharing was declined on the phone")
             }
             ACTION_AUTO, ACTION_WIFI -> {
-                scope.launch { RootPrep.grants(this@CarLifeService) }
+                scope.launch {
+                    RootPrep.grants(this@CarLifeService)
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (envLoggedAt < 0 || now - envLoggedAt > 60_000) {
+                        envLoggedAt = now
+                        DiagLog.i("Env", "connecting via ${if (app.prefs.linkMode == 1) "WiFi + BL" else "Hotspot"}, what FT sees on this phone:")
+                        DiagSnapshot.connectionStart(this@CarLifeService).forEach { DiagLog.i("Env", it) }
+                    }
+                }
                 val wanted = if (app.prefs.linkMode == 1) 1 else 0
                 if (mode != -1 && mode != wanted) {
                     DiagLog.i(tag, "switching to ${if (wanted == 1) "WiFi + BL" else "Hotspot"}, the other way is closed")
@@ -1760,6 +1770,48 @@ class CarLifeService : Service() {
     }
 
     private var btWatch: android.content.BroadcastReceiver? = null
+    private var usbWatch: android.content.BroadcastReceiver? = null
+    @Volatile private var envLoggedAt = -1L
+    private var lastUsb = ""
+
+    private fun watchUsb() {
+        val r = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                when (i.action) {
+                    "android.hardware.usb.action.USB_STATE" -> {
+                        val ex = i.extras
+                        val flags = ex?.keySet()?.sorted()?.filter { ex.getBoolean(it, false) }.orEmpty()
+                        val line = "connected=${ex?.getBoolean("connected") == true} configured=${ex?.getBoolean("configured") == true} on: ${flags.joinToString().ifBlank { "nothing" }}"
+                        if (line == lastUsb) return
+                        lastUsb = line
+                        DiagLog.i("USB", "usb $line")
+                    }
+                    android.hardware.usb.UsbManager.ACTION_USB_ACCESSORY_DETACHED ->
+                        DiagLog.i("USB", "usb accessory detached: ${usbAccessory(i)}")
+                    android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED, android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED ->
+                        DiagLog.i("USB", "usb device ${if (i.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) "attached" else "detached"}")
+                }
+            }
+        }
+        val f = android.content.IntentFilter().apply {
+            addAction("android.hardware.usb.action.USB_STATE")
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_ACCESSORY_DETACHED)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_EXPORTED) else registerReceiver(r, f)
+            usbWatch = r
+        }.onFailure { DiagLog.w(tag, "cannot watch usb: ${it.message}") }
+        val um = getSystemService(Context.USB_SERVICE) as? android.hardware.usb.UsbManager
+        runCatching { um?.accessoryList?.forEach { a -> DiagLog.i("USB", "usb accessory present: ${a.manufacturer} ${a.model} ${a.version} ${a.description}") } }
+    }
+
+    private fun usbAccessory(i: Intent): String {
+        val a: android.hardware.usb.UsbAccessory? = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(android.hardware.usb.UsbManager.EXTRA_ACCESSORY, android.hardware.usb.UsbAccessory::class.java)
+            else @Suppress("DEPRECATION") i.getParcelableExtra(android.hardware.usb.UsbManager.EXTRA_ACCESSORY)
+        return a?.let { "${it.manufacturer} ${it.model} ${it.version} ${it.description}" } ?: "unknown"
+    }
 
     @SuppressLint("MissingPermission")
     private fun watchCarBluetoothAudio() {
@@ -1819,6 +1871,8 @@ class CarLifeService : Service() {
         teardown()
         btWatch?.let { runCatching { unregisterReceiver(it) } }
         btWatch = null
+        usbWatch?.let { runCatching { unregisterReceiver(it) } }
+        usbWatch = null
         progressJob?.cancel()
         CarPlayer.onTrack = null
         CarPlayer.onBreak = null

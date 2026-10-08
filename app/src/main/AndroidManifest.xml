@@ -38,6 +38,8 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
         <package android:name="com.google.android.projection.gearhead" />
+        <package android:name="com.baidu.carlife" />
+        <package android:name="com.huawei.hicar" />
     </queries>
 
     <application
