@@ -45,14 +45,25 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         val hardware = Build.HARDWARE.orEmpty().lowercase()
         val manufacturer = Build.MANUFACTURER.orEmpty().lowercase()
         val brand = Build.BRAND.orEmpty().lowercase()
-        hardware.contains("mtk") ||
+        val board = Build.BOARD.orEmpty().lowercase()
+        val device = Build.DEVICE.orEmpty().lowercase()
+
+        hardware.startsWith("mt") ||
+            hardware.contains("mtk") ||
             hardware.contains("mediatek") ||
             manufacturer.contains("mediatek") ||
-            brand.contains("mediatek")
+            brand.contains("mediatek") ||
+            board.startsWith("mt") ||
+            device.startsWith("mt")
     }
 
     init {
-        DiagLog.i(tag, "decoder created ${width}x$height hardware=${Build.HARDWARE} manufacturer=${Build.MANUFACTURER} mediaTek=$isMediaTek")
+        DiagLog.i(
+            tag,
+            "decoder created ${width}x$height " +
+                "hardware=${Build.HARDWARE} board=${Build.BOARD} device=${Build.DEVICE} " +
+                "manufacturer=${Build.MANUFACTURER} mediaTek=$isMediaTek"
+        )
     }
 
     fun setSurface(s: Surface?) {
@@ -103,7 +114,11 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
                 return
             }
 
-            DiagLog.w(tag, "setOutputSurface() failed; recreating decoder: ${moved.exceptionOrNull()?.javaClass?.simpleName}")
+            DiagLog.w(
+                tag,
+                "setOutputSurface() failed; recreating decoder: " +
+                    moved.exceptionOrNull()?.javaClass?.simpleName
+            )
             stopLocked()
             if (surface?.isValid == true && config != null) startLocked()
         }
@@ -161,23 +176,37 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
 
         var newCodec: MediaCodec? = null
         try {
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height)
+            val format = MediaFormat.createVideoFormat(
+                MediaFormat.MIMETYPE_VIDEO_AVC,
+                width,
+                height
+            )
             format.setByteBuffer("csd-0", ByteBuffer.wrap(csd))
             format.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
 
             newCodec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
 
-            if (!s.isValid) throw IllegalStateException("Surface became invalid before configure()")
+            if (!s.isValid) {
+                throw IllegalStateException("Surface became invalid before configure()")
+            }
 
             newCodec.configure(format, s, null, 0)
             newCodec.start()
             codec = newCodec
 
             val codecName = runCatching { newCodec.name }.getOrNull()
-            DiagLog.i(tag, "decoder started ${width}x$height codec=$codecName generation=$myGeneration mediaTek=$isMediaTek")
+            DiagLog.i(
+                tag,
+                "decoder started ${width}x$height codec=$codecName " +
+                    "generation=$myGeneration mediaTek=$isMediaTek"
+            )
 
             val decoder = newCodec
-            drain = Thread({ drainLoop(decoder, myGeneration) }, "FT-AaDrain-$myGeneration").also { it.start() }
+            drain = Thread(
+                { drainLoop(decoder, myGeneration) },
+                "FT-AaDrain-$myGeneration"
+            ).also { it.start() }
+
             newCodec = null
         } catch (t: Throwable) {
             DiagLog.e(tag, "decoder start failed generation=$myGeneration", t)
@@ -198,11 +227,20 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
             val buf = c.getInputBuffer(idx) ?: return
             buf.clear()
             if (data.size > buf.remaining()) {
-                DiagLog.w(tag, "decoder input buffer too small: data=${data.size} remaining=${buf.remaining()}")
+                DiagLog.w(
+                    tag,
+                    "decoder input buffer too small: data=${data.size} remaining=${buf.remaining()}"
+                )
                 return
             }
             buf.put(data)
-            c.queueInputBuffer(idx, 0, data.size, ptsUs, if (isConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0)
+            c.queueInputBuffer(
+                idx,
+                0,
+                data.size,
+                ptsUs,
+                if (isConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0
+            )
         } catch (t: Throwable) {
             DiagLog.e(tag, "feed failed", t)
         }
@@ -210,6 +248,7 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
 
     private fun drainLoop(c: MediaCodec, myGeneration: Long) {
         val info = MediaCodec.BufferInfo()
+
         while (running.get()) {
             if (codec !== c || generation != myGeneration) return
 
@@ -222,6 +261,7 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
                         handleDrainFailure(c, myGeneration, null)
                         return
                     }
+
                     c.releaseOutputBuffer(idx, true)
                     _frames.value = _frames.value + 1
                 }
@@ -234,15 +274,25 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         }
     }
 
-    private fun handleDrainFailure(failedCodec: MediaCodec, failedGeneration: Long, error: Throwable?) {
+    private fun handleDrainFailure(
+        failedCodec: MediaCodec,
+        failedGeneration: Long,
+        error: Throwable?
+    ) {
         synchronized(codecLock) {
             if (codec !== failedCodec || generation != failedGeneration) return
+
             running.set(false)
             codec = null
             if (drain === Thread.currentThread()) drain = null
+
             runCatching { failedCodec.stop() }
             runCatching { failedCodec.release() }
-            DiagLog.w(tag, "decoder disabled after drain failure; will recover on next frame/Surface event")
+
+            DiagLog.w(
+                tag,
+                "decoder disabled after drain failure; will recover on next frame/Surface event"
+            )
             if (error != null) DiagLog.e(tag, "decoder failure details", error)
         }
     }
@@ -255,9 +305,12 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         drain = null
 
         if (oldCodec == null) return
+
         DiagLog.i(tag, "stopping decoder")
-        runCatching { oldCodec.stop() }.onFailure { DiagLog.w(tag, "decoder stop failed: ${it.message}") }
-        runCatching { oldCodec.release() }.onFailure { DiagLog.w(tag, "decoder release failed: ${it.message}") }
+        runCatching { oldCodec.stop() }
+            .onFailure { DiagLog.w(tag, "decoder stop failed: ${it.message}") }
+        runCatching { oldCodec.release() }
+            .onFailure { DiagLog.w(tag, "decoder release failed: ${it.message}") }
     }
 
     fun stop() {
