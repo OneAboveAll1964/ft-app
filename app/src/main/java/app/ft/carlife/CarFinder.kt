@@ -43,10 +43,18 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     @Volatile private var searchStartedAt = 0L
     @Volatile var busyStreak = 0
         private set
+    @Volatile var myName = ""
+        private set
     private var servicesChannel: WifiP2pManager.Channel? = null
     private val servicesSeen = HashSet<String>()
     private val peerDetails = HashMap<String, String>()
     private val SERVICES_AFTER_MS = 15_000L
+    private val NARROW_AFTER_MS = 8_000L
+    private val NARROW = listOf(5745, 5180, 5765, 5785, 5805, 5825, 5200, 5220, 5240, 2437, 2412, 2462)
+    @Volatile private var namedAt = 0L
+    private var notedMatch = ""
+    private var narrowNoted = false
+    private var narrowIndex = 0
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
     private val _state = MutableStateFlow("off")
     private val _link = MutableStateFlow<Link?>(null)
@@ -85,7 +93,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             var tick = 0
             while (isActive) {
                 if (searching && _link.value == null && connecting == null) {
-                    if (wantsServices() && tick % 2 == 1) discoverServices() else discover()
+                    when {
+                        narrowDue(tick) -> discoverOn(NARROW[narrowIndex++ % NARROW.size])
+                        wantsServices() && tick % 2 == 1 -> discoverServices()
+                        else -> discover()
+                    }
                     tick++
                 }
                 delay(JoinWatch.DISCOVER_EVERY_MS)
@@ -134,6 +146,29 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 }
             }
         }
+    }
+
+    private fun narrowDue(tick: Int): Boolean {
+        if (Build.VERSION.SDK_INT < 33 || !armed || tick % 3 != 2) return false
+        if (android.os.SystemClock.elapsedRealtime() - namedAt < NARROW_AFTER_MS) return false
+        if (CarMatch.pick(_peers.value, prefs.carP2pName, prefs.carBtAddress) != null) return false
+        return runCatching { manager?.isChannelConstrainedDiscoverySupported == true }.getOrDefault(false)
+    }
+
+    @SuppressLint("NewApi")
+    private fun discoverOn(mhz: Int) {
+        val m = manager ?: return
+        val ch = channel ?: return
+        if (!narrowNoted) {
+            narrowNoted = true
+            DiagLog.i(tag, "WiFi Direct: this phone has not seen the car's group yet, also searching the channels cars use one at a time (${NARROW.joinToString()} MHz)")
+        }
+        runCatching {
+            m.discoverPeersOnSpecificFrequency(ch, mhz, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() = Unit
+                override fun onFailure(reason: Int) { DiagLog.d(tag, "search on $mhz MHz failed reason=$reason (${failureName(reason)})") }
+            })
+        }.onFailure { DiagLog.d(tag, "search on $mhz MHz not possible: ${it.message}") }
     }
 
     private fun wantsServices(): Boolean {
@@ -227,6 +262,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 DiagLog.i(tag, if (on) "WiFi Direct enabled" else "WiFi Direct disabled")
                 if (!on) _state.value = "wifi direct off"
             }
+            WifiP2pManager.WIFI_P2P_THIS_DEVICE_CHANGED_ACTION -> {
+                val me: WifiP2pDevice? = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE, WifiP2pDevice::class.java)
+                    else @Suppress("DEPRECATION") i.getParcelableExtra(WifiP2pManager.EXTRA_WIFI_P2P_DEVICE)
+                me?.deviceName?.takeIf { it.isNotBlank() }?.let { myName = it }
+            }
             WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> m.requestPeers(ch) { list ->
                 list.deviceList.forEach { describe(it) }
                 val ps = list.deviceList.map { Peer(it.deviceName ?: "", it.deviceAddress ?: "", it.status, it.isGroupOwner) }
@@ -277,12 +317,23 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
     }
 
+    private fun theCar(ps: List<Peer>, want: String = prefs.carP2pName): Peer? {
+        val hit = CarMatch.pick(ps, want, prefs.carBtAddress) ?: return null
+        val (p, why) = hit
+        if (why != CarMatch.Why.NAME && notedMatch != p.address) {
+            notedMatch = p.address
+            DiagLog.i(tag, when (why) {
+                CarMatch.Why.ADDRESS -> "WiFi Direct: '${p.name}' (${p.address}) does not carry the car's name, but its address belongs to the car's bluetooth radio (${prefs.carBtAddress}), so it is the car"
+                else -> "WiFi Direct: the car named itself '${want.trim()}' over bluetooth but its group (${p.address}) has no name; it is the only nameless group nearby, so it is taken as the car"
+            })
+        }
+        return p
+    }
+
     private fun autoMatch(ps: List<Peer>) {
         if (_link.value != null || connecting != null) return
         val want = prefs.carP2pName.trim()
-        val target = ps.firstOrNull { p ->
-            if (want.isNotEmpty()) p.name.equals(want, true) || p.name.contains(want, true) else p.name.contains("carlife", true)
-        }
+        val target = theCar(ps, want)
         if (target == null) {
             val nearby = ps.joinToString { "'${it.name}'" }.ifBlank { "nothing" }
             val sig = "$want|$nearby"
@@ -309,12 +360,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     }
 
     fun inSight(name: String): Boolean =
-        _link.value != null || connecting != null || _peers.value.any { it.name.equals(name, true) || it.name.contains(name, true) }
+        _link.value != null || connecting != null || theCar(_peers.value, name) != null
 
     fun connectByName(name: String) {
         prefs.carP2pName = name
         armed = true
-        val p = _peers.value.firstOrNull { it.name == name } ?: return
+        namedAt = android.os.SystemClock.elapsedRealtime()
+        val p = theCar(_peers.value, name) ?: return
         connect(p)
     }
 
@@ -324,7 +376,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (name.isEmpty()) return
         val attempting = connecting != null
         if (!JoinWatch.interruptForReady(android.os.SystemClock.elapsedRealtime() - attemptAt, attempting)) return
-        val p = _peers.value.firstOrNull { it.name.equals(name, true) }
+        val p = theCar(_peers.value, name)
         if (p == null) {
             discover()
             return
@@ -449,6 +501,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         servicesSeen.clear()
         peerDetails.clear()
         searching = false
+        namedAt = 0L
+        notedMatch = ""
+        narrowNoted = false
         runCatching { ch?.close() }
         _state.value = "off"
     }
