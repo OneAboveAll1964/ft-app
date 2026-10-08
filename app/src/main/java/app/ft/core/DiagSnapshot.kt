@@ -122,8 +122,9 @@ object DiagSnapshot {
         add(line("radios") { app.ft.ui.home.readRadios(c) })
         add(line("wifi") {
             @Suppress("DEPRECATION") val ci = wm?.connectionInfo
+            val other = otherWifiMhz(c)
             "on=${wm?.isWifiEnabled} 5GHz=${wm?.is5GHzBandSupported} p2p=${c.packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_DIRECT)} " +
-                "connected=${ci != null && ci.networkId != -1} freq=${ci?.frequency}MHz rssi=${ci?.rssi} link=${ci?.linkSpeed}Mbps"
+                "connected to other wifi=${if (other != null) "yes, ${band(other)} ${other}MHz" else "no"} rssi=${ci?.rssi} link=${ci?.linkSpeed}Mbps"
         })
         add(line("usb") {
             val um = c.getSystemService(Context.USB_SERVICE) as? android.hardware.usb.UsbManager
@@ -187,6 +188,24 @@ object DiagSnapshot {
         addAll(app(c).filterNot { it.startsWith("carlife state") || it.startsWith("android auto bridge state") })
         addAll(radios(c))
         addAll(androidAuto(c))
+    }
+
+    fun otherWifiMhz(c: Context): Int? = runCatching {
+        val cm = c.getSystemService(android.net.ConnectivityManager::class.java)
+        @Suppress("DEPRECATION")
+        val caps = cm.allNetworks.mapNotNull { cm.getNetworkCapabilities(it) }
+            .firstOrNull { it.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) } ?: return@runCatching null
+        val info = if (Build.VERSION.SDK_INT >= 31) caps.transportInfo as? android.net.wifi.WifiInfo else null
+        @Suppress("DEPRECATION")
+        val mhz = info?.frequency ?: (c.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)?.connectionInfo?.frequency
+        mhz?.takeIf { it > 0 } ?: 0
+    }.getOrNull()
+
+    fun band(mhz: Int): String = when {
+        mhz <= 0 -> "unknown band"
+        mhz < 3000 -> "2.4 GHz"
+        mhz < 5925 -> "5 GHz"
+        else -> "6 GHz"
     }
 
     private fun pkg(c: Context, name: String): PackageInfo? = runCatching { c.packageManager.getPackageInfo(name, 0) }.getOrNull()

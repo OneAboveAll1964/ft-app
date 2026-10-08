@@ -602,10 +602,16 @@ class CarLifeService : Service() {
 
     private fun watchWifiDirect() {
         p2pWatch?.cancel()
+        directStartedAt = android.os.SystemClock.elapsedRealtime()
+        blockerNote = ""
+        lastOtherWifi = -1
+        hotspotStoppedForDirect = false
         p2pWatch = scope.launch {
+            var ticks = 0
             while (mode == 1) {
                 delay(2000)
                 if (wifiLink?.connected == true) continue
+                if (ticks++ % 5 == 0) checkDirectBlockers()
                 val ip = NetUtil.wifiDirectIpv4(p2pIface)
                 val up = _state.value.wifiDirect
                 if (ip != null && !up) {
@@ -622,6 +628,36 @@ class CarLifeService : Service() {
                 }
             }
         }
+    }
+
+    private fun checkDirectBlockers() {
+        if (mode != 1 || wifiLink?.connected == true) return
+        val waited = android.os.SystemClock.elapsedRealtime() - directStartedAt
+        val hotspot = NetUtil.hotspotIpv4() != null
+        val other = DiagSnapshot.otherWifiMhz(this)
+        val called = _state.value.btCar != null || _state.value.carWifi != null
+        if ((other ?: 0) != lastOtherWifi) {
+            lastOtherWifi = other ?: 0
+            DiagLog.i(tag, if (other != null) "WiFi + BL: the phone is connected to another Wi-Fi on ${DiagSnapshot.band(other)} (${other} MHz); many phones can only join the car's WiFi Direct on that same channel" else "WiFi + BL: the phone is not connected to any other Wi-Fi")
+        }
+        if (hotspot && Root.granted && !hotspotStoppedForDirect) {
+            hotspotStoppedForDirect = true
+            DiagLog.i(tag, "WiFi + BL: the phone's hotspot is on and blocks WiFi Direct, turning it off with root")
+            Root.stopHotspot()
+        }
+        val busy = finder?.busyStreak ?: 0
+        val note = when {
+            hotspot -> "Turn off the phone's hotspot, it blocks WiFi Direct"
+            busy >= 3 -> "The phone won't search for the car: turn off its hotspot and any screen casting"
+            !called && waited > 25_000 -> "Open CarLife on the car's screen so the car calls the phone"
+            other != null && called && waited > 30_000 -> "Disconnect the phone from other Wi-Fi so it can join the car"
+            else -> ""
+        }
+        if (note == blockerNote) return
+        blockerNote = note
+        if (note.isEmpty()) return
+        DiagLog.w(tag, "WiFi + BL: $note (hotspot=$hotspot, search refused=$busy, other wifi=${other?.let { DiagSnapshot.band(it) } ?: "none"}, car called=$called, waited ${waited / 1000}s)")
+        step(note)
     }
 
     private fun stopLink() {
@@ -1772,6 +1808,10 @@ class CarLifeService : Service() {
     private var btWatch: android.content.BroadcastReceiver? = null
     private var usbWatch: android.content.BroadcastReceiver? = null
     @Volatile private var envLoggedAt = -1L
+    @Volatile private var directStartedAt = 0L
+    @Volatile private var blockerNote = ""
+    @Volatile private var lastOtherWifi = -1
+    @Volatile private var hotspotStoppedForDirect = false
     private var lastUsb = ""
 
     private fun watchUsb() {
