@@ -32,6 +32,13 @@ class CarWirelessSetup(
         return ok
     }
 
+    fun askName(): Boolean {
+        carWifiName = null
+        val ok = send(CarLifeFraming.cmd(MD_TARGET_INFO_REQUEST))
+        if (ok) progress("Asking the car for its WiFi Direct name again")
+        return ok
+    }
+
     fun wifiDirectReady(ip: String?) {
         phoneIp = ip
         if (ip != null && ipWanted) sendIp()

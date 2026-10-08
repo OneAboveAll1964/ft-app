@@ -612,6 +612,7 @@ class CarLifeService : Service() {
                 delay(2000)
                 if (wifiLink?.connected == true) continue
                 if (ticks++ % 5 == 0) checkDirectBlockers()
+                askCarAgain()
                 val ip = NetUtil.wifiDirectIpv4(p2pIface)
                 val up = _state.value.wifiDirect
                 if (ip != null && !up) {
@@ -658,6 +659,18 @@ class CarLifeService : Service() {
         if (note.isEmpty()) return
         DiagLog.w(tag, "WiFi + BL: $note (hotspot=$hotspot, search refused=$busy, other wifi=${other?.let { DiagSnapshot.band(it) } ?: "none"}, car called=$called, waited ${waited / 1000}s)")
         step(note)
+    }
+
+    private fun askCarAgain() {
+        val name = _state.value.carWifi ?: return
+        if (mode != 1 || !bt.open || _state.value.wifiDirect || wifiLink?.connected == true) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        val inSight = finder?.inSight(name) == true
+        if (inSight || carSeenAt == 0L) carSeenAt = now
+        if (!JoinWatch.askCarAgain(now - carSeenAt, inSight)) return
+        DiagLog.i(tag, "WiFi + BL: the car's WiFi Direct '$name' has not shown up for ${(now - carSeenAt) / 1000}s, asking the car for it again over bluetooth")
+        carSeenAt = now
+        wireless.askName()
     }
 
     private fun stopLink() {
@@ -1211,6 +1224,7 @@ class CarLifeService : Service() {
 
     private fun onCarRaisedWifiDirect(name: String) {
         if (mode != 1) return
+        carSeenAt = android.os.SystemClock.elapsedRealtime()
         app.prefs.carP2pName = name
         _state.update { it.copy(carWifi = name) }
         if (wifiLink?.connected == true) {
@@ -1812,6 +1826,7 @@ class CarLifeService : Service() {
     @Volatile private var blockerNote = ""
     @Volatile private var lastOtherWifi = -1
     @Volatile private var hotspotStoppedForDirect = false
+    @Volatile private var carSeenAt = 0L
     private var lastUsb = ""
 
     private fun watchUsb() {

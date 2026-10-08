@@ -61,6 +61,13 @@ class JoinWatchTest {
     }
 
     @Test
+    fun theCarIsAskedAgainOnlyAfterThirtySecondsOutOfSight() {
+        assertFalse(JoinWatch.askCarAgain(29_999, carInSight = false))
+        assertTrue(JoinWatch.askCarAgain(30_000, carInSight = false))
+        assertFalse(JoinWatch.askCarAgain(90_000, carInSight = true))
+    }
+
+    @Test
     fun thisMorningsHangWouldHaveBeenRetriedAtFiveSeconds() {
         val firstTry = listOf(1_000L, 3_000L, 5_000L).map { JoinWatch.next(it, carConnected = false, groupInterfaceUp = false) }
         assertEquals(listOf(JoinWatch.Next.WAIT, JoinWatch.Next.WAIT, JoinWatch.Next.RETRY), firstTry)

@@ -9,6 +9,7 @@ object JoinWatch {
     const val QUICK_RETRY_MS = 1_000L
     const val FRESH_MS = 2_000L
     const val DISCOVER_EVERY_MS = 5_000L
+    const val ASK_AGAIN_MS = 30_000L
 
     enum class Next { WAIT, RETRY, DECLINED }
 
@@ -29,4 +30,6 @@ object JoinWatch {
     }
 
     fun interruptForReady(attemptAgeMs: Long, attempting: Boolean): Boolean = !attempting || attemptAgeMs >= FRESH_MS
+
+    fun askCarAgain(unseenMs: Long, carInSight: Boolean): Boolean = !carInSight && unseenMs >= ASK_AGAIN_MS
 }

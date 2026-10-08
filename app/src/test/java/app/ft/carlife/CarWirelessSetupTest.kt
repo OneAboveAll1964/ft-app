@@ -76,6 +76,16 @@ class CarWirelessSetupTest {
     }
 
     @Test
+    fun askingAgainTakesTheCarsNextAnswerEvenWhenTheNameIsTheSame() {
+        val w = setup()
+        w.feed(target("_ClfWfd_vehicle-r9ti4"))
+        w.askName()
+        assertEquals(listOf(CarWirelessSetup.MD_TARGET_INFO_REQUEST), ids())
+        w.feed(target("_ClfWfd_vehicle-r9ti4"))
+        assertEquals(listOf("_ClfWfd_vehicle-r9ti4", "_ClfWfd_vehicle-r9ti4"), names)
+    }
+
+    @Test
     fun theAddressWaitsForWifiDirect() {
         val w = setup()
         w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))

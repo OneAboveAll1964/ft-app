@@ -303,6 +303,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
     }
 
+    fun inSight(name: String): Boolean =
+        _link.value != null || connecting != null || _peers.value.any { it.name.equals(name, true) || it.name.contains(name, true) }
+
     fun connectByName(name: String) {
         prefs.carP2pName = name
         armed = true
