@@ -40,6 +40,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var watchdog: Job? = null
     private var failures = 0
     private var lastNoMatch = ""
+    @Volatile private var searchStartedAt = 0L
+    @Volatile var busyStreak = 0
+        private set
+    private var servicesChannel: WifiP2pManager.Channel? = null
+    private val servicesSeen = HashSet<String>()
+    private val peerDetails = HashMap<String, String>()
+    private val SERVICES_AFTER_MS = 15_000L
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
     private val _state = MutableStateFlow("off")
     private val _link = MutableStateFlow<Link?>(null)
@@ -75,8 +82,12 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(r, f, Context.RECEIVER_EXPORTED) else context.registerReceiver(r, f)
         _state.value = "ready"
         loop = scope.launch(Dispatchers.Main) {
+            var tick = 0
             while (isActive) {
-                if (searching && _link.value == null && connecting == null) discover()
+                if (searching && _link.value == null && connecting == null) {
+                    if (wantsServices() && tick % 2 == 1) discoverServices() else discover()
+                    tick++
+                }
                 delay(JoinWatch.DISCOVER_EVERY_MS)
             }
         }
@@ -106,6 +117,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     fun search() {
         if (searching) return
         searching = true
+        searchStartedAt = android.os.SystemClock.elapsedRealtime()
         _state.value = "searching"
         DiagLog.i(tag, "WiFi Direct search started")
         scope.launch(Dispatchers.Main) { if (_link.value == null && connecting == null) discover() }
@@ -124,19 +136,80 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
     }
 
+    private fun wantsServices(): Boolean {
+        val want = prefs.carP2pName.trim()
+        return want.startsWith("_") || (want.isEmpty() && android.os.SystemClock.elapsedRealtime() - searchStartedAt > SERVICES_AFTER_MS)
+    }
+
+    private fun discoverServices() {
+        val m = manager ?: return
+        val ch = channel ?: return
+        if (servicesChannel !== ch) {
+            runCatching {
+                m.setDnsSdResponseListeners(ch,
+                    { instance, type, device -> onService("dns-sd", instance.orEmpty(), type.orEmpty(), device) },
+                    { domain, txt, device -> DiagLog.i(tag, "WiFi Direct service record from '${device?.deviceName}' (${device?.deviceAddress}): $domain $txt") })
+                m.setUpnpServiceResponseListener(ch) { names, device -> onService("upnp", names.orEmpty().joinToString(), "", device) }
+                m.addServiceRequest(ch, android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest.newInstance(), null)
+                m.addServiceRequest(ch, android.net.wifi.p2p.nsd.WifiP2pUpnpServiceRequest.newInstance(), null)
+                servicesChannel = ch
+                DiagLog.i(tag, "WiFi Direct: also looking for the car's CarLife service, not only its name")
+            }.onFailure { DiagLog.w(tag, "WiFi Direct service search could not start: ${it.message}") }
+        }
+        m.discoverServices(ch, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() = Unit
+            override fun onFailure(reason: Int) { DiagLog.d(tag, "discoverServices failed reason=$reason") }
+        })
+    }
+
+    private fun onService(kind: String, instance: String, type: String, device: WifiP2pDevice?) {
+        val d = device ?: return
+        val key = "${d.deviceAddress}|$instance"
+        if (servicesSeen.add(key)) DiagLog.i(tag, "WiFi Direct $kind service '$instance' $type from '${d.deviceName}' (${d.deviceAddress})")
+        if (_link.value != null || connecting != null) return
+        val want = prefs.carP2pName.trim()
+        if (want.isEmpty()) return
+        val base = instance.substringBefore('.')
+        val match = base.equals(want, true) || (base.isNotEmpty() && want.startsWith(base, true) && base.startsWith("_"))
+        if (!match) return
+        DiagLog.i(tag, "WiFi Direct: '${d.deviceName}' (${d.deviceAddress}) offers the car's service '$base', joining it")
+        connect(Peer(d.deviceName ?: want, d.deviceAddress ?: return, d.status, d.isGroupOwner))
+    }
+
+    private fun describe(d: WifiP2pDevice) {
+        val sig = "${d.deviceName}|${d.status}|${d.isGroupOwner}"
+        if (peerDetails[d.deviceAddress] == sig) return
+        peerDetails[d.deviceAddress ?: return] = sig
+        DiagLog.d(tag, "WiFi Direct device '${d.deviceName}' ${d.deviceAddress} ${statusName(d.status)} owner=${d.isGroupOwner} type=${d.primaryDeviceType} " +
+            "push-button=${d.wpsPbcSupported()} keypad=${d.wpsKeypadSupported()} display=${d.wpsDisplaySupported()} services=${d.isServiceDiscoveryCapable}" +
+            if (Build.VERSION.SDK_INT >= 30) " wfd=${d.wfdInfo?.let { "on=${it.isEnabled} type=${it.deviceType}" } ?: "none"}" else "")
+    }
+
     private fun discover() {
         val m = manager ?: return
         val ch = channel ?: return
         m.discoverPeers(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
+                if (busyStreak > 0) DiagLog.i(tag, "WiFi Direct searching again after $busyStreak refusals")
+                busyStreak = 0
                 if (_link.value == null && connecting == null) _state.value = "searching"
             }
 
             override fun onFailure(reason: Int) {
                 _state.value = "discovery failed ($reason)"
-                DiagLog.w(tag, "discoverPeers failed reason=$reason")
+                if (reason == WifiP2pManager.BUSY) busyStreak++
+                DiagLog.w(tag, "discoverPeers failed reason=$reason (${failureName(reason)})" +
+                    if (reason == WifiP2pManager.BUSY && busyStreak == 3) "; the phone keeps refusing to search, usually because its hotspot is on or another app is using WiFi Direct (screen casting, Nearby Share)" else "")
             }
         })
+    }
+
+    private fun failureName(reason: Int) = when (reason) {
+        WifiP2pManager.ERROR -> "error"
+        WifiP2pManager.P2P_UNSUPPORTED -> "not supported"
+        WifiP2pManager.BUSY -> "busy"
+        WifiP2pManager.NO_SERVICE_REQUESTS -> "no service requests"
+        else -> "code $reason"
     }
 
     private fun handle(i: Intent) {
@@ -150,6 +223,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 if (!on) _state.value = "wifi direct off"
             }
             WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> m.requestPeers(ch) { list ->
+                list.deviceList.forEach { describe(it) }
                 val ps = list.deviceList.map { Peer(it.deviceName ?: "", it.deviceAddress ?: "", it.status, it.isGroupOwner) }
                 _peers.value = ps
                 if (ps.isNotEmpty()) DiagLog.d(tag, "peers: " + ps.joinToString { "${it.name}[${statusName(it.status)}${if (it.groupOwner) ", group up" else ""}]" })
@@ -362,6 +436,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val ch = channel
         channel = null
         if (m != null && ch != null) runCatching { m.stopPeerDiscovery(ch, null) }
+        if (m != null && ch != null && servicesChannel === ch) runCatching { m.clearServiceRequests(ch, null) }
+        servicesChannel = null
+        servicesSeen.clear()
+        peerDetails.clear()
+        searching = false
         runCatching { ch?.close() }
         _state.value = "off"
     }
