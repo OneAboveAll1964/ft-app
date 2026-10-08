@@ -910,11 +910,19 @@ class CarLifeService : Service() {
     private fun triggerAaWireless() {
         val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
         val bonded = runCatching { adapter?.bondedDevices?.toList() }.getOrNull().orEmpty()
+        val wantAddress = app.prefs.carBtAddress.trim()
         val want = app.prefs.carBtName.trim()
-        val device = bonded.firstOrNull { d ->
-            want.isNotEmpty() && runCatching { d.name }.getOrNull()?.contains(want, true) == true
-        } ?: bonded.firstOrNull { d -> runCatching { d.name }.getOrNull()?.contains("corolla", true) == true }
-        ?: bonded.firstOrNull()
+        val byAddress = bonded.firstOrNull { d -> wantAddress.isNotEmpty() && d.address.equals(wantAddress, true) }
+        val byName = bonded.firstOrNull { d -> want.isNotEmpty() && runCatching { d.name }.getOrNull()?.contains(want, true) == true }
+        val byClass = bonded.filter { d -> runCatching { d.bluetoothClass?.deviceClass }.getOrNull() == android.bluetooth.BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO }
+        val device = byAddress ?: byName ?: byClass.singleOrNull()
+        DiagLog.i(tag, "car for Android Auto over bluetooth: " + when {
+            byAddress != null -> "the car that called FT (${byAddress.address})"
+            byName != null -> "the paired device named like '$want'"
+            byClass.size == 1 -> "the only paired device that says it is a car"
+            byClass.size > 1 -> "none, ${byClass.size} paired devices say they are cars and FT does not know which one"
+            else -> "none, no paired device says it is a car and FT has not heard from one yet"
+        } + " (paired: ${bonded.joinToString { d -> "'${runCatching { d.name }.getOrNull() ?: "?"}' class ${runCatching { Integer.toHexString(d.bluetoothClass?.deviceClass ?: 0) }.getOrNull()}" }})")
         if (device == null) {
             DiagLog.w(tag, "no bonded bluetooth device to hand Android Auto")
             return
