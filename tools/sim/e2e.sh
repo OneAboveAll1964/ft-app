@@ -26,6 +26,7 @@ $ADB shell appops set $PKG SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1
 $ADB shell settings put secure enabled_accessibility_services $PKG/$PKG.FTTouchService >/dev/null 2>&1
 $ADB shell settings put secure accessibility_enabled 1 >/dev/null 2>&1
 $ADB shell appops set $PKG WRITE_SETTINGS allow >/dev/null 2>&1
+$ADB shell dumpsys deviceidle whitelist +$PKG >/dev/null 2>&1
 $ADB shell am kill-all >/dev/null 2>&1
 for p in com.android.settings com.android.chrome com.google.android.youtube com.google.android.apps.maps com.android.vending; do $ADB shell am force-stop $p >/dev/null 2>&1; done
 $ADB shell settings put system accelerometer_rotation 0 >/dev/null 2>&1
@@ -99,10 +100,10 @@ echo "== start services (auto-connect, Android Auto auto-start on) =="
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei pictureSize 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings --ez carSongInfo true --ei guidance 2 \
   --es carTiles music,videos,youtube,maps,browser,apps --es carBackground deep --ei carAccent -10492992 --ez carClock24 true >/dev/null 2>&1
 sleep 7
-check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt'"
+check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt' || $ADB shell 'netstat -ltn 2>/dev/null' | grep -q ':7240 '"
 check "no WiFi Direct nagging while the car is reachable on this network" "! grep -q 'discoverPeers failed' '$OUT/logcat.txt'"
 check "hotspot route leaves bluetooth alone" "! grep -q 'FT/CarBT' '$OUT/logcat.txt'"
-check "discovery beacon keeps calling on udp 7999 (4th tick seen)" "grep -q 'discovery beacon #4 to .*udp 7999 ([1-9]' '$OUT/logcat.txt'"
+check "discovery beacon keeps calling on udp 7999 (4th tick seen)" "grep -qE 'discovery beacon #([4-9]|[1-9][0-9]+) to .*udp 7999 \([1-9]' '$OUT/logcat.txt'"
 check "not marked connected before any head unit dialled in" "! grep -q 'head unit connected over' '$OUT/logcat.txt'"
 udpcall(){ python3 - <<'PY2'
 import socket
