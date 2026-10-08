@@ -261,7 +261,7 @@ private fun hotspotSteps(
     projecting: Boolean
 ) = listOf(
     StepItem("Hotspot on", radios.hotspot, action = "Turn on", onAction = { Fixes.open(context, Fixes.hotspot(context)) }),
-    StepItem("Car connected", connected, hint = if (running) "Waiting for the car to join the hotspot" else null),
+    StepItem("Car connected", connected, hint = if (running) "Join this hotspot from the car. Some cars only have Wi-Fi inside their CarLife settings" else null),
     StepItem("On the car screen", projecting, hint = if (connected) "Starting the picture" else null)
 )
 
