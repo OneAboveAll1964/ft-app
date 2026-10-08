@@ -55,7 +55,7 @@ private fun hotspotOn(c: Context): Boolean {
         13 -> return true
         10, 11, 14 -> return false
     }
-    return NetUtil.hotspotIpv4() != null
+    return NetUtil.hotspotIpv4(c) != null
 }
 
 @Composable
@@ -93,10 +93,22 @@ object Fixes {
 
     fun location(): Intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
 
-    fun hotspot(c: Context): Intent {
-        val tether = Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings")
-        return if (c.packageManager.resolveActivity(tether, 0) != null) tether else Intent(Settings.ACTION_WIRELESS_SETTINGS)
+    fun openHotspot(c: Context) {
+        val screens = listOf(
+            "com.android.settings.TetherSettings",
+            "com.android.settings.Settings\$TetherSettingsActivity",
+            "com.android.settings.Settings\$WifiTetherSettingsActivity",
+            "com.android.settings.wifi.tether.WifiTetherSettings"
+        )
+        for (s in screens) {
+            val ok = runCatching { c.startActivity(Intent().setClassName("com.android.settings", s).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+            if (ok) return
+        }
+        open(c, Intent(Settings.ACTION_WIRELESS_SETTINGS))
     }
+
+    fun background(c: Context): Intent =
+        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + c.packageName))
 
     fun open(c: Context, intent: Intent) {
         runCatching { c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

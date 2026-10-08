@@ -74,7 +74,9 @@ data class CarState(
     val waitingForShare: Boolean = false,
     val shareForSound: Boolean = false,
     val notice: String = "",
-    val usb: Boolean = false
+    val usb: Boolean = false,
+    val blocked: String = "",
+    val hotspotClients: List<String>? = null
 )
 
 class CarLifeService : Service() {
@@ -398,7 +400,11 @@ class CarLifeService : Service() {
     private var lastSongPositionAt = 0L
     private var savedVolume = -1
     private val app get() = application as FTApp
-    private val beacon by lazy { CarBeacon(scope, { app.prefs.carName }, { beaconTargets() }) }
+    private val beacon by lazy { CarBeacon(scope, { beaconTargets() }, { carGroupOwner() }, { helloForCar() }) }
+    private val hotspotClients by lazy {
+        HotspotClients(scope, { NetUtil.hotspotAddresses(this) }, { mode == 0 && wifiLink?.connected != true }) { list -> onHotspotClients(list) }
+    }
+    private val busyPorts: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     private val discovery by lazy { CarDiscovery(scope) { from -> sameWay(from) } }
     @Volatile private var p2pIface: String? = null
     @Volatile private var carP2pIp: String? = null
@@ -720,7 +726,9 @@ class CarLifeService : Service() {
                 CarLifeProtocol.CH_VR to p.vrPort,
                 CarLifeProtocol.CH_CTRL to p.touchPort
             ),
-            refuse = { socket -> wrongWay(socket) }
+            refuse = { socket -> wrongWay(socket) },
+            onBusy = { port -> portBusy(port) },
+            onBound = { port -> portBound(port) }
         )
         wifiLink = l
         _state.update { it.copy(listening = true) }
@@ -730,13 +738,49 @@ class CarLifeService : Service() {
 
     private fun startHotspot() {
         if (Root.granted) scope.launch {
-            RootPrep.ensureHotspot(this@CarLifeService, NetUtil.hotspotIpv4() != null)
+            RootPrep.ensureHotspot(this@CarLifeService, NetUtil.hotspotIpv4(this@CarLifeService) != null)
             delay(3000)
             RootPrep.poke()
         }
         step("Waiting for the car to join the hotspot")
         updateBeacon()
+        hotspotClients.start()
     }
+
+    private fun onHotspotClients(list: List<String>?) {
+        if (mode != 0) return
+        _state.update { it.copy(hotspotClients = list) }
+        if (wifiLink?.connected == true) return
+        when {
+            list == null -> DiagLog.i(tag, "Hotspot: FT does not see the phone's hotspot running (interfaces: ${NetUtil.apInterfaces(this).ifEmpty { setOf("none reported") }.joinToString()})")
+            list.isEmpty() -> {
+                DiagLog.i(tag, "Hotspot: nothing has joined the phone's hotspot yet")
+                step("Waiting for the car to join the hotspot")
+            }
+            else -> {
+                DiagLog.i(tag, "Hotspot: ${list.size} device${if (list.size == 1) "" else "s"} on the phone's hotspot: ${list.joinToString()}; FT is calling them directly too")
+                step("Something joined the hotspot (${list.joinToString()}), waiting for it to connect")
+            }
+        }
+    }
+
+    private fun portBusy(port: Int) {
+        busyPorts.add(port)
+        val baidu = installed("com.baidu.carlife")
+        DiagLog.w(tag, "port $port is held by another app${if (baidu) ", and Baidu CarLife is installed" else ""}; FT keeps trying, the car cannot reach FT until it is free")
+        _state.update {
+            it.copy(blocked = if (baidu) "Baidu CarLife is holding the car's connection. Force stop it so the car reaches FT."
+                else "Another app is holding CarLife's connection ports. Close other car apps so the car reaches FT.")
+        }
+    }
+
+    private fun portBound(port: Int) {
+        if (!busyPorts.remove(port) || busyPorts.isNotEmpty()) return
+        DiagLog.i(tag, "CarLife's ports are free again, FT is listening")
+        _state.update { it.copy(blocked = "") }
+    }
+
+    private fun installed(pkg: String): Boolean = runCatching { packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
 
     private fun startDirect() {
         wireless.reset()
@@ -793,7 +837,7 @@ class CarLifeService : Service() {
     private fun checkDirectBlockers() {
         if (mode != 1 || wifiLink?.connected == true) return
         val waited = android.os.SystemClock.elapsedRealtime() - directStartedAt
-        val hotspot = NetUtil.hotspotIpv4() != null
+        val hotspot = NetUtil.hotspotIpv4(this) != null
         val other = DiagSnapshot.otherWifiMhz(this)
         val called = _state.value.btCar != null || _state.value.carWifi != null
         if ((other ?: 0) != lastOtherWifi) {
@@ -857,13 +901,16 @@ class CarLifeService : Service() {
         usbLink?.stop()
         usbLink = null
         usbAccessory = null
+        hotspotClients.stop()
+        busyPorts.clear()
         pendingLaunch = null
         carDisplay.stop()
         _state.update {
             it.copy(
                 link = "", session = CarLifeSession.State.Idle, listening = false, aaOverlay = false,
                 mirroring = false, mirrorPackage = "", btCar = null, carWifi = null, wifiDirect = false,
-                beacon = false, step = "", refused = "", waitingForShare = false, usb = false
+                beacon = false, step = "", refused = "", waitingForShare = false, usb = false,
+                blocked = "", hotspotClients = null
             )
         }
     }
@@ -936,11 +983,25 @@ class CarLifeService : Service() {
         iface.startsWith("p2p") || iface == p2pIface || (carNetworkIface != null && iface == carNetworkIface)
 
     private fun beaconTargets(): Collection<java.net.InetAddress> {
-        if (mode != 1) return NetUtil.broadcastAddresses { !onWifiDirectSide(it) }
+        if (mode != 1) {
+            val out = LinkedHashSet<java.net.InetAddress>(NetUtil.broadcastAddresses { !onWifiDirectSide(it) })
+            _state.value.hotspotClients?.forEach { ip -> runCatching { java.net.InetAddress.getByName(ip) }.getOrNull()?.let(out::add) }
+            return out
+        }
         val out = LinkedHashSet<java.net.InetAddress>(NetUtil.broadcastAddresses { onWifiDirectSide(it) })
         carP2pIp?.let { ip -> runCatching { java.net.InetAddress.getByName(ip) }.getOrNull()?.let(out::add) }
         return out
     }
+
+    private fun carGroupOwner(): java.net.InetAddress? =
+        if (mode == 1) carP2pIp?.let { ip -> runCatching { java.net.InetAddress.getByName(ip) }.getOrNull() } else null
+
+    @SuppressLint("MissingPermission")
+    private fun helloForCar(): String = runCatching {
+        val bt = runCatching { (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter?.name }.getOrNull().orEmpty()
+        val info = org.json.JSONObject().put("bluetoothName", bt).put("wifiP2pName", finder?.myName.orEmpty())
+        org.json.JSONObject().put("carlifehost", "carlife").put("deviceInfo", info).toString()
+    }.getOrDefault("")
 
     private fun sameWay(from: java.net.InetAddress): Boolean {
         val iface = NetUtil.interfaceFor(from) ?: return false

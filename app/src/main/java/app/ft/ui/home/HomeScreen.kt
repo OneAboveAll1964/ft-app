@@ -105,6 +105,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val radios = rememberRadios(context, resumed)
     val touchOn = remember(resumed) { FTTouchService.enabled }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
+    val backgroundOn = remember(resumed) { (context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) != false }
     val aaStep = remember(resumed) { AaInstaller.step(context) }
     val aaInstalled = remember(resumed) { AaInstaller.installed(context) }
 
@@ -118,7 +119,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val steps = when {
         cable -> usbSteps(running, connected, projecting)
         direct -> directSteps(context, radios, car, running, connected, projecting)
-        else -> hotspotSteps(context, radios, running, connected, projecting)
+        else -> hotspotSteps(context, radios, running, connected, projecting, car.hotspotClients)
     }
     val way = when {
         car.usb -> "Using USB"
@@ -184,6 +185,14 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
+                AnimatedVisibility(visible = car.blocked.isNotBlank() && !connected) {
+                    val baidu = remember(car.blocked) { runCatching { context.packageManager.getPackageInfo("com.baidu.carlife", 0); true }.getOrDefault(false) }
+                    if (baidu) Notice(car.blocked, "Open") {
+                        runCatching {
+                            context.startActivity(android.content.Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:com.baidu.carlife")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                    } else Notice(car.blocked)
+                }
                 val refused = car.refused
                 AnimatedVisibility(visible = refused.isNotBlank() && !connected && !cable) {
                     Notice(refused, if (direct) "Use Hotspot" else "Use WiFi + BL") { pickMode(if (direct) 0 else 1) }
@@ -194,13 +203,14 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             }
         }
 
-        if (!touchOn || !overlayOn) {
+        if (!touchOn || !overlayOn || !backgroundOn) {
             item {
                 Section("Finish setup") {
-                    Text("Needed to use phone apps on the car", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Needed to use phone apps on the car and to start with the car", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
                     Check("Touch control", touchOn, onOpenAccessibility)
                     Check("Open apps from the car", overlayOn, onOpenOverlay)
+                    Check("Run in the background", backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
             }
         }
@@ -258,10 +268,19 @@ private fun hotspotSteps(
     radios: Radios,
     running: Boolean,
     connected: Boolean,
-    projecting: Boolean
+    projecting: Boolean,
+    clients: List<String>?
 ) = listOf(
-    StepItem("Hotspot on", radios.hotspot, action = "Turn on", onAction = { Fixes.open(context, Fixes.hotspot(context)) }),
-    StepItem("Car connected", connected, hint = if (running) "Join this hotspot from the car. Some cars only have Wi-Fi inside their CarLife settings" else null),
+    StepItem("Hotspot on", radios.hotspot || !clients.isNullOrEmpty(), action = "Turn on", onAction = { Fixes.openHotspot(context) }),
+    StepItem(
+        "Car connected",
+        connected,
+        hint = when {
+            !running -> null
+            !clients.isNullOrEmpty() -> "${clients.joinToString()} joined the hotspot but has not connected yet. Open CarLife on the car"
+            else -> "Join this hotspot from the car. Some cars only have Wi-Fi inside their CarLife settings"
+        }
+    ),
     StepItem("On the car screen", projecting, hint = if (connected) "Starting the picture" else null)
 )
 
@@ -335,14 +354,14 @@ private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> 
 }
 
 @Composable
-private fun Notice(text: String, action: String, onAction: () -> Unit) {
+private fun Notice(text: String, action: String? = null, onAction: () -> Unit = {}) {
     val scheme = MaterialTheme.colorScheme
     Surface(color = scheme.errorContainer, contentColor = scheme.onErrorContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 14.dp, end = if (action == null) 14.dp else 6.dp, top = if (action == null) 12.dp else 6.dp, bottom = if (action == null) 12.dp else 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onAction) { Text(action, color = scheme.onErrorContainer) }
+            if (action != null) TextButton(onClick = onAction) { Text(action, color = scheme.onErrorContainer) }
         }
     }
 }

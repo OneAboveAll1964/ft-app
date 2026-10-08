@@ -139,7 +139,12 @@ object DiagSnapshot {
                 "${n.name} [$addrs]"
             }
         })
-        add(line("hotspot address") { app.ft.carlife.NetUtil.hotspotIpv4() })
+        add(line("hotspot address") { app.ft.carlife.NetUtil.hotspotIpv4(c) })
+        add(line("hotspot interfaces Android reports") { app.ft.carlife.NetUtil.apInterfaces(c).joinToString().ifBlank { "none" } })
+        add(line("wifi direct") {
+            val m = c.getSystemService(Context.WIFI_P2P_SERVICE) as? android.net.wifi.p2p.WifiP2pManager
+            if (m == null) "unavailable" else "single-channel search ${if (Build.VERSION.SDK_INT >= 33) (if (runCatching { m.isChannelConstrainedDiscoverySupported }.getOrDefault(false)) "supported" else "not supported") else "needs Android 13"}"
+        })
         val adapter = (c.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
         add(line("bluetooth") { "on=${adapter?.isEnabled} state=${adapter?.state} scanning=${runCatching { adapter?.isDiscovering }.getOrNull()}" })
         val carAddress = runCatching { c.getSharedPreferences("ft", Context.MODE_PRIVATE).getString("carBtAddress", "") }.getOrNull().orEmpty()

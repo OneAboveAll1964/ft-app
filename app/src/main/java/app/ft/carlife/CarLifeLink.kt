@@ -30,7 +30,9 @@ interface CarLifeLink {
 
 class WifiChannelLink(
     private val ports: Map<Int, Int>,
-    private val refuse: (Socket) -> String? = { null }
+    private val refuse: (Socket) -> String? = { null },
+    private val onBusy: (Int) -> Unit = {},
+    private val onBound: (Int) -> Unit = {}
 ) : CarLifeLink {
     override val name = "WiFi"
     private val tag = "Link"
@@ -53,12 +55,13 @@ class WifiChannelLink(
             locks[channel] = Any()
             jobs += scope.launch(Dispatchers.IO) {
                 try {
-                    val ss = NetUtil.listen(port) { running.get() } ?: return@launch
+                    val ss = NetUtil.listen(port, { onBusy(port) }) { running.get() } ?: return@launch
                     synchronized(servers) { servers[channel] = ss }
                     if (!running.get()) {
                         runCatching { ss.close() }
                         return@launch
                     }
+                    onBound(port)
                     onEvent("WIFI ${CarLifeProtocol.channelName(channel)} listening on $port")
                     while (isActive && running.get()) {
                         val s = ss.accept()
@@ -244,7 +247,7 @@ class WifiChannelLink(
 }
 
 object NetUtil {
-    suspend fun listen(port: Int, alive: () -> Boolean): ServerSocket? {
+    suspend fun listen(port: Int, onBusy: (() -> Unit)? = null, alive: () -> Boolean): ServerSocket? {
         var tries = 0
         while (alive()) {
             val ss = ServerSocket()
@@ -254,13 +257,17 @@ object NetUtil {
                 return ss
             } catch (e: BindException) {
                 runCatching { ss.close() }
-                if (++tries >= 40) throw e
+                tries++
+                if (onBusy == null && tries >= 40) throw e
                 if (tries == 1) DiagLog.d("Link", "port $port is still in use, trying again")
-                delay(250)
+                if (onBusy != null && tries == BUSY_AFTER_TRIES) onBusy()
+                delay(if (tries < BUSY_AFTER_TRIES) 250 else 2000)
             }
         }
         return null
     }
+
+    private const val BUSY_AFTER_TRIES = 8
 
     fun localIpv4(): String? = try {
         NetworkInterface.getNetworkInterfaces().toList()
@@ -289,15 +296,51 @@ object NetUtil {
         false
     }
 
-    fun hotspotIpv4(): String? = try {
-        NetworkInterface.getNetworkInterfaces().toList()
-            .filter { n -> n.isUp && listOf("swlan", "ap", "softap").any { n.name.startsWith(it) } }
-            .flatMap { it.inetAddresses.toList() }
-            .firstOrNull { it is Inet4Address }
-            ?.hostAddress
-    } catch (_: Throwable) {
-        null
+    fun apInterfaces(context: android.content.Context?): Set<String> {
+        val out = LinkedHashSet<String>()
+        if (context == null) return out
+        fun sticky(action: String): android.content.Intent? = runCatching {
+            val f = android.content.IntentFilter(action)
+            if (android.os.Build.VERSION.SDK_INT >= 33) context.registerReceiver(null, f, android.content.Context.RECEIVER_NOT_EXPORTED) else context.registerReceiver(null, f)
+        }.getOrNull()
+        sticky("android.net.wifi.WIFI_AP_STATE_CHANGED")?.let { i ->
+            if (i.getIntExtra("wifi_state", -1) == 13) i.getStringExtra("wifi_ap_interface_name")?.takeIf { it.isNotBlank() }?.let { out += it }
+        }
+        sticky("android.net.conn.TETHER_STATE_CHANGED")?.let { i ->
+            (i.getStringArrayListExtra("tetherArray") ?: i.getStringArrayListExtra("activeArray"))?.filter { it.isNotBlank() }?.let { out += it }
+        }
+        return out
     }
+
+    private fun stationInterfaces(context: android.content.Context?): Set<String> {
+        val cm = context?.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return emptySet()
+        return runCatching {
+            @Suppress("DEPRECATION")
+            cm.allNetworks.filter { n -> cm.getNetworkCapabilities(n)?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true }
+                .mapNotNull { n -> cm.getLinkProperties(n)?.interfaceName }.toSet()
+        }.getOrDefault(emptySet())
+    }
+
+    fun hotspotInterfaces(context: android.content.Context? = null): List<NetworkInterface> = try {
+        val all = NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
+        val named = apInterfaces(context)
+        val byName = all.filter { it.name in named }
+        if (byName.isNotEmpty()) byName
+        else {
+            val station = stationInterfaces(context)
+            all.filter { n -> n.name !in station && HOTSPOT_NAMES.any { n.name.startsWith(it) } && n.inetAddresses.toList().any { it is Inet4Address } }
+        }
+    } catch (_: Throwable) {
+        emptyList()
+    }
+
+    fun hotspotIpv4(context: android.content.Context? = null): String? =
+        hotspotInterfaces(context).flatMap { it.inetAddresses.toList() }.firstOrNull { it is Inet4Address }?.hostAddress
+
+    fun hotspotAddresses(context: android.content.Context?): List<Pair<Inet4Address, Int>> =
+        hotspotInterfaces(context).flatMap { n -> n.interfaceAddresses.mapNotNull { a -> (a.address as? Inet4Address)?.let { it to a.networkPrefixLength.toInt() } } }
+
+    private val HOTSPOT_NAMES = listOf("swlan", "ap", "softap", "wlan1", "wlan2", "wifi_ap")
 
     fun broadcastAddresses(include: (String) -> Boolean): List<InetAddress> = try {
         NetworkInterface.getNetworkInterfaces().toList()
