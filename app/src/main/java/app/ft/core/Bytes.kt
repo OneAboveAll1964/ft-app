@@ -35,11 +35,14 @@ object Bytes {
         for (i in 0 until 8) b[off + i] = (v ushr (56 - 8 * i)).toByte()
     }
 
+    private val HEX = "0123456789ABCDEF".toCharArray()
+
     fun hex(b: ByteArray, max: Int = 32): String {
         val n = minOf(b.size, max)
         val sb = StringBuilder(n * 3 + 12)
         for (i in 0 until n) {
-            sb.append(String.format("%02X", b[i].toInt() and 0xff))
+            val v = b[i].toInt() and 0xff
+            sb.append(HEX[v ushr 4]).append(HEX[v and 0x0f])
             if (i < n - 1) sb.append(' ')
         }
         if (b.size > max) sb.append(" …(").append(b.size).append(')')
