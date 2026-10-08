@@ -39,6 +39,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     @Volatile private var armed = false
     private var watchdog: Job? = null
     private var failures = 0
+    private var lastNoMatch = ""
     private val _peers = MutableStateFlow<List<Peer>>(emptyList())
     private val _state = MutableStateFlow("off")
     private val _link = MutableStateFlow<Link?>(null)
@@ -202,7 +203,17 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val want = prefs.carP2pName.trim()
         val target = ps.firstOrNull { p ->
             if (want.isNotEmpty()) p.name.equals(want, true) || p.name.contains(want, true) else p.name.contains("carlife", true)
-        } ?: return
+        }
+        if (target == null) {
+            val nearby = ps.joinToString { "'${it.name}'" }.ifBlank { "nothing" }
+            val sig = "$want|$nearby"
+            if (sig != lastNoMatch) {
+                lastNoMatch = sig
+                DiagLog.i(tag, if (want.isEmpty()) "WiFi Direct: FT does not know the car's name yet (the car sends it over bluetooth) and nothing nearby is called CarLife; nearby: $nearby"
+                    else "WiFi Direct: the car '$want' is not among the nearby devices yet; nearby: $nearby")
+            }
+            return
+        }
         val m = manager ?: return
         val ch = channel ?: return
         when (target.status) {

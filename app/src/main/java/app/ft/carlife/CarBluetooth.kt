@@ -23,6 +23,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private val adapter: BluetoothAdapter? = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     @Volatile private var socket: BluetoothSocket? = null
     @Volatile private var servers: List<BluetoothServerSocket> = emptyList()
+    @Volatile private var lastListenFailure = ""
     private var serverJob: Job? = null
     @Volatile private var listening = false
     var onFrame: ((ByteArray) -> Unit)? = null
@@ -78,9 +79,15 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             }
             moaned = false
             val offers = listOf(CARLIFE_UUID to "CarLife", SPP_UUID to "SPP")
+            val failures = ArrayList<String>()
             val offered = offers.mapNotNull { (uuid, label) ->
-                runCatching { a.listenUsingRfcommWithServiceRecord(SERVICE_NAME, uuid) }.getOrNull()?.let { it to label }
+                runCatching { a.listenUsingRfcommWithServiceRecord(SERVICE_NAME, uuid) }
+                    .onFailure { failures += "$label ($uuid): ${it.javaClass.simpleName} ${it.message ?: ""}" }
+                    .getOrNull()?.let { it to label }
             }
+            val failed = failures.joinToString("; ")
+            if (failed.isNotEmpty() && failed != lastListenFailure) DiagLog.w(tag, "could not offer bluetooth service: $failed")
+            lastListenFailure = failed
             if (offered.isEmpty()) {
                 delay(3000)
                 continue
@@ -91,7 +98,9 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             val winner = CompletableDeferred<Pair<BluetoothSocket, String>?>()
             val waits = offered.map { (ss, label) ->
                 scope.launch(Dispatchers.IO) {
-                    val s = runCatching { ss.accept() }.getOrNull() ?: return@launch
+                    val s = runCatching { ss.accept() }
+                        .onFailure { if (listening && !winner.isCompleted) DiagLog.d(tag, "bluetooth $label stopped waiting: ${it.javaClass.simpleName} ${it.message ?: ""}") }
+                        .getOrNull() ?: return@launch
                     if (!winner.complete(s to label)) runCatching { s.close() }
                 }
             }
@@ -110,14 +119,19 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     private fun talk(s: BluetoothSocket, label: String) {
         val who = runCatching { s.remoteDevice?.name }.getOrNull() ?: "The car"
         DiagLog.i(tag, "'$who' called this phone over bluetooth on $label")
+        runCatching {
+            val d = s.remoteDevice
+            DiagLog.i(tag, "car bluetooth: address ${d?.address} class 0x${Integer.toHexString(d?.bluetoothClass?.deviceClass ?: 0)} bond ${d?.bondState} type ${d?.type} connection ${s.connectionType} max packet ${s.maxReceivePacketSize}")
+        }
         socket = s
         runCatching { s.remoteDevice?.address }.getOrNull()?.let { prefs.carBtAddress = it }
         onCar?.invoke(who)
         val input = runCatching { s.inputStream }.getOrNull()
         val buf = ByteArray(512)
         var seen = 0
+        var why = "the link ended"
         while (listening) {
-            val n = runCatching { input?.read(buf) ?: -1 }.getOrElse { -1 }
+            val n = runCatching { input?.read(buf) ?: -1 }.getOrElse { why = "${it.javaClass.simpleName} ${it.message ?: ""}"; -1 }
             if (n < 0) break
             if (n == 0) continue
             seen++
@@ -128,7 +142,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         runCatching { s.close() }
         if (socket === s) socket = null
         onCar?.invoke(null)
-        DiagLog.i(tag, "bluetooth link to '$who' closed")
+        DiagLog.i(tag, "bluetooth link to '$who' closed ($why, $seen messages)")
     }
 
     companion object {
