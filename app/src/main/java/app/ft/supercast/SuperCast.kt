@@ -133,14 +133,24 @@ object SuperCast {
     fun start(context: android.content.Context): Boolean {
         if (_ready.value) return true
         val fresh = freshToken()
-        if (Root.ensure() && Helper.startWithRoot(context, fresh)) {
-            FTApp.instance.prefs.supercastWay = WAY_ROOT
-            return true
+        if (Root.ensure()) {
+            if (Helper.startWithRoot(context, fresh) { _ready.value }) {
+                FTApp.instance.prefs.supercastWay = WAY_ROOT
+                DiagLog.i(TAG, "apps on the car are ready, set up with root")
+                return true
+            }
+            DiagLog.w(TAG, "root is there but the helper did not come back to FT")
         }
         return when (Helper.startWithAdb(context, fresh)) {
             Helper.Adb.STARTED -> {
-                FTApp.instance.prefs.supercastWay = WAY_BRIDGE
-                true
+                val up = waitForHandshake()
+                if (up) {
+                    FTApp.instance.prefs.supercastWay = WAY_BRIDGE
+                    DiagLog.i(TAG, "apps on the car are ready, set up through the phone's debug bridge")
+                } else {
+                    DiagLog.w(TAG, "the helper started over the debug bridge but did not come back to FT")
+                }
+                up
             }
             Helper.Adb.NOT_ALLOWED -> {
                 DiagLog.w(TAG, "the phone has not allowed FT on its debug bridge yet")
@@ -152,6 +162,14 @@ object SuperCast {
             }
             Helper.Adb.FAILED -> false
         }
+    }
+
+    private fun waitForHandshake(): Boolean {
+        repeat(24) {
+            if (_ready.value) return true
+            Thread.sleep(250)
+        }
+        return _ready.value
     }
 
     fun startOverBridge(context: android.content.Context): Boolean {
