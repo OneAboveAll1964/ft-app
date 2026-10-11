@@ -107,6 +107,11 @@
                 android:resource="@xml/usb_car" />
         </activity>
 
+        <provider
+            android:name=".supercast.SuperCastProvider"
+            android:authorities="app.ft.supercast"
+            android:exported="true" />
+
         <service
             android:name=".carlife.CarLifeService"
             android:exported="false"

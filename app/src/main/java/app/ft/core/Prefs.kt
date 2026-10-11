@@ -116,4 +116,6 @@ class Prefs(context: Context) {
     var weatherCelsius: Float get() = flt("weatherCelsius", 0f); set(v) = set("weatherCelsius", v)
     var weatherCode: Int get() = int("weatherCode", -1); set(v) = set("weatherCode", v)
     var weatherAt: Long get() = lng("weatherAt", 0L); set(v) = set("weatherAt", v)
+
+    var supercastToken: String get() = str("supercastToken", ""); set(v) = set("supercastToken", v)
 }

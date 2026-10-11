@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "FT"
 include(":app")
+include(":server")

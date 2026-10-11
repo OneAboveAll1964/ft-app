@@ -32,6 +32,7 @@ class FTApp : Application() {
             runCatching { DiagLog.crash(thread, error) }
             previous?.uncaughtException(thread, error)
         }
+        app.ft.supercast.SuperCast.freshToken()
         app.ft.ui.car.CarStyles.reload()
         app.ft.ui.car.CarStyles.watchDayNight(scope)
         DiagLog.i("App", "FT ${runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""} ready")

@@ -42,7 +42,10 @@ android {
         }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        aidl = true
+    }
 
     testOptions {
         unitTests.isReturnDefaultValues = true
