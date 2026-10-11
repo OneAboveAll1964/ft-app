@@ -1,5 +1,6 @@
 package app.ft.ui.components
 
+import app.ft.ui.theme.Localized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -76,29 +77,31 @@ fun RootChip() {
 private fun RootSheet(onDismiss: () -> Unit) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 24.dp).navigationBarsPadding().padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(RootGreen))
-                Text(stringResource(R.string.root_title), style = MaterialTheme.typography.headlineSmall)
-            }
-            Text(
-                stringResource(R.string.root_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            listOf(
-                stringResource(R.string.root_does_radios),
-                stringResource(R.string.root_does_permissions),
-                stringResource(R.string.root_does_sound),
-                stringResource(R.string.root_does_touch),
-                stringResource(R.string.root_does_awake)
-            ).forEach { line ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("•", color = RootGreen, fontWeight = FontWeight.Bold)
-                    Text(line, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Localized {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp).navigationBarsPadding().padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(RootGreen))
+                    Text(stringResource(R.string.root_title), style = MaterialTheme.typography.headlineSmall)
+                }
+                Text(
+                    stringResource(R.string.root_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                listOf(
+                    stringResource(R.string.root_does_radios),
+                    stringResource(R.string.root_does_permissions),
+                    stringResource(R.string.root_does_sound),
+                    stringResource(R.string.root_does_touch),
+                    stringResource(R.string.root_does_awake)
+                ).forEach { line ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("•", color = RootGreen, fontWeight = FontWeight.Bold)
+                        Text(line, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }

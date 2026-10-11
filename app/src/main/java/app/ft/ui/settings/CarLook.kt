@@ -1,5 +1,6 @@
 package app.ft.ui.settings
 
+import app.ft.ui.theme.Localized
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -305,26 +306,28 @@ private fun TilePicker(current: String?, canRemove: Boolean, onDismiss: () -> Un
     val apps = installedApps()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (current == null) stringResource(R.string.look_add_button) else stringResource(R.string.look_change_button, tileLabel(context, current))) },
+        title = { Localized { Text(if (current == null) stringResource(R.string.look_add_button) else stringResource(R.string.look_change_button, tileLabel(context, current))) } },
         text = {
-            LazyColumn(Modifier.heightIn(max = 460.dp)) {
-                items(CarStyle.BUILT_IN_TILES) { key ->
-                    ListItem(
-                        headlineContent = { Text(tileLabel(context, key)) },
-                        leadingContent = { Icon(tileIcon(key), contentDescription = null) },
-                        trailingContent = { if (key == current) Icon(Icons.Filled.Check, contentDescription = null) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        modifier = Modifier.clickable { onPick(key) }
-                    )
-                }
-                item { HorizontalDivider(Modifier.padding(vertical = 6.dp)) }
-                items(apps, key = { it.pkg }) { a ->
-                    AppRow(a, chosen = current == "app:${a.pkg}") { onPick("app:${a.pkg}") }
+            Localized {
+                LazyColumn(Modifier.heightIn(max = 460.dp)) {
+                    items(CarStyle.BUILT_IN_TILES) { key ->
+                        ListItem(
+                            headlineContent = { Text(tileLabel(context, key)) },
+                            leadingContent = { Icon(tileIcon(key), contentDescription = null) },
+                            trailingContent = { if (key == current) Icon(Icons.Filled.Check, contentDescription = null) },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            modifier = Modifier.clickable { onPick(key) }
+                        )
+                    }
+                    item { HorizontalDivider(Modifier.padding(vertical = 6.dp)) }
+                    items(apps, key = { it.pkg }) { a ->
+                        AppRow(a, chosen = current == "app:${a.pkg}") { onPick("app:${a.pkg}") }
+                    }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
-        dismissButton = { if (canRemove) TextButton(onClick = { onPick(null) }) { Text(stringResource(R.string.action_remove)) } }
+        confirmButton = { Localized { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } } },
+        dismissButton = { Localized { if (canRemove) TextButton(onClick = { onPick(null) }) { Text(stringResource(R.string.action_remove)) } } }
     )
 }
 
@@ -333,13 +336,15 @@ private fun AppPicker(title: String, onDismiss: () -> Unit, onPick: (String) -> 
     val apps = installedApps()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Localized { Text(title) } },
         text = {
-            LazyColumn(Modifier.heightIn(max = 460.dp)) {
-                items(apps, key = { it.pkg }) { a -> AppRow(a, chosen = false) { onPick(a.pkg) } }
+            Localized {
+                LazyColumn(Modifier.heightIn(max = 460.dp)) {
+                    items(apps, key = { it.pkg }) { a -> AppRow(a, chosen = false) { onPick(a.pkg) } }
+                }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } }
+        confirmButton = { Localized { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } } }
     )
 }
 

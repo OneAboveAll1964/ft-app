@@ -1,5 +1,6 @@
 package app.ft.ui.components
 
+import app.ft.ui.theme.Localized
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.LinearOutSlowInEasing
@@ -206,39 +207,41 @@ fun ServerHelpSheet(serverOn: Boolean?, onDismiss: () -> Unit) {
         val tall = LocalContext.current.resources.displayMetrics.heightPixels
         val shotMax = minOf(200.dp, with(LocalDensity.current) { (tall * 0.3f).toDp() })
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-            Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.aa_help_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    if (serverOn == true) StatusChip(stringResource(R.string.state_on), active = true)
-                }
-                Spacer(Modifier.height(18.dp))
-                TallestPage(HELP_PAGES, { HelpPage(it, icon, shotMax) }) { height ->
-                    HorizontalPager(
-                        state = pager,
-                        modifier = Modifier.fillMaxWidth().height(height),
-                        beyondViewportPageCount = HELP_PAGES - 1,
-                        verticalAlignment = Alignment.Top,
-                        overscrollEffect = null
-                    ) { HelpPage(it, icon, shotMax) }
-                }
-                Spacer(Modifier.height(14.dp))
-                val page = pager.currentPage
-                val done = serverOn == true || page == HELP_PAGES - 1
-                Box(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp)) {
-                    if (page > 0) {
-                        TextButton(
-                            onClick = { scope.launch { pager.animateScrollToPage((pager.targetPage - 1).coerceAtLeast(0)) } },
-                            modifier = Modifier.align(Alignment.CenterStart)
-                        ) { Text(stringResource(R.string.action_back)) }
+            Localized {
+                Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.aa_help_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        if (serverOn == true) StatusChip(stringResource(R.string.state_on), active = true)
                     }
-                    Dots(HELP_PAGES, page, Modifier.align(Alignment.Center))
-                    Button(
-                        onClick = {
-                            if (done) scope.launch { sheet.hide() }.invokeOnCompletion { if (!sheet.isVisible) onDismiss() }
-                            else scope.launch { pager.animateScrollToPage((pager.targetPage + 1).coerceAtMost(HELP_PAGES - 1)) }
-                        },
-                        modifier = Modifier.align(Alignment.CenterEnd)
-                    ) { Text(stringResource(if (done) R.string.state_done else R.string.action_next)) }
+                    Spacer(Modifier.height(18.dp))
+                    TallestPage(HELP_PAGES, { HelpPage(it, icon, shotMax) }) { height ->
+                        HorizontalPager(
+                            state = pager,
+                            modifier = Modifier.fillMaxWidth().height(height),
+                            beyondViewportPageCount = HELP_PAGES - 1,
+                            verticalAlignment = Alignment.Top,
+                            overscrollEffect = null
+                        ) { HelpPage(it, icon, shotMax) }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    val page = pager.currentPage
+                    val done = serverOn == true || page == HELP_PAGES - 1
+                    Box(Modifier.fillMaxWidth().padding(start = 8.dp, end = 20.dp)) {
+                        if (page > 0) {
+                            TextButton(
+                                onClick = { scope.launch { pager.animateScrollToPage((pager.targetPage - 1).coerceAtLeast(0)) } },
+                                modifier = Modifier.align(Alignment.CenterStart)
+                            ) { Text(stringResource(R.string.action_back)) }
+                        }
+                        Dots(HELP_PAGES, page, Modifier.align(Alignment.Center))
+                        Button(
+                            onClick = {
+                                if (done) scope.launch { sheet.hide() }.invokeOnCompletion { if (!sheet.isVisible) onDismiss() }
+                                else scope.launch { pager.animateScrollToPage((pager.targetPage + 1).coerceAtMost(HELP_PAGES - 1)) }
+                            },
+                            modifier = Modifier.align(Alignment.CenterEnd)
+                        ) { Text(stringResource(if (done) R.string.state_done else R.string.action_next)) }
+                    }
                 }
             }
         }
