@@ -73,6 +73,16 @@
             android:theme="@style/Theme.FT.Quiet" />
 
         <activity
+            android:name=".WakeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.FT.Quiet" />
+
+        <activity
             android:name=".UsbCarActivity"
             android:exported="true"
             android:excludeFromRecents="true"

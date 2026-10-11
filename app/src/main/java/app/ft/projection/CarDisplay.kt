@@ -40,6 +40,7 @@ class CarDisplay(private val context: Context) {
             main.postDelayed(this, frameIntervalMs)
         }
     }
+    private val watch = DrawWatch(context)
     private val _active = MutableStateFlow(false)
     val active: StateFlow<Boolean> = _active
     var width = 0; private set
@@ -88,6 +89,7 @@ class CarDisplay(private val context: Context) {
                 p.show()
                 presentation = p
                 _active.value = true
+                watch.start()
                 if (gate == null) {
                     main.postDelayed(ticker, frameIntervalMs)
                     DiagLog.i(tag, "presentation shown, redraw every ${frameIntervalMs}ms")
@@ -214,6 +216,7 @@ class CarDisplay(private val context: Context) {
     }
 
     fun stop() {
+        watch.stop()
         main.removeCallbacks(ticker)
         val p = presentation
         presentation = null
