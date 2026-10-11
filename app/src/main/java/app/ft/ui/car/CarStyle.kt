@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -203,6 +204,18 @@ fun carScheme(base: ColorScheme, accent: Color): ColorScheme = base.copy(
 )
 
 val LocalCarCard = staticCompositionLocalOf { Color.Black.copy(alpha = 0.3f) }
+
+val LocalPillRow = androidx.compose.runtime.compositionLocalOf { androidx.compose.foundation.layout.PaddingValues(0.dp) }
+
+fun pillRowInset(corner: Int, space: androidx.compose.ui.unit.Dp): androidx.compose.foundation.layout.PaddingValues {
+    val top = corner == 0 || corner == 1
+    if (!top) return androidx.compose.foundation.layout.PaddingValues(0.dp)
+    val left = corner == 0
+    return androidx.compose.foundation.layout.PaddingValues.Absolute(
+        left = if (left) space else 0.dp,
+        right = if (left) 0.dp else space
+    )
+}
 
 @Composable
 fun CarBackground(style: CarStyle, modifier: Modifier = Modifier) {

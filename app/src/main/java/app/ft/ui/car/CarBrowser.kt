@@ -193,9 +193,8 @@ fun CarBrowser(page: WebPage, onExit: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         if (showAddressBar) {
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
-                val pillLeft = CarStyles.current.value.corner.let { it == 0 || it == 2 }
                 Row(
-                    Modifier.fillMaxWidth().height(72.dp).absolutePadding(left = if (pillLeft) 104.dp else 10.dp, right = if (pillLeft) 10.dp else 104.dp),
+                    Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 10.dp).padding(LocalPillRow.current),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

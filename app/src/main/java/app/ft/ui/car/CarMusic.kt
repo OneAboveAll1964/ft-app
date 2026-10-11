@@ -98,7 +98,7 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
 
     Column(Modifier.fillMaxSize().padding(pad)) {
         Row(
-            Modifier.fillMaxWidth().height(CAR_ROW),
+            Modifier.fillMaxWidth().height(CAR_ROW).padding(LocalPillRow.current),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {

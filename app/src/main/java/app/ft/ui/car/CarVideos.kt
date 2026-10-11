@@ -88,7 +88,7 @@ fun CarVideos(pad: PaddingValues) {
     }
 
     Column(Modifier.fillMaxSize().padding(pad)) {
-        Row(Modifier.fillMaxWidth().height(CAR_ROW), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(CAR_ROW).padding(LocalPillRow.current), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.tile_videos), style = MaterialTheme.typography.headlineMedium)
         }
         Spacer(Modifier.height(12.dp))

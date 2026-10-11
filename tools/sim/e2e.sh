@@ -662,6 +662,20 @@ check "the cable takes over from the hotspot and the session runs over USB" "gre
 check "the picture flows over the cable after a tap" "python3 -c \"import json;d=json.load(open('$OUT/usb/result.json'));assert d['checks']['video_flowing'] and d['checks']['video_after_tap1']\" 2>/dev/null"
 check "when the cable link ends FT goes back to the hotspot" "awk '/USB: the cable link ended/{e=1} e && /Waiting for the car to join the hotspot/{f=1} END{exit !f}' '$OUT/usb_logcat.txt'"
 
+echo "== apps on the car =="
+$ADB shell "su -c 'pkill -f app.ft.server.Main'" >/dev/null 2>&1
+SCAPK=$($ADB shell pm path $PKG | tr -d '\r' | cut -d: -f2)
+$ADB shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
+sleep 1
+$ADB shell "CLASSPATH=$SCAPK app_process / app.ft.server.Main selftest=1 shot=/data/local/tmp/sc_on.png hold=1500" > "$OUT/supercast_on.txt" 2>&1
+$ADB shell input keyevent KEYCODE_SLEEP >/dev/null 2>&1
+sleep 2
+$ADB shell "CLASSPATH=$SCAPK app_process / app.ft.server.Main selftest=1 wake=1 shot=/data/local/tmp/sc_off.png hold=1500" > "$OUT/supercast_off.txt" 2>&1
+$ADB shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
+$ADB shell "su -c 'pkill -f app.ft.server.Main'" >/dev/null 2>&1
+check "a real phone app runs on a hidden screen, draws, and takes touch" "grep -q 'launched=true' '$OUT/supercast_on.txt' && grep -q 'input=true' '$OUT/supercast_on.txt' && grep -q 'drawn=true' '$OUT/supercast_on.txt'"
+check "those apps keep drawing after the phone screen goes off" "grep -q 'drawn=true' '$OUT/supercast_off.txt' && grep -q 'holding the phone awake' '$OUT/supercast_off.txt'"
+
 echo "== crashes =="
 check "no FT crash in logcat" "! grep -A3 'FATAL EXCEPTION' '$OUT/logcat.txt' | grep -q 'app.ft'"
 grep -E 'FT/' "$OUT/logcat.txt" | sed -E 's/^.*FT\//FT\//' > "$OUT/ft_log.txt"

@@ -127,7 +127,7 @@ private fun Pane(pane: CarPane, modifier: Modifier, onClose: () -> Unit) {
             }
         )
         Row(
-            Modifier.align(Alignment.TopEnd).padding(6.dp),
+            Modifier.align(Alignment.TopEnd).padding(6.dp).padding(LocalPillRow.current),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Pill(stringResource(R.string.key_back)) { SuperCast.key(pane.name, 4) }
