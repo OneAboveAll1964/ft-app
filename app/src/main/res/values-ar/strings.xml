@@ -316,4 +316,12 @@
     <string name="look_night_background">خلفية الليل</string>
     <string name="look_night_colour">لون الليل</string>
     <string name="look_same_as_day">كما في النهار</string>
+    <string name="wheel_title">أزرار المقود</string>
+    <string name="wheel_about">اضغط الزر نفسه مرة ثانية بسرعة لتنفيذ أمر آخر</string>
+    <string name="wheel_next_again">زر التالي، بضغطتين</string>
+    <string name="wheel_prev_again">زر السابق، بضغطتين</string>
+    <string name="wheel_action_none">لا شيء</string>
+    <string name="wheel_action_home">الرئيسية في FT</string>
+    <string name="wheel_action_play">تشغيل أو إيقاف مؤقت</string>
+    <string name="wheel_action_voice">المساعد الصوتي</string>
 </resources>

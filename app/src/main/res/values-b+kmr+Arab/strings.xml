@@ -316,4 +316,12 @@
     <string name="look_night_background">باکگراوندا شەڤێ</string>
     <string name="look_night_colour">رەنگێ شەڤێ</string>
     <string name="look_same_as_day">وەکی رۆژێ</string>
+    <string name="wheel_title">دوگمێن سوکانێ</string>
+    <string name="wheel_about">هەمان دوگمەی ب لەز جارەکا دی بتەقینە بۆ کارەکێ دی</string>
+    <string name="wheel_next_again">دوگما پێشڤە، دوو جاران</string>
+    <string name="wheel_prev_again">دوگما پاشڤە، دوو جاران</string>
+    <string name="wheel_action_none">چ تشت</string>
+    <string name="wheel_action_home">سەرەکیا FT</string>
+    <string name="wheel_action_play">لێدان یان راوەستاندن</string>
+    <string name="wheel_action_voice">هاریکارێ دەنگی</string>
 </resources>

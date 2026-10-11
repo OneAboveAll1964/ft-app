@@ -223,6 +223,10 @@ class CarLifeService : Service() {
     @Volatile private var note: () -> String = { Lang.str(R.string.app_name) }
     @Volatile private var carNetworkIface: String? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wheelPending: Job? = null
+    private var wheelKey = -1
+
+    private val WHEEL_AGAIN_MS = 450L
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> CarAudioBus.write(CarAudioBus.LANE_PHONE, pcm) }
@@ -1495,7 +1499,6 @@ class CarLifeService : Service() {
     }
 
     private fun onHardKey(key: Int) {
-        val st = _state.value
         val swap = app.prefs.swapTrackKeys
         val mapped = when (key) {
             15 -> if (swap) 87 else 88
@@ -1505,6 +1508,53 @@ class CarLifeService : Service() {
             79 -> 85
             else -> key
         }
+        val extra = when (mapped) {
+            87 -> app.prefs.wheelLongNext
+            88 -> app.prefs.wheelLongPrev
+            else -> WheelAction.NONE
+        }
+        if (extra == WheelAction.NONE) {
+            handleHardKey(key, mapped)
+            return
+        }
+        val pending = wheelPending
+        if (pending != null && mapped == wheelKey) {
+            pending.cancel()
+            wheelPending = null
+            wheelKey = -1
+            DiagLog.i(tag, "steering wheel ${keyName(mapped)} pressed again, doing the second action instead")
+            runWheelAction(extra)
+            return
+        }
+        wheelPending?.cancel()
+        wheelKey = mapped
+        wheelPending = scope.launch {
+            delay(WHEEL_AGAIN_MS)
+            wheelPending = null
+            wheelKey = -1
+            handleHardKey(key, mapped)
+        }
+    }
+
+    private fun runWheelAction(action: Int) {
+        when (action) {
+            WheelAction.ANDROID_AUTO -> startAndroidAuto()
+            WheelAction.CAR_HOME -> _screenKeys.tryEmit(3)
+            WheelAction.MAPS -> launch(app.prefs.mapsPackage)
+            WheelAction.PHONE_SCREEN -> phoneScreen()
+            WheelAction.PLAY_PAUSE -> mediaKey(85)
+            WheelAction.VOICE -> {
+                val aa = AaHeadUnitService.current
+                if (_state.value.aaOverlay && aa != null) aa.sendKey(84)
+                else runCatching {
+                    startActivity(Intent(Intent.ACTION_VOICE_COMMAND).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }.onFailure { DiagLog.w(tag, "no voice assistant to open: ${it.message}") }
+            }
+        }
+    }
+
+    private fun handleHardKey(key: Int, mapped: Int) {
+        val st = _state.value
         when {
             st.aaOverlay -> {
                 val aa = AaHeadUnitService.current

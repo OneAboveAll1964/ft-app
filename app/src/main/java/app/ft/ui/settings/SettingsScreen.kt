@@ -55,6 +55,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import app.ft.carlife.WheelAction
 import app.ft.ui.components.AaMissing
 import app.ft.ui.components.AaStart
 import app.ft.ui.components.rememberRootGranted
@@ -198,6 +201,14 @@ private fun PageContent(page: SettingsPage) {
             TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
             TextSetting(stringResource(R.string.car_pin_label), p.carWpsPin) { p.carWpsPin = it }
             BoolSetting(stringResource(R.string.car_swap_keys), p.swapTrackKeys) { p.swapTrackKeys = it }
+            Text(stringResource(R.string.wheel_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                stringResource(R.string.wheel_about),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            WheelSetting(stringResource(R.string.wheel_next_again), p.wheelLongNext) { p.wheelLongNext = it }
+            WheelSetting(stringResource(R.string.wheel_prev_again), p.wheelLongPrev) { p.wheelLongPrev = it }
         }
         SettingsPage.ANDROID_AUTO -> {
             BoolSetting(stringResource(R.string.aa_match_car), p.aaMatchCar) { p.aaMatchCar = it }
@@ -425,6 +436,21 @@ private fun PictureSettings() {
 }
 
 private const val DEFAULT_FLOOR = 22
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WheelSetting(label: String, initial: Int, onChange: (Int) -> Unit) {
+    var chosen by remember { mutableIntStateOf(initial) }
+    Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 6.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        WheelAction.ALL.forEach { action ->
+            ValueChip(stringResource(WheelAction.label(action)), chosen == action, Modifier) {
+                chosen = action
+                onChange(action)
+            }
+        }
+    }
+}
 
 @Composable
 private fun ValueChip(label: String, chosen: Boolean, modifier: Modifier, onPick: () -> Unit) {

@@ -317,4 +317,12 @@
     <string name="look_night_background">Night background</string>
     <string name="look_night_colour">Night colour</string>
     <string name="look_same_as_day">Same as day</string>
+    <string name="wheel_title">Steering wheel buttons</string>
+    <string name="wheel_about">Press the same button again quickly to do something else</string>
+    <string name="wheel_next_again">Next button, pressed twice</string>
+    <string name="wheel_prev_again">Previous button, pressed twice</string>
+    <string name="wheel_action_none">Nothing</string>
+    <string name="wheel_action_home">FT home</string>
+    <string name="wheel_action_play">Play or pause</string>
+    <string name="wheel_action_voice">Voice assistant</string>
 </resources>

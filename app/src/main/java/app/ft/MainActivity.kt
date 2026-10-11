@@ -212,6 +212,8 @@ class MainActivity : ComponentActivity() {
             CarAudioBus.guidance = app.prefs.guidanceMode
         }
         intent.getStringExtra("language")?.let { Lang.set(Language.of(it)) }
+        if (intent.hasExtra("wheelNext")) app.prefs.wheelLongNext = intent.getIntExtra("wheelNext", 0)
+        if (intent.hasExtra("wheelPrev")) app.prefs.wheelLongPrev = intent.getIntExtra("wheelPrev", 0)
         if (intent.hasExtra("carInfoRight")) { app.prefs.carInfoRight = intent.getBooleanExtra("carInfoRight", false); CarStyles.reload() }
         if (intent.hasExtra("carColumns")) { app.prefs.carColumns = intent.getIntExtra("carColumns", 0); CarStyles.reload() }
         if (intent.hasExtra("carShowClock")) { app.prefs.carShowClock = intent.getBooleanExtra("carShowClock", true); CarStyles.reload() }
