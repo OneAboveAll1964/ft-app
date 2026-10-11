@@ -40,9 +40,14 @@ public final class Main {
             Sys.context();
             Bridge bridge = new Bridge(token);
             Commands commands = new Commands(token, bridge);
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                Log.i("helper going away, giving the phone screen back");
+                commands.shutdown();
+            }));
             if (!bridge.connect(commands.binder())) {
                 return;
             }
+            commands.watch(bridge);
             Log.i("ft-server ready");
             Looper.loop();
         } catch (Throwable t) {

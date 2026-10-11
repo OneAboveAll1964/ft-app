@@ -1925,6 +1925,7 @@ class CarLifeService : Service() {
 
     private fun teardown() {
         if (AaHeadUnitService.running) runCatching { AaHeadUnitService.stop(this) }
+        if (SuperCast.ready.value) runCatching { SuperCast.phoneScreen(true) }
         stopLink()
         stopSoundWatch()
         stopWatchingTurning()

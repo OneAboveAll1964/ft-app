@@ -125,9 +125,17 @@ fun Modifier.touchZone(key: String): Modifier = composed {
     }
 }
 
+val CAR_EDGE = 14.dp
+val CAR_ROW = 44.dp
+
 private fun sidePadding(corner: Int): PaddingValues {
     val left = corner == 0 || corner == 2
-    return PaddingValues.Absolute(left = if (left) 108.dp else 28.dp, right = if (left) 28.dp else 108.dp, top = 22.dp, bottom = 20.dp)
+    return PaddingValues.Absolute(
+        left = if (left) 108.dp else 28.dp,
+        right = if (left) 28.dp else 108.dp,
+        top = CAR_EDGE,
+        bottom = 20.dp
+    )
 }
 
 @Composable
@@ -217,6 +225,7 @@ private fun CarRoot(style: CarStyle) {
             view == CarView.SUPERCAST -> SuperCastScreen(
                 panes = panes,
                 apps = dockApps,
+                pad = pad,
                 onPick = { index ->
                     val chosen = dockApps.getOrNull(index) ?: return@SuperCastScreen
                     val taken = panes.map { it.name }.toSet()
@@ -310,13 +319,13 @@ private fun CornerPill(corner: Int, onClick: () -> Unit) {
         3 -> AbsoluteAlignment.BottomRight
         else -> AbsoluteAlignment.TopLeft
     }
-    Box(Modifier.fillMaxSize().padding(14.dp), contentAlignment = align) {
+    Box(Modifier.fillMaxSize().padding(CAR_EDGE), contentAlignment = align) {
         Surface(
             onClick = onClick,
             shape = RoundedCornerShape(50),
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
             contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(width = 68.dp, height = 44.dp).touchZone("pill")
+            modifier = Modifier.size(width = 68.dp, height = CAR_ROW).touchZone("pill")
         ) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = null)
@@ -798,7 +807,10 @@ private fun AppDrawer(gridState: LazyGridState, pad: PaddingValues, onClose: () 
         AppCatalog.apps.value?.let { AppCatalog.warm(context, it.take(30), px) }
     }
     Column(Modifier.fillMaxSize().padding(pad)) {
-        Text(stringResource(R.string.tile_apps), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
+        Row(Modifier.fillMaxWidth().height(CAR_ROW), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.tile_apps), style = MaterialTheme.typography.headlineMedium)
+        }
+        Spacer(Modifier.height(12.dp))
         val list = apps
         if (list == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }

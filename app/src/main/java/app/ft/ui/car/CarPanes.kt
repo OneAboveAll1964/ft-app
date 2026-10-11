@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -57,9 +58,16 @@ import kotlinx.coroutines.withContext
 data class CarPane(val name: String, val packageName: String, val label: String)
 
 @Composable
-fun SuperCastScreen(panes: List<CarPane>, apps: List<Pair<String, String>>, onPick: (Int) -> Unit, onClose: (String) -> Unit, onSwap: () -> Unit) {
+fun SuperCastScreen(
+    panes: List<CarPane>,
+    apps: List<Pair<String, String>>,
+    pad: PaddingValues,
+    onPick: (Int) -> Unit,
+    onClose: (String) -> Unit,
+    onSwap: () -> Unit
+) {
     LeftToRight {
-        Column(Modifier.fillMaxSize().padding(10.dp)) {
+        Column(Modifier.fillMaxSize().padding(pad)) {
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 panes.forEachIndexed { index, pane ->
                     Pane(pane, Modifier.weight(1f).fillMaxHeight()) { onClose(pane.name) }

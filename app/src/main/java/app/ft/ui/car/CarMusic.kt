@@ -97,14 +97,18 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
     }
 
     Column(Modifier.fillMaxSize().padding(pad)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier.fillMaxWidth().height(CAR_ROW),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Text(stringResource(R.string.tile_music), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(end = 6.dp))
-            FilterChip(selected = tab == MusicTab.SONGS && album == null, onClick = { tab = MusicTab.SONGS; album = null }, label = { Text(stringResource(R.string.music_songs)) })
-            FilterChip(selected = tab == MusicTab.ALBUMS || album != null, onClick = { tab = MusicTab.ALBUMS; album = null }, label = { Text(stringResource(R.string.music_albums)) })
+            FilterChip(modifier = Modifier.height(CAR_ROW), selected = tab == MusicTab.SONGS && album == null, onClick = { tab = MusicTab.SONGS; album = null }, label = { Text(stringResource(R.string.music_songs)) })
+            FilterChip(modifier = Modifier.height(CAR_ROW), selected = tab == MusicTab.ALBUMS || album != null, onClick = { tab = MusicTab.ALBUMS; album = null }, label = { Text(stringResource(R.string.music_albums)) })
             Spacer(Modifier.weight(1f))
             val list = songs.orEmpty()
             if (list.isNotEmpty()) {
-                FilledTonalButton(onClick = {
+                FilledTonalButton(modifier = Modifier.height(CAR_ROW), onClick = {
                     CarPlayer.play(context, list.shuffled(), 0)
                     CarPlayer.setShuffle(true)
                     onPlaying(true)
@@ -114,7 +118,7 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
                 }
             }
             if (player.track != null) {
-                FilledTonalButton(onClick = { onPlaying(true) }) {
+                FilledTonalButton(modifier = Modifier.height(CAR_ROW), onClick = { onPlaying(true) }) {
                     Icon(CarIcons.Music, contentDescription = null, modifier = Modifier.size(20.dp))
                     Text(stringResource(R.string.music_playing), modifier = Modifier.padding(start = 8.dp))
                 }

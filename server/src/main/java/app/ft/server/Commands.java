@@ -33,6 +33,33 @@ public final class Commands {
         return stub;
     }
 
+    public void shutdown() {
+        try {
+            displays.closeAll();
+        } catch (Throwable ignored) {
+        }
+        try {
+            Power.screen(true);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public void watch(Bridge bridge) {
+        IFtClient client = bridge.client();
+        if (client == null) {
+            return;
+        }
+        try {
+            client.asBinder().linkToDeath(() -> {
+                Log.w("FT went away, shutting the helper down");
+                shutdown();
+                System.exit(0);
+            }, 0);
+        } catch (Throwable t) {
+            Log.w("could not watch FT: " + t);
+        }
+    }
+
     private Bundle handle(Bundle request, Surface surface) {
         if (request == null || !token.equals(request.getString("token"))) {
             Log.w("a call arrived with the wrong token, ignoring it");

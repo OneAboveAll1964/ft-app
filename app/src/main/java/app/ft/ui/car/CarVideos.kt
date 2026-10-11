@@ -14,6 +14,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -86,7 +88,10 @@ fun CarVideos(pad: PaddingValues) {
     }
 
     Column(Modifier.fillMaxSize().padding(pad)) {
-        Text(stringResource(R.string.tile_videos), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
+        Row(Modifier.fillMaxWidth().height(CAR_ROW), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.tile_videos), style = MaterialTheme.typography.headlineMedium)
+        }
+        Spacer(Modifier.height(12.dp))
         val list = videos
         when {
             !allowed -> Empty(stringResource(R.string.videos_allow), CarIcons.Movie)
