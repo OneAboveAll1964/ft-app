@@ -80,6 +80,7 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import app.ft.core.Looks
+import app.ft.supercast.SuperCast
 import android.widget.Toast
 import app.ft.core.Backup
 import app.ft.core.Language
@@ -221,6 +222,9 @@ class MainActivity : ComponentActivity() {
                 DiagLog.i("Backup", "car look brought over from a shared code ($count settings)")
                 Toast.makeText(this, getString(R.string.backup_look_applied), Toast.LENGTH_LONG).show()
             }
+        }
+        if (intent.getBooleanExtra("supercast", false)) {
+            Thread { SuperCast.start(applicationContext) }.start()
         }
         intent.getStringExtra("openOnConnect")?.let { app.prefs.openOnConnect = it }
         if (intent.hasExtra("wheelNext")) app.prefs.wheelLongNext = intent.getIntExtra("wheelNext", 0)
