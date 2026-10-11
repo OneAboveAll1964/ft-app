@@ -188,7 +188,12 @@ private fun CarRoot(style: CarStyle) {
             DiagLog.i("SuperCast", "the helper listed ${dockApps.size} apps for the dock")
         }
     }
-    LaunchedEffect(view) { DiagLog.i("Car", "car screen: ${view.name}") }
+    LaunchedEffect(view) {
+        DiagLog.i("Car", "car screen: ${view.name}")
+        if (view == CarView.YOUTUBE || view == CarView.BROWSER || view == CarView.VIDEOS || view == CarView.SUPERCAST) {
+            CarLifeService.soundSoon()
+        }
+    }
     LaunchedEffect(nowPlaying) { if (view == CarView.MUSIC) DiagLog.i("Car", if (nowPlaying) "music: now playing" else "music: song list") }
     LaunchedEffect(Unit) {
         CarLifeService.openView.collect { key ->
@@ -537,13 +542,18 @@ private data class TileSpec(val key: String, val label: String, val icon: ImageV
 private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, interactive: Boolean = true, onApp: (String) -> Boolean = { false }, onOpen: (CarView, Boolean) -> Unit) {
     val context = LocalContext.current
     val specs = remember(keys, context) { keys.map { tileSpec(context, it) } }
-    val columns = if (columns > 0) columns.coerceAtMost(specs.size.coerceAtLeast(1)) else CarStyle.columns(specs.size)
+    val chosen = columns > 0
+    val columns = if (chosen) columns.coerceAtMost(specs.size.coerceAtLeast(1)) else CarStyle.columns(specs.size)
     val rows = specs.chunked(columns)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         rows.forEach { row ->
+            val spare = columns - row.size
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                row.forEach { spec -> Tile(Modifier.weight(1f), spec) { if (interactive) openTile(spec.key, onOpen, onApp) } }
-                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                row.forEachIndexed { index, spec ->
+                    val wide = !chosen && spare > 0 && index == row.lastIndex
+                    Tile(Modifier.weight(if (wide) 1f + spare else 1f), spec) { if (interactive) openTile(spec.key, onOpen, onApp) }
+                }
+                if (chosen) repeat(spare) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -551,7 +561,7 @@ private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, i
 
 private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit, onApp: (String) -> Boolean = { false }) {
     val prefs = FTApp.instance.prefs
-    if (prefs.supercastTiles && SuperCast.ready.value) {
+    if (prefs.supercastOn && SuperCast.ready.value) {
         val packageName = when {
             key == "maps" -> prefs.mapsPackage
             key == "youtube" -> "com.google.android.youtube"

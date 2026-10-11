@@ -343,14 +343,8 @@
     <string name="supercast_swap">تبديل الجهتين</string>
     <string name="settings_supercast_title">التطبيقات على السيارة</string>
     <string name="settings_supercast_about">شغّل تطبيقاتك الحقيقية على السيارة وشاشة الهاتف مطفأة</string>
-    <string name="supercast_on">تشغيل التطبيقات على السيارة</string>
-    <string name="supercast_body">يمنح FT كل تطبيق شاشة مخفية خاصة به، فيعمل Waze أو YouTube على السيارة بينما يبقى هاتفك مطفأ. تطبيقان في وقت واحد جنبًا إلى جنب.</string>
-    <string name="supercast_ready">جاهز</string>
     <string name="supercast_not_ready">لم يُضبط بعد</string>
     <string name="supercast_screen_off">أطفئ شاشة الهاتف أثناء تشغيل التطبيقات</string>
-    <string name="supercast_tiles">افتح أزرار السيارة كتطبيقات حقيقية</string>
-    <string name="supercast_tiles_about">يفتح زرا الخرائط وYouTube التطبيق الحقيقي. وإن لم يكن جاهزًا، يعرض FT النسخة المعكوسة القديمة بهدوء.</string>
-    <string name="supercast_turn_on">اضبطه</string>
     <string name="supercast_ways">كيف تشغّله</string>
     <string name="supercast_way_root">بصلاحيات الروت، تلقائيًا</string>
     <string name="supercast_way_root_body">هاتفك فيه صلاحيات روت، لذا يضبط FT هذا في كل مشوار دون أي تدخل منك.</string>
@@ -383,4 +377,15 @@
     <string name="connect_section">عند اتصال السيارة</string>
     <string name="look_default_buttons">إرجاع الأزرار الافتراضية</string>
     <string name="sound_music_section">الموسيقى</string>
+    <string name="apps_how">كيف تفتح التطبيقات على السيارة</string>
+    <string name="apps_mirror">عرض شاشة الهاتف</string>
+    <string name="apps_mirror_about">تعرض السيارة ما يظهر على الهاتف. يعمل دائماً، وتبقى شاشة الهاتف مضاءة.</string>
+    <string name="apps_run">تشغيلها على السيارة</string>
+    <string name="apps_run_about">كل تطبيق يحصل على شاشة خفية خاصة به، فيعمل على السيارة بينما يبقى الهاتف مطفأ. اثنان جنباً إلى جنب كحد أقصى. يحتاج إعداداً مرة واحدة.</string>
+    <string name="apps_car_size">ارسم التطبيقات المعروضة بمقاس السيارة</string>
+    <string name="apps_car_size_about">أعرض، لكن بعض الهواتف ترفضه فيعرض FT الشاشة بهدوء بدلاً من ذلك.</string>
+    <string name="apps_setup_now">جهّزه الآن</string>
+    <string name="apps_setting_up">جارٍ التجهيز</string>
+    <string name="apps_failed">لم يتمكن FT من التجهيز. افتح الطرق أدناه وجرّب واحدة.</string>
+    <string name="apps_ready_now">جاهز، ستعمل التطبيقات على السيارة</string>
 </resources>

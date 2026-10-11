@@ -4,18 +4,24 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +34,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -36,11 +44,12 @@ import app.ft.FTApp
 import app.ft.R
 import app.ft.supercast.Helper
 import app.ft.supercast.SuperCast
+import app.ft.ui.components.Option
+import app.ft.ui.components.PickSetting
 import app.ft.ui.components.rememberRootGranted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
 
 @Composable
 fun SuperCastSettings() {
@@ -49,56 +58,54 @@ fun SuperCastSettings() {
     val scope = rememberCoroutineScope()
     val root = rememberRootGranted()
     val ready by SuperCast.ready.collectAsState()
-    var on by remember { mutableStateOf(prefs.supercastOn) }
+    var onCar by remember { mutableStateOf(prefs.supercastOn) }
     var busy by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     var open by remember { mutableIntStateOf(-1) }
 
-    Text(stringResource(R.string.supercast_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.supercast_on), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                stringResource(if (ready) R.string.supercast_ready else R.string.supercast_not_ready),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    fun setUp() {
+        failed = false
+        scope.launch {
+            busy = true
+            val ok = withContext(Dispatchers.IO) { SuperCast.start(context.applicationContext) }
+            busy = false
+            failed = !ok
         }
-        Switch(checked = on, onCheckedChange = { want ->
-            on = want
-            prefs.supercastOn = want
-            scope.launch {
-                busy = true
-                withContext(Dispatchers.IO) {
-                    if (want) SuperCast.start(context.applicationContext) else SuperCast.stopAll()
-                }
-                busy = false
-            }
-        })
     }
 
-    if (on) {
-        BoolSetting(stringResource(R.string.supercast_screen_off), prefs.supercastScreenOff) { prefs.supercastScreenOff = it }
-        BoolSetting(stringResource(R.string.supercast_tiles), prefs.supercastTiles) { prefs.supercastTiles = it }
+    PickSetting(
+        stringResource(R.string.apps_how),
+        listOf(
+            Option(stringResource(R.string.apps_mirror), stringResource(R.string.apps_mirror_about)),
+            Option(stringResource(R.string.apps_run), stringResource(R.string.apps_run_about))
+        ),
+        if (onCar) 1 else 0
+    ) { index ->
+        onCar = index == 1
+        prefs.supercastOn = onCar
+        if (onCar) setUp() else scope.launch { withContext(Dispatchers.IO) { SuperCast.stopAll() } }
+    }
+
+    if (!onCar) {
+        BoolSetting(stringResource(R.string.apps_car_size), prefs.carSizedApps) { prefs.carSizedApps = it }
         Text(
-            stringResource(R.string.supercast_tiles_about),
-            style = MaterialTheme.typography.bodySmall,
+            stringResource(R.string.apps_car_size_about),
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        return
     }
 
-    if (!ready) {
-        TextButton(onClick = {
-            scope.launch {
-                busy = true
-                withContext(Dispatchers.IO) { SuperCast.start(context.applicationContext) }
-                busy = false
-            }
-        }, enabled = !busy) { Text(stringResource(R.string.supercast_turn_on)) }
+    Status(ready, busy)
+    if (!ready && !busy) {
+        FilledTonalButton(onClick = { setUp() }) { Text(stringResource(R.string.apps_setup_now)) }
     }
+    if (failed && !ready) {
+        Text(stringResource(R.string.apps_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+    }
+    BoolSetting(stringResource(R.string.supercast_screen_off), prefs.supercastScreenOff) { prefs.supercastScreenOff = it }
 
     Text(stringResource(R.string.supercast_ways), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-
     Way(
         index = 0,
         open = open,
@@ -129,6 +136,31 @@ fun SuperCastSettings() {
                 ?.setPrimaryClip(ClipData.newPlainText("FT", command))
             Toast.makeText(context, context.getString(R.string.supercast_copy_command), Toast.LENGTH_SHORT).show()
         }) { Text(stringResource(R.string.supercast_copy_command)) }
+    }
+}
+
+@Composable
+private fun Status(ready: Boolean, busy: Boolean) {
+    val colour = when {
+        ready -> MaterialTheme.colorScheme.primary
+        busy -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.error
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = colour)
+        else Box(Modifier.size(10.dp).clip(CircleShape).background(colour))
+        Spacer(Modifier.width(10.dp))
+        Text(
+            stringResource(
+                when {
+                    ready -> R.string.apps_ready_now
+                    busy -> R.string.apps_setting_up
+                    else -> R.string.supercast_not_ready
+                }
+            ),
+            style = MaterialTheme.typography.bodyLarge,
+            color = colour
+        )
     }
 }
 

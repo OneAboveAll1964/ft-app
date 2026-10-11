@@ -344,14 +344,8 @@
     <string name="supercast_swap">Swap sides</string>
     <string name="settings_supercast_title">Apps on the car</string>
     <string name="settings_supercast_about">Run your real apps on the car with the phone screen off</string>
-    <string name="supercast_on">Run apps on the car</string>
-    <string name="supercast_body">FT gives each app its own hidden screen, so Waze or YouTube run on the car while your phone stays dark. Up to two at once, side by side.</string>
-    <string name="supercast_ready">Ready</string>
     <string name="supercast_not_ready">Not set up yet</string>
     <string name="supercast_screen_off">Turn the phone screen off while apps run</string>
-    <string name="supercast_tiles">Open car buttons as real apps</string>
-    <string name="supercast_tiles_about">Maps and YouTube buttons open the real app. If this is not ready, FT quietly shows the old mirror instead.</string>
-    <string name="supercast_turn_on">Set it up</string>
     <string name="supercast_ways">How to switch it on</string>
     <string name="supercast_way_root">With root, by itself</string>
     <string name="supercast_way_root_body">Your phone is rooted, so FT sets this up every drive with nothing for you to do.</string>
@@ -384,4 +378,15 @@
     <string name="connect_section">When the car connects</string>
     <string name="look_default_buttons">Put the default buttons back</string>
     <string name="sound_music_section">Music</string>
+    <string name="apps_how">How apps open on the car</string>
+    <string name="apps_mirror">Mirror the phone</string>
+    <string name="apps_mirror_about">The car shows whatever is on the phone. Always works, and the phone screen stays on.</string>
+    <string name="apps_run">Run on the car</string>
+    <string name="apps_run_about">Each app gets its own hidden screen, so it runs on the car while the phone stays dark. Up to two side by side. Needs setting up once.</string>
+    <string name="apps_car_size">Draw mirrored apps at the car\'s size</string>
+    <string name="apps_car_size_about">Wider, but some phones refuse it and FT quietly mirrors instead.</string>
+    <string name="apps_setup_now">Set it up now</string>
+    <string name="apps_setting_up">Setting up</string>
+    <string name="apps_failed">FT could not set it up. Open the ways below and try one.</string>
+    <string name="apps_ready_now">Ready, apps will run on the car</string>
 </resources>

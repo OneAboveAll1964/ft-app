@@ -343,14 +343,8 @@
     <string name="supercast_swap">گۆڕینی لایەکان</string>
     <string name="settings_supercast_title">ئەپەکان لەسەر ئۆتۆمبێل</string>
     <string name="settings_supercast_about">ئەپە ڕاستەقینەکانت لەسەر ئۆتۆمبێل کار بکەن و شاشەی مۆبایل کوژاوە بێت</string>
-    <string name="supercast_on">ئەپەکان لەسەر ئۆتۆمبێل کار بکەن</string>
-    <string name="supercast_body">FT بۆ هەر ئەپێک شاشەیەکی شاراوەی تایبەت دروست دەکات، بۆیە Waze یان YouTube لەسەر ئۆتۆمبێل کار دەکەن و مۆبایلەکەت تاریک دەمێنێتەوە. تا دوو دانە پێکەوە، تەنیشت یەک.</string>
-    <string name="supercast_ready">ئامادەیە</string>
     <string name="supercast_not_ready">هێشتا ڕێک نەخراوە</string>
     <string name="supercast_screen_off">کاتێک ئەپەکان کار دەکەن شاشەی مۆبایل بکوژێنەوە</string>
-    <string name="supercast_tiles">دوگمەکانی ئۆتۆمبێل وەک ئەپی ڕاستەقینە بکەرەوە</string>
-    <string name="supercast_tiles_about">دوگمەکانی نەخشە و YouTube ئەپە ڕاستەقینەکە دەکەنەوە. ئەگەر ئامادە نەبێت، FT بێدەنگ شێوازی کۆنی وێنەگواستنەوە پیشان دەدات.</string>
-    <string name="supercast_turn_on">ڕێکی بخە</string>
     <string name="supercast_ways">چۆن هەڵیبکەیت</string>
     <string name="supercast_way_root">بە ڕووت، خۆکار</string>
     <string name="supercast_way_root_body">مۆبایلەکەت ڕووت کراوە، بۆیە FT لە هەموو گەشتێکدا خۆی ئەمە ڕێک دەخات و هیچت پێویست نییە بکەیت.</string>
@@ -383,4 +377,15 @@
     <string name="connect_section">کاتێک ئۆتۆمبێلەکە پەیوەست دەبێت</string>
     <string name="look_default_buttons">دوگمە بنەڕەتییەکان بگەڕێنەوە</string>
     <string name="sound_music_section">مۆسیقا</string>
+    <string name="apps_how">ئەپەکان چۆن لەسەر ئۆتۆمبێل دەکرێنەوە</string>
+    <string name="apps_mirror">شاشەی مۆبایل پیشان بدە</string>
+    <string name="apps_mirror_about">ئۆتۆمبێلەکە ئەوە پیشان دەدات کە لەسەر مۆبایلەکەیە. هەمیشە کار دەکات، شاشەی مۆبایلیش داگیرساو دەمێنێتەوە.</string>
+    <string name="apps_run">لەسەر ئۆتۆمبێل کاری پێ بکە</string>
+    <string name="apps_run_about">هەر ئەپێک شاشەیەکی شاراوەی خۆی دەبێت، بۆیە لەسەر ئۆتۆمبێل کار دەکات و مۆبایلەکەش تاریک دەمێنێتەوە. تا دوو دانە تەنیشت یەک. جارێک پێویستی بە ڕێکخستن هەیە.</string>
+    <string name="apps_car_size">ئەپە پیشاندراوەکان بە قەبارەی ئۆتۆمبێل بکێشە</string>
+    <string name="apps_car_size_about">پانترە، بەڵام هەندێک مۆبایل ڕەتی دەکەنەوە و FT بێدەنگ شاشەکە پیشان دەدات لە جیاتی.</string>
+    <string name="apps_setup_now">ئێستا ڕێکی بخە</string>
+    <string name="apps_setting_up">ڕێکخستن بەردەوامە</string>
+    <string name="apps_failed">FT نەیتوانی ڕێکی بخات. ڕێگاکانی خوارەوە بکەرەوە و یەکێکیان تاقی بکەرەوە.</string>
+    <string name="apps_ready_now">ئامادەیە، ئەپەکان لەسەر ئۆتۆمبێل کار دەکەن</string>
 </resources>

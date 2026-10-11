@@ -155,6 +155,10 @@ class CarLifeService : Service() {
                 .onFailure { DiagLog.w("CarLife", "Android would not let FT start right now (${it.javaClass.simpleName}), open FT to connect") }
         }
 
+        fun soundSoon() {
+            instance?.let { svc -> svc.scope.launch { svc.soundSoon() } }
+        }
+
         fun startAudio(context: Context) {
             if (instance == null) return
             send(context, ACTION_AUDIO, foreground = true)
@@ -203,7 +207,7 @@ class CarLifeService : Service() {
     }
 
     private val tag = "CarLife"
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var carDisplay: CarDisplay
     private val mirror = PhoneMirror()
     private var session: CarLifeSession? = null
@@ -1996,7 +2000,7 @@ class CarLifeService : Service() {
             val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
             var heard = 0
             while (true) {
-                delay(1500)
+                delay(800)
                 val st = _state.value
                 checkBlockedSound(am, st)
                 val busy = st.waitingForShare || st.aaOverlay || st.mirroring || audio.active || CarPlayer.playing ||
@@ -2007,23 +2011,36 @@ class CarLifeService : Service() {
                 }
                 if (++heard < 2) continue
                 heard = 0
-                if (app.prefs.soundOverBluetooth && btAudio.ready() && btAudio.somethingIsPlaying() != null) continue
-                if (!canRecord()) continue
-                if (projection != null || (app.mirrorResultCode != 0 && app.mirrorData != null)) {
-                    DiagLog.i(tag, "the phone is playing, sending its sound to the car")
-                    startAudioToCar()
-                    continue
-                }
-                if (canShareQuietly()) {
-                    DiagLog.i(tag, "the phone is playing, sharing its sound with the car without asking")
-                    shareQuietly()
-                    continue
-                }
-                DiagLog.i(tag, "the phone is playing sound the car cannot hear yet, asking on the phone")
-                _state.update { it.copy(waitingForShare = true, shareForSound = true, mirrorPackage = "") }
-                askForScreenShare()
+                routePhoneSound("the phone is playing")
             }
         }
+    }
+
+    private fun routePhoneSound(why: String) {
+        if (audio.active) return
+        if (app.prefs.soundOverBluetooth && btAudio.ready() && btAudio.somethingIsPlaying() != null) return
+        if (!canRecord()) return
+        if (projection != null || (app.mirrorResultCode != 0 && app.mirrorData != null)) {
+            DiagLog.i(tag, "$why, sending its sound to the car")
+            startAudioToCar()
+            return
+        }
+        if (canShareQuietly()) {
+            DiagLog.i(tag, "$why, sharing its sound with the car without asking")
+            shareQuietly()
+            return
+        }
+        DiagLog.i(tag, "$why sound the car cannot hear yet, asking on the phone")
+        _state.update { it.copy(waitingForShare = true, shareForSound = true, mirrorPackage = "") }
+        askForScreenShare()
+    }
+
+    internal fun soundSoon() {
+        val st = _state.value
+        if (st.waitingForShare || st.aaOverlay || st.mirroring || audio.active) return
+        if (CarAudioBus.inCall || soundDeclined || AaHeadUnitService.current != null) return
+        if (session?.projecting != true) return
+        routePhoneSound("a screen that plays opened on the car")
     }
 
     private fun checkBlockedSound(am: android.media.AudioManager, st: CarState) {

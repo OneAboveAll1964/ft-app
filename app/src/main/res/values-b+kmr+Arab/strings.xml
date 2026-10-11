@@ -343,14 +343,8 @@
     <string name="supercast_swap">گوهۆڕینا لایان</string>
     <string name="settings_supercast_title">ئەپ ل سەر ترومبێلێ</string>
     <string name="settings_supercast_about">ئەپێن خۆ یێن راستەقینە ل سەر ترومبێلێ بخەبتینە و شاشەیا مۆبایلی گرتی بیت</string>
-    <string name="supercast_on">ئەپ ل سەر ترومبێلێ بخەبتن</string>
-    <string name="supercast_body">FT بۆ هەر ئەپەکێ شاشەیەکا ڤەشارتی یا تایبەت چێدکەت، لەورا Waze یان YouTube ل سەر ترومبێلێ دخەبتن و مۆبایلێ تە تاری دمینیت. هەتا دوو هەب پێکڤە، ل تەنیشتا ئێک.</string>
-    <string name="supercast_ready">ئامادەیە</string>
     <string name="supercast_not_ready">هێشتا نەهاتیە رێکخستن</string>
     <string name="supercast_screen_off">دەمێ ئەپ دخەبتن شاشەیا مۆبایلی بگرە</string>
-    <string name="supercast_tiles">دوگمێن ترومبێلێ وەکی ئەپێن راستەقینە ڤەکە</string>
-    <string name="supercast_tiles_about">دوگمێن نەخشە و YouTube ئەپێ راستەقینە ڤەدکەن. ئەگەر ئامادە نەبیت، FT بێدەنگ شێوازێ کەڤن یێ وێنەگواستنێ نیشان ددەت.</string>
-    <string name="supercast_turn_on">رێک بخە</string>
     <string name="supercast_ways">چاوا ڤەکەی</string>
     <string name="supercast_way_root">ب روتێ، ئۆتۆماتیک</string>
     <string name="supercast_way_root_body">مۆبایلێ تە روت کریە، لەورا FT د هەر گەشتەکێ دا ب خۆ ڤێ رێک دکەت و چ پێدڤی نینە تو بکەی.</string>
@@ -383,4 +377,15 @@
     <string name="connect_section">دەمێ ترومبێل گرێ ددەت</string>
     <string name="look_default_buttons">دوگمێن بنەڕەتی بزڤڕینە</string>
     <string name="sound_music_section">مۆزیک</string>
+    <string name="apps_how">ئەپ چاوا ل سەر ترومبێلێ ڤەدبن</string>
+    <string name="apps_mirror">شاشا موبایلی نیشا بدە</string>
+    <string name="apps_mirror_about">ترومبێل وێ نیشا دەت یا ل سەر موبایلی یە. هەمی دەمی کاردکەت، و شاشا موبایلی ڤەکری دمینیت.</string>
+    <string name="apps_run">ل سەر ترومبێلێ بخەبتینە</string>
+    <string name="apps_run_about">هەر ئەپەکێ شاشەکا ڤەشارتی یا خۆ دبیت، ڤێجا ل سەر ترومبێلێ دخەبتیت و موبایل تاری دمینیت. هەتا دودان ل تەنیشتا ئێک. جارەکێ پێدڤی ب ڕێکخستنێ هەیە.</string>
+    <string name="apps_car_size">ئەپێن نیشاندای ب قەبارا ترومبێلێ بکێشە</string>
+    <string name="apps_car_size_about">فرەهتر، بەلێ هندەک موبایل وێ ڕەد دکەن و FT بێ دەنگ شاشێ نیشا دەت ل شونا وێ.</string>
+    <string name="apps_setup_now">نوکە ڕێک بخە</string>
+    <string name="apps_setting_up">ڕێکخستن ب رێڤەیە</string>
+    <string name="apps_failed">FT نەشیا ڕێک بخیت. ڕێکێن خوارێ ڤەکە و ئێکێ ژ وان تاقی بکە.</string>
+    <string name="apps_ready_now">ئامادەیە، ئەپ وێ ل سەر ترومبێلێ بخەبتن</string>
 </resources>
