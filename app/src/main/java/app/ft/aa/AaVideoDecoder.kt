@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 object AaVideoSink {
     private val _surface = MutableStateFlow<Surface?>(null)
     val surface: StateFlow<Surface?> = _surface
+    private val _frame = MutableStateFlow<Pair<Int, Int>?>(null)
+    val frame: StateFlow<Pair<Int, Int>?> = _frame
     var width = 0
     var height = 0
 
@@ -23,6 +25,10 @@ object AaVideoSink {
 
     fun detach(surface: Surface?) {
         if (surface != null) _surface.compareAndSet(surface, null)
+    }
+
+    fun frameSize(width: Int, height: Int) {
+        _frame.value = width to height
     }
 }
 
@@ -71,6 +77,7 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
             c.configure(format, s, null, 0)
             c.start()
             codec = c
+            AaVideoSink.frameSize(width, height)
             drain = Thread({ drainLoop(c) }, "FT-AaDrain").also { it.start() }
             DiagLog.i(tag, "decoder started ${width}x$height")
         } catch (t: Throwable) {
@@ -109,12 +116,22 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
                 if (idx >= 0) {
                     c.releaseOutputBuffer(idx, true)
                     _frames.value = _frames.value + 1
+                } else if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    shown(c.outputFormat)
                 }
             } catch (t: Throwable) {
                 if (running.get()) DiagLog.e(tag, "drain failed", t)
                 break
             }
         }
+    }
+
+    private fun shown(f: MediaFormat) {
+        val w = if (f.containsKey("crop-right") && f.containsKey("crop-left")) f.getInteger("crop-right") - f.getInteger("crop-left") + 1 else f.getInteger(MediaFormat.KEY_WIDTH)
+        val h = if (f.containsKey("crop-bottom") && f.containsKey("crop-top")) f.getInteger("crop-bottom") - f.getInteger("crop-top") + 1 else f.getInteger(MediaFormat.KEY_HEIGHT)
+        if (w <= 0 || h <= 0) return
+        DiagLog.i(tag, "Android Auto draws ${w}x$h" + if (w != width || h != height) ", not the ${width}x$height FT asked for" else "")
+        AaVideoSink.frameSize(w, h)
     }
 
     fun stop() {

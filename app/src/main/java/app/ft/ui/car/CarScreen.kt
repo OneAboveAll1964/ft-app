@@ -518,6 +518,8 @@ private fun Tile(modifier: Modifier, spec: TileSpec, onClick: () -> Unit) {
 private fun AaOverlay(aa: app.ft.aa.AaState) {
     val prefs = FTApp.instance.prefs
     val (fullW, fullH) = app.ft.aa.AaProtocol.standardSize(prefs.aaWidth, prefs.aaHeight)
+    val real by AaVideoSink.frame.collectAsState()
+    val (frameW, frameH) = real ?: (fullW to fullH)
     Box(Modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
         LaunchedEffect(Unit) {
             delay(3000)
@@ -534,7 +536,8 @@ private fun AaOverlay(aa: app.ft.aa.AaState) {
                     })
                 }
             },
-            modifier = Modifier.fillMaxWidth().aspectRatio(fullW.toFloat() / fullH).align(Alignment.TopCenter)
+            update = { v -> v.holder.setFixedSize(frameW, frameH) },
+            modifier = Modifier.fillMaxWidth().aspectRatio(frameW.toFloat() / frameH).align(Alignment.TopCenter)
         )
         AnimatedVisibility(visible = aa.phase != AaSession.Phase.STREAMING, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
