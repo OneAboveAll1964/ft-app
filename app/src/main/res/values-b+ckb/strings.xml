@@ -360,4 +360,9 @@
     <string name="supercast_way_computer_body">مۆبایلەکە بە کۆمپیوتەرێکەوە ببەستە کە USB debuggingی هەڵکرابێت و ئەم دێڕەی خوارەوە جێبەجێ بکە. پێویستی بە هیچ فایلێک نییە و هەموو شتێک ڕێک دەخات. دوای ڕیستارتی مۆبایل دووبارەی بکەرەوە.</string>
     <string name="supercast_copy_command">کۆپیکردنی فەرمانەکە</string>
     <string name="supercast_stop">وەستاندن</string>
+    <string name="tile_looking">بەدوای ئۆتۆمبێلەکەدا دەگەڕێت</string>
+    <string name="tile_on_the_car">لەسەر شاشەی ئۆتۆمبێل</string>
+    <string name="tile_add">زیادکردنی دوگمەکە بۆ ڕێکخستنە خێراکان</string>
+    <string name="tile_add_about">دوگمەیەکی FT دەخاتە ئەو پەڕەیەی لە سەرەوە ڕایدەکێشیت، تاکو بەبێ کردنەوەی FT بیکەیتەوە.</string>
+    <string name="tile_add_do">دوگمەکە زیاد بکە</string>
 </resources>

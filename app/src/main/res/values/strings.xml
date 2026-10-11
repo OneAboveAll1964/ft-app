@@ -361,4 +361,9 @@
     <string name="supercast_way_computer_body">Plug the phone into a computer with USB debugging on and run the one line below. It needs no files and sets everything up. Run it again after a phone restart.</string>
     <string name="supercast_copy_command">Copy the command</string>
     <string name="supercast_stop">Stop</string>
+    <string name="tile_looking">Looking for the car</string>
+    <string name="tile_on_the_car">On the car</string>
+    <string name="tile_add">Add the button to Quick Settings</string>
+    <string name="tile_add_about">Puts an FT button in the panel you pull down from the top, so you can switch FT on without opening it.</string>
+    <string name="tile_add_do">Add the button</string>
 </resources>

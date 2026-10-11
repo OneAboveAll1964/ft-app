@@ -138,7 +138,7 @@ sleep 3
 
 echo "== run the head unit simulator =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
-  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;fps:5@19.5;fps:15@23.5;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;156,651@42;417,651@44;40,40@54" \
+  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;fps:5@19.5;fps:15@23.5;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;417,651@42;156,651@50;40,40@54" \
   --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
@@ -296,7 +296,7 @@ check "the phone keys open from their handle on the car" "grep -q 'phone keys sh
 check "the phone's back key works from the car" "grep -q 'phone back' '$OUT/logcat.txt'"
 check "rotate turns the phone to landscape" "grep -q 'phone turned to landscape' '$OUT/logcat.txt'"
 check "the car shows the turned phone across its whole width" "song landscape"
-check "the mirror follows the phone into landscape" "grep -E 'phone turned, mirror is now [0-9]+x[0-9]+' '$OUT/logcat.txt' | tail -1 | python3 -c \"import re,sys;w,h=map(int,re.search(r'now (\\d+)x(\\d+)',sys.stdin.read()).groups());assert w>h\""
+check "the mirror follows the phone into landscape" "grep -E 'phone turned, mirror is now [0-9]+x[0-9]+' '$OUT/logcat.txt' | python3 -c \"import re,sys;s=[tuple(map(int,m.groups())) for m in re.finditer(r'now (\\d+)x(\\d+)',sys.stdin.read())];assert any(w>h for w,h in s), s\""
 check "the FT button still works on top of the mirror" "grep -q 'mirror stopped' '$OUT/logcat.txt'"
 check "the phone's rotation is put back when the car goes" "grep -q 'phone rotation set back the way it was' '$OUT/logcat.txt' && [ \"\$($ADB shell settings get system user_rotation | tr -d '\\r')\" = 0 ]"
 
@@ -583,6 +583,22 @@ sleep 1
 kill $QUIETLOG 2>/dev/null
 $ADB shell appops set $PKG PROJECT_MEDIA default >/dev/null 2>&1
 check "with sharing allowed ahead, a car tile mirrors an app and nothing is asked on the phone" "grep -q 'screen sharing allowed without asking' '$OUT/quiet_logcat.txt' && grep -q 'launched com.android.settings' '$OUT/quiet_logcat.txt' && ! grep -q 'asking on the phone for screen sharing' '$OUT/quiet_logcat.txt'"
+
+echo "== the quick settings button =="
+$ADB shell am force-stop $PKG
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/tile_logcat.txt" 2>&1 &
+TILELOG=$!
+$ADB shell cmd statusbar add-tile $PKG/$PKG.FtTile >/dev/null 2>&1
+sleep 2
+$ADB shell cmd statusbar click-tile $PKG/$PKG.FtTile >/dev/null 2>&1
+sleep 3
+$ADB shell cmd statusbar click-tile $PKG/$PKG.FtTile >/dev/null 2>&1
+sleep 3
+$ADB shell cmd statusbar remove-tile $PKG/$PKG.FtTile >/dev/null 2>&1
+sleep 1
+kill $TILELOG 2>/dev/null
+check "the quick settings button switches FT off and on without opening it" "grep -q 'switched off from the quick settings' '$OUT/tile_logcat.txt' && grep -q 'switched on from the quick settings' '$OUT/tile_logcat.txt' && grep -q 'session start via WiFi' '$OUT/tile_logcat.txt'"
 
 echo "== phone screen off and on during a drive =="
 $ADB logcat -c

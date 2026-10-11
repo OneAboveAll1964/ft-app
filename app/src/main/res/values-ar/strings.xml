@@ -360,4 +360,9 @@
     <string name="supercast_way_computer_body">وصّل الهاتف بكمبيوتر مع تفعيل تصحيح أخطاء USB ونفّذ السطر أدناه. لا يحتاج أي ملفات ويضبط كل شيء. كرّره بعد إعادة تشغيل الهاتف.</string>
     <string name="supercast_copy_command">نسخ الأمر</string>
     <string name="supercast_stop">إيقاف</string>
+    <string name="tile_looking">يبحث عن السيارة</string>
+    <string name="tile_on_the_car">على شاشة السيارة</string>
+    <string name="tile_add">إضافة الزر إلى الإعدادات السريعة</string>
+    <string name="tile_add_about">يضع زر FT في اللوحة التي تسحبها من الأعلى، لتشغيل FT دون فتحه.</string>
+    <string name="tile_add_do">إضافة الزر</string>
 </resources>
