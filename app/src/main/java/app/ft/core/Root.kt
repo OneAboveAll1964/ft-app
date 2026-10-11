@@ -117,9 +117,17 @@ object Root {
         return (out.stdout.trim().toIntOrNull() ?: 0) > 0
     }
 
-    fun startAaServer(): Boolean = toggleAaServer(start = true)
+    fun startAaServer(context: android.content.Context? = null): Boolean {
+        if (aaServerUp()) return true
+        if (context != null && app.ft.aa.AaServer.start(context)) return true
+        return toggleAaServer(start = true)
+    }
 
-    fun stopAaServer(): Boolean = toggleAaServer(start = false)
+    fun stopAaServer(context: android.content.Context? = null): Boolean {
+        if (!aaServerUp()) return true
+        if (context != null && app.ft.aa.AaServer.stop(context)) return true
+        return toggleAaServer(start = false)
+    }
 
     private fun toggleAaServer(start: Boolean): Boolean {
         if (!granted) return false

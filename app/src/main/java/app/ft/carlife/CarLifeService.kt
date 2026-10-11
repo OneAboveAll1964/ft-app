@@ -1308,7 +1308,7 @@ class CarLifeService : Service() {
         scope.launch {
             if (Root.granted && !Root.aaServerUp()) {
                 DiagLog.i(tag, "starting Android Auto's head unit server with root")
-                Root.startAaServer()
+                Root.startAaServer(this@CarLifeService)
             }
             delay(1500)
             askAndroidAutoToConnect()

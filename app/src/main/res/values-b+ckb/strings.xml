@@ -388,4 +388,7 @@
     <string name="apps_setting_up">ڕێکخستن بەردەوامە</string>
     <string name="apps_failed">FT نەیتوانی ڕێکی بخات. ڕێگاکانی خوارەوە بکەرەوە و یەکێکیان تاقی بکەرەوە.</string>
     <string name="apps_ready_now">ئامادەیە، ئەپەکان لەسەر ئۆتۆمبێل کار دەکەن</string>
+    <string name="aa_switch_on">بیکەرەوە</string>
+    <string name="aa_switching_on">دەکرێتەوە</string>
+    <string name="aa_switch_failed">FT نەیتوانی بە تەنها بیکاتەوە، بۆیە لە خوارەوە بە دەستی بیکەرەوە.</string>
 </resources>

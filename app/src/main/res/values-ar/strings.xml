@@ -388,4 +388,7 @@
     <string name="apps_setting_up">جارٍ التجهيز</string>
     <string name="apps_failed">لم يتمكن FT من التجهيز. افتح الطرق أدناه وجرّب واحدة.</string>
     <string name="apps_ready_now">جاهز، ستعمل التطبيقات على السيارة</string>
+    <string name="aa_switch_on">شغّله</string>
+    <string name="aa_switching_on">جارٍ تشغيله</string>
+    <string name="aa_switch_failed">لم يتمكن FT من تشغيله وحده، فافعل ذلك يدوياً أدناه.</string>
 </resources>

@@ -388,4 +388,7 @@
     <string name="apps_setting_up">ڕێکخستن ب رێڤەیە</string>
     <string name="apps_failed">FT نەشیا ڕێک بخیت. ڕێکێن خوارێ ڤەکە و ئێکێ ژ وان تاقی بکە.</string>
     <string name="apps_ready_now">ئامادەیە، ئەپ وێ ل سەر ترومبێلێ بخەبتن</string>
+    <string name="aa_switch_on">ڤەکە</string>
+    <string name="aa_switching_on">تێت ڤەکرن</string>
+    <string name="aa_switch_failed">FT بی تنێ نەشیا ڤەکەت، ڤێجا ل خوارێ ب دەستان ڤەکە.</string>
 </resources>

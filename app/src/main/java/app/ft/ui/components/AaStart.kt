@@ -65,6 +65,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
 import app.ft.R
+import app.ft.core.Root
 import app.ft.aa.AaInstaller
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -104,8 +105,30 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
         return
     }
     val on = serverOn == true
+    val root = rememberRootGranted()
+    val scope = rememberCoroutineScope()
+    var switching by remember { mutableStateOf(false) }
+    var refused by remember { mutableStateOf(false) }
     OptionCard(stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking }), framed = framed) {
         Note(stringResource(R.string.aa_server_option_body))
+        if (!on && root) {
+            FilledTonalButton(
+                onClick = {
+                    refused = false
+                    scope.launch {
+                        switching = true
+                        val ok = withContext(Dispatchers.IO) { Root.startAaServer(context) }
+                        switching = false
+                        refused = !ok
+                    }
+                },
+                enabled = !switching,
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+            ) {
+                Text(stringResource(if (switching) R.string.aa_switching_on else R.string.aa_switch_on), maxLines = 1)
+            }
+            if (refused) Note(stringResource(R.string.aa_switch_failed))
+        }
         if (!on) ButtonPair(stringResource(R.string.aa_show_me_how), { help = true }, stringResource(R.string.aa_open_aa), { AaInstaller.openSettings(context) })
     }
     if (help) ServerHelpSheet(serverOn) { help = false }
