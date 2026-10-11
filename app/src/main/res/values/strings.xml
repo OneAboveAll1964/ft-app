@@ -355,12 +355,10 @@
     <string name="supercast_ways">How to switch it on</string>
     <string name="supercast_way_root">With root, by itself</string>
     <string name="supercast_way_root_body">Your phone is rooted, so FT sets this up every drive with nothing for you to do.</string>
-    <string name="supercast_way_wireless">With Wireless debugging</string>
-    <string name="supercast_way_wireless_body">Turn on Wireless debugging in the phone\'s developer settings, then pair FT with the six-digit code it shows. Do this again after a restart.</string>
-    <string name="supercast_way_car">From the car</string>
-    <string name="supercast_way_car_body">Some head units can switch this on over the USB cable by themselves. FT asks yours when it connects; most cars cannot do it.</string>
+    <string name="supercast_way_wireless">With the phone\'s own debug bridge</string>
+    <string name="supercast_way_wireless_body">If debugging is already switched on and you have allowed FT on it once, FT sets itself up with no computer. Android will not let FT ask for that permission on its own, so the first time still needs the computer step below.</string>
     <string name="supercast_way_computer">From a computer, once</string>
-    <string name="supercast_way_computer_body">Plug the phone into a computer with USB debugging on and run one command. FT shows it and can copy it for you.</string>
+    <string name="supercast_way_computer_body">Plug the phone into a computer with USB debugging on and run the one line below. It needs no files and sets everything up. Run it again after a phone restart.</string>
     <string name="supercast_copy_command">Copy the command</string>
     <string name="supercast_stop">Stop</string>
 </resources>

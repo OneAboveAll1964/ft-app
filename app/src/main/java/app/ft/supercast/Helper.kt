@@ -9,22 +9,21 @@ import java.io.File
 
 object Helper {
     private const val TAG = "SuperCast"
-    const val ASSET = "ft-helper.jar"
-    const val REMOTE = "/data/local/tmp/ft-helper.jar"
     const val MAIN = "app.ft.server.Main"
     const val LOG = "/data/local/tmp/ft-helper.log"
+    private const val SCRIPT = "/data/local/tmp/ft-helper.sh"
 
-    fun unpack(context: Context): File? = runCatching {
-        val out = File(context.cacheDir, ASSET)
-        context.assets.open(ASSET).use { input -> out.outputStream().use { input.copyTo(it) } }
-        out.setReadable(true, false)
-        out
-    }.onFailure { DiagLog.e(TAG, "could not unpack the helper", it) }.getOrNull()
+    enum class Adb { STARTED, NOT_ALLOWED, NO_BRIDGE, FAILED }
 
-    const val SCRIPT = "/data/local/tmp/ft-helper.sh"
+    fun apkPath(context: Context): String? = runCatching {
+        context.packageManager.getApplicationInfo(context.packageName, 0).sourceDir
+    }.getOrNull()
 
-    fun script(token: String): String =
-        "export CLASSPATH=$REMOTE\nexec app_process / $MAIN token=$token\n"
+    fun run(apk: String, token: String): String =
+        "CLASSPATH=$apk app_process / $MAIN token=$token"
+
+    fun computerCommand(token: String): String =
+        "adb shell \"CLASSPATH=\$(pm path app.ft | cut -d: -f2) app_process / $MAIN token=$token &\""
 
     fun running(): Boolean =
         Root.run("pgrep -f $MAIN")?.stdout?.trim()?.isNotEmpty() == true
@@ -34,21 +33,12 @@ object Helper {
             DiagLog.w(TAG, "no root to start the helper with")
             return false
         }
-        val local = unpack(context) ?: return false
-        val copied = Root.run(
-            "mkdir -p /data/local/tmp",
-            "cp '${local.absolutePath}' $REMOTE",
-            "chmod 644 $REMOTE",
-            "chown shell:shell $REMOTE"
-        )
-        if (copied?.ok != true) {
-            DiagLog.w(TAG, "could not put the helper in place: ${copied?.stderr?.trim()}")
-            return false
+        val apk = apkPath(context) ?: return false
+        val local = File(context.cacheDir, "ft-helper.sh").apply {
+            writeText("export CLASSPATH=$apk\nexec app_process / $MAIN token=$token\n")
         }
-        Root.run("pkill -f $MAIN")
-        val written = File(context.cacheDir, "ft-helper.sh").apply { writeText(script(token).replace("\\n", "\n")) }
         val placed = Root.run(
-            "cp '${written.absolutePath}' $SCRIPT",
+            "cp '${local.absolutePath}' $SCRIPT",
             "chmod 700 $SCRIPT",
             "chown shell:shell $SCRIPT"
         )
@@ -56,44 +46,38 @@ object Helper {
             DiagLog.w(TAG, "could not place the helper script")
             return false
         }
+        Root.run("pkill -f $MAIN")
         val launch = "nohup sh $SCRIPT >$LOG 2>&1 &"
-        val asShell = Root.run("su 2000 -c '$launch'")
-        if (asShell?.ok == true) {
+        if (Root.run("su 2000 -c '$launch'")?.ok == true) {
             DiagLog.i(TAG, "helper started with root, running as the shell user")
             return true
         }
-        val asRoot = Root.run(launch)
-        if (asRoot?.ok == true) {
+        if (Root.run(launch)?.ok == true) {
             DiagLog.i(TAG, "helper started with root")
             return true
         }
-        DiagLog.w(TAG, "the helper would not start: ${asRoot?.stderr?.trim()}")
+        DiagLog.w(TAG, "the helper would not start")
         return false
     }
 
     fun startWithAdb(context: Context, token: String): Adb {
+        val apk = apkPath(context) ?: return Adb.FAILED
         val keys = AdbKeys.of(context) ?: return Adb.FAILED
         val client = AdbClient(keys)
         try {
             when (client.connect()) {
                 AdbClient.Result.READY -> Unit
                 AdbClient.Result.NOT_ALLOWED -> return Adb.NOT_ALLOWED
-                AdbClient.Result.UNREACHABLE -> return Adb.NO_BRIDGE
-                AdbClient.Result.TIMED_OUT -> return Adb.NO_BRIDGE
+                else -> return Adb.NO_BRIDGE
             }
-            val local = unpack(context) ?: return Adb.FAILED
-            client.shell("mkdir -p /data/local/tmp")
-            if (!client.push(local, REMOTE, 420)) return Adb.FAILED
             client.shell("pkill -f $MAIN")
-            client.shell("CLASSPATH=$REMOTE nohup app_process / $MAIN token=$token >$LOG 2>&1 &", waitMs = 2000)
+            client.shell("${run(apk, token)} >$LOG 2>&1 &", waitMs = 2000)
             DiagLog.i(TAG, "helper started through the phone's own debug bridge")
             return Adb.STARTED
         } finally {
             client.close()
         }
     }
-
-    enum class Adb { STARTED, NOT_ALLOWED, NO_BRIDGE, FAILED }
 
     fun stop() {
         Root.run("pkill -f $MAIN")

@@ -56,8 +56,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/helper"))
-
     packaging {
         resources.excludes += setOf("META-INF/*.version", "META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/versions/9/OSGI-INF/MANIFEST.MF")
     }
@@ -86,13 +84,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("androidx.media3:media3-exoplayer:1.8.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation(project(":server"))
 }
 
-val copyHelper = tasks.register<Copy>("copyFtHelper") {
-    dependsOn(":server:assembleRelease")
-    from(rootProject.layout.projectDirectory.file("server/build/outputs/apk/release/server-release-unsigned.apk"))
-    into(layout.buildDirectory.dir("generated/helper"))
-    rename { "ft-helper.jar" }
-}
-
-tasks.named("preBuild").configure { dependsOn(copyHelper) }

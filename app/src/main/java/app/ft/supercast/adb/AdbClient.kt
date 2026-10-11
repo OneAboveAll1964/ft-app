@@ -28,11 +28,13 @@ class AdbClient(private val keys: AdbKeys, private val host: String = "127.0.0.1
             socket = made
             input = DataInputStream(made.getInputStream().buffered())
             output = made.getOutputStream()
+            DiagLog.i(TAG, "opened a socket to the debug bridge at $host:$port")
             send(AdbWire.connect())
+            DiagLog.i(TAG, "said hello to the debug bridge")
             handshake(timeoutMs)
         }.getOrElse {
             close()
-            DiagLog.w(TAG, "could not reach the phone's debug bridge: ${it.message}")
+            DiagLog.w(TAG, "could not reach the phone's debug bridge: ${it.javaClass.simpleName} ${it.message}")
             Result.UNREACHABLE
         }
     }
@@ -42,9 +44,10 @@ class AdbClient(private val keys: AdbKeys, private val host: String = "127.0.0.1
         val deadline = System.currentTimeMillis() + timeoutMs.toLong() * 3
         while (System.currentTimeMillis() < deadline) {
             val message = read() ?: return Result.UNREACHABLE
+            DiagLog.i(TAG, "bridge said ${String(ByteArray(4) { i -> ((message.command shr (i * 8)) and 0xFF).toByte() })}")
             when (message.command) {
                 AdbWire.CNXN -> {
-                    DiagLog.i(TAG, "the phone's debug bridge accepted FT")
+                    DiagLog.i(TAG, "the phone\'s debug bridge accepted FT")
                     return Result.READY
                 }
                 AdbWire.AUTH -> when {

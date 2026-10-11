@@ -354,12 +354,10 @@
     <string name="supercast_ways">چۆن هەڵیبکەیت</string>
     <string name="supercast_way_root">بە ڕووت، خۆکار</string>
     <string name="supercast_way_root_body">مۆبایلەکەت ڕووت کراوە، بۆیە FT لە هەموو گەشتێکدا خۆی ئەمە ڕێک دەخات و هیچت پێویست نییە بکەیت.</string>
-    <string name="supercast_way_wireless">بە Wireless debugging</string>
-    <string name="supercast_way_wireless_body">لە ڕێکخستنەکانی گەشەپێدەری مۆبایلدا Wireless debugging هەڵبکە، پاشان FT بە کۆدی شەش ژمارەییەکە ببەستەوە. دوای ڕیستارت دووبارەی بکەرەوە.</string>
-    <string name="supercast_way_car">لە ئۆتۆمبێلەوە</string>
-    <string name="supercast_way_car_body">هەندێک شاشەی ئۆتۆمبێل دەتوانن خۆیان ئەمە لە ڕێگەی کێبڵی USBەوە هەڵبکەن. FT کاتی پەیوەستبوون داوا لە هی تۆ دەکات، بەڵام زۆربەی ئۆتۆمبێلەکان ناتوانن.</string>
+    <string name="supercast_way_wireless">بە پردی دیباگی خودی مۆبایلەکە</string>
+    <string name="supercast_way_wireless_body">ئەگەر دیباگ پێشتر هەڵکرابێت و جارێک ڕێگەت بە FT دابێت، FT بەبێ کۆمپیوتەر خۆی ڕێک دەخات. Android ڕێگە نادات FT خۆی داوای ئەو مۆڵەتە بکات، بۆیە جاری یەکەم هێشتا پێویستی بە هەنگاوی کۆمپیوتەرە لە خوارەوە.</string>
     <string name="supercast_way_computer">لە کۆمپیوتەرێکەوە، یەک جار</string>
-    <string name="supercast_way_computer_body">مۆبایلەکە بە کۆمپیوتەرێکەوە ببەستە کە USB debuggingی هەڵکرابێت و یەک فەرمان جێبەجێ بکە. FT پیشانت دەدات و دەتوانێت بۆت کۆپی بکات.</string>
+    <string name="supercast_way_computer_body">مۆبایلەکە بە کۆمپیوتەرێکەوە ببەستە کە USB debuggingی هەڵکرابێت و ئەم دێڕەی خوارەوە جێبەجێ بکە. پێویستی بە هیچ فایلێک نییە و هەموو شتێک ڕێک دەخات. دوای ڕیستارتی مۆبایل دووبارەی بکەرەوە.</string>
     <string name="supercast_copy_command">کۆپیکردنی فەرمانەکە</string>
     <string name="supercast_stop">وەستاندن</string>
 </resources>

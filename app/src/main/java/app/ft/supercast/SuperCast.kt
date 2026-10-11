@@ -154,6 +154,13 @@ object SuperCast {
         }
     }
 
+    fun startOverBridge(context: android.content.Context): Boolean {
+        val fresh = freshToken()
+        val result = Helper.startWithAdb(context, fresh)
+        DiagLog.i(TAG, "bridge start result: $result")
+        return result == Helper.Adb.STARTED
+    }
+
     const val WAY_NONE = 0
     const val WAY_ROOT = 1
     const val WAY_BRIDGE = 2

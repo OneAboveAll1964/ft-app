@@ -34,13 +34,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import app.ft.FTApp
 import app.ft.R
+import app.ft.supercast.Helper
 import app.ft.supercast.SuperCast
 import app.ft.ui.components.rememberRootGranted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val COMPUTER_COMMAND = "adb tcpip 5555"
 
 @Composable
 fun SuperCastSettings() {
@@ -122,20 +122,14 @@ fun SuperCastSettings() {
         title = stringResource(R.string.supercast_way_computer),
         body = stringResource(R.string.supercast_way_computer_body)
     ) {
-        Text(COMPUTER_COMMAND, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
+        val command = remember { Helper.computerCommand(SuperCast.token) }
+        Text(command, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
         TextButton(onClick = {
             context.getSystemService(ClipboardManager::class.java)
-                ?.setPrimaryClip(ClipData.newPlainText("FT", COMPUTER_COMMAND))
+                ?.setPrimaryClip(ClipData.newPlainText("FT", command))
             Toast.makeText(context, context.getString(R.string.supercast_copy_command), Toast.LENGTH_SHORT).show()
         }) { Text(stringResource(R.string.supercast_copy_command)) }
     }
-    Way(
-        index = 3,
-        open = open,
-        onOpen = { open = if (open == 3) -1 else 3 },
-        title = stringResource(R.string.supercast_way_car),
-        body = stringResource(R.string.supercast_way_car_body)
-    )
 }
 
 @Composable

@@ -354,12 +354,10 @@
     <string name="supercast_ways">چاوا ڤەکەی</string>
     <string name="supercast_way_root">ب روتێ، ئۆتۆماتیک</string>
     <string name="supercast_way_root_body">مۆبایلێ تە روت کریە، لەورا FT د هەر گەشتەکێ دا ب خۆ ڤێ رێک دکەت و چ پێدڤی نینە تو بکەی.</string>
-    <string name="supercast_way_wireless">ب Wireless debugging</string>
-    <string name="supercast_way_wireless_body">ل رێکخستنێن پەرەپێدەری یێن مۆبایلی Wireless debugging ڤەکە، پاشان FT ب کۆدێ شەش ژمارەیی ڤە گرێ بدە. پشتی ریستارتێ جارەکا دی بکە.</string>
-    <string name="supercast_way_car">ژ ترومبێلێ</string>
-    <string name="supercast_way_car_body">هندەک شاشێن ترومبێلان دشێن ب خۆ ڤێ ب رێکا کێبلێ USB ڤەکەن. FT دەمێ گرێ ددەت داخوازێ ژ یا تە دکەت، بەلێ زۆرا ترومبێلان نەشێن.</string>
+    <string name="supercast_way_wireless">ب پرا دیباگێ یا مۆبایلی ب خۆ</string>
+    <string name="supercast_way_wireless_body">ئەگەر دیباگ بەری هنگێ ڤەکری بیت و تە جارەکێ رێ دابیت FT، FT بێی کۆمپیوتەری ب خۆ رێک دکەت. Android رێ نادەت FT ب خۆ داخوازا وێ دەستویرێ بکەت, لەورا جارا ئێکێ هێشتا پێدڤی ب پێنگاڤا کۆمپیوتەری یە ل ژێرێ.</string>
     <string name="supercast_way_computer">ژ کۆمپیوتەرەکێ، ئێک جار</string>
-    <string name="supercast_way_computer_body">مۆبایلی ب کۆمپیوتەرەکێ ڤە گرێ بدە کو USB debugging تێدا ڤەکری بیت و ئێک فەرمانێ جێبەجێ بکە. FT نیشا تە ددەت و دشێت بۆ تە کۆپی بکەت.</string>
+    <string name="supercast_way_computer_body">مۆبایلی ب کۆمپیوتەرەکێ ڤە گرێ بدە کو USB debugging تێدا ڤەکری بیت و ڤێ ریزا ژێرێ جێبەجێ بکە. پێدڤی ب چ فایلان نینە و هەمی تشتان رێک دکەت. پشتی ریستارتا مۆبایلی جارەکا دی بکە.</string>
     <string name="supercast_copy_command">کۆپیکرنا فەرمانێ</string>
     <string name="supercast_stop">راوەستاندن</string>
 </resources>

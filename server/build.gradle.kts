@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.application")
+    id("com.android.library")
 }
 
 android {
@@ -7,17 +7,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.ft.server"
         minSdk = 29
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1"
-    }
-
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-        }
     }
 
     buildFeatures {

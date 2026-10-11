@@ -354,12 +354,10 @@
     <string name="supercast_ways">كيف تشغّله</string>
     <string name="supercast_way_root">بصلاحيات الروت، تلقائيًا</string>
     <string name="supercast_way_root_body">هاتفك فيه صلاحيات روت، لذا يضبط FT هذا في كل مشوار دون أي تدخل منك.</string>
-    <string name="supercast_way_wireless">عبر تصحيح الأخطاء اللاسلكي</string>
-    <string name="supercast_way_wireless_body">فعّل تصحيح الأخطاء اللاسلكي في إعدادات المطوّرين، ثم اربط FT بالرمز المكوّن من ستة أرقام. كرّر هذا بعد إعادة التشغيل.</string>
-    <string name="supercast_way_car">من السيارة</string>
-    <string name="supercast_way_car_body">بعض شاشات السيارات تستطيع تشغيل هذا بنفسها عبر كابل USB. يسأل FT سيارتك عند الاتصال، لكن معظم السيارات لا تدعم ذلك.</string>
+    <string name="supercast_way_wireless">عبر جسر التصحيح في الهاتف نفسه</string>
+    <string name="supercast_way_wireless_body">إذا كان التصحيح مفعّلًا وسمحت لـ FT به مرة، يضبط FT نفسه دون كمبيوتر. لا يسمح Android لـ FT بطلب هذا الإذن بنفسه، لذا تحتاج المرة الأولى إلى خطوة الكمبيوتر أدناه.</string>
     <string name="supercast_way_computer">من كمبيوتر، مرة واحدة</string>
-    <string name="supercast_way_computer_body">وصّل الهاتف بكمبيوتر مع تفعيل تصحيح أخطاء USB ونفّذ أمرًا واحدًا. يعرضه FT ويمكنه نسخه لك.</string>
+    <string name="supercast_way_computer_body">وصّل الهاتف بكمبيوتر مع تفعيل تصحيح أخطاء USB ونفّذ السطر أدناه. لا يحتاج أي ملفات ويضبط كل شيء. كرّره بعد إعادة تشغيل الهاتف.</string>
     <string name="supercast_copy_command">نسخ الأمر</string>
     <string name="supercast_stop">إيقاف</string>
 </resources>
