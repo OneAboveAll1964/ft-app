@@ -17,12 +17,7 @@ object AaInstaller {
     private const val TAG = "AaSetup"
     const val GEARHEAD = "com.google.android.projection.gearhead"
     const val ACTION_RESULT = "app.ft.aa.INSTALL_RESULT"
-    const val EXTRA_JOB = "job"
-    const val JOB_INSTALL = "install"
-    const val JOB_UNINSTALL = "uninstall"
     private const val PLAY = "com.android.vending"
-
-    enum class Step { REMOVE_UPDATES, UNINSTALL, INSTALL, DONE }
 
     private val WANTED = listOf(
         "com.google.android.apps.auto.carservice.gmscorecompat.FirstActivityImpl",
@@ -76,51 +71,28 @@ object AaInstaller {
         context.packageManager.getPackageInfo(GEARHEAD, 0).versionName ?: ""
     }.getOrDefault("")
 
-    private fun isSystem(a: ApplicationInfo) = a.flags and ApplicationInfo.FLAG_SYSTEM != 0
-    private fun isUpdatedSystem(a: ApplicationInfo) = a.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
-
-    fun step(context: Context): Step {
-        if (weInstalledIt(context)) return Step.DONE
-        val a = info(context) ?: return Step.INSTALL
-        if (isUpdatedSystem(a)) return Step.REMOVE_UPDATES
-        if (isSystem(a)) return Step.INSTALL
-        return Step.UNINSTALL
+    fun openStore(context: Context) {
+        val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$GEARHEAD")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(Intent(store).setPackage(PLAY)) }.isSuccess) return
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$GEARHEAD"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure { DiagLog.w(TAG, "could not open the store page: ${it.message}") }
     }
 
-    fun explain(context: Context): Pair<String, String> = when (step(context)) {
-        Step.DONE -> "FT installed Android Auto" to
-            "FT can ask it to project onto the car"
-        Step.REMOVE_UPDATES -> "Android Auto belongs to ${installerOfAndroidAuto(context) ?: "the phone"}" to
-            "FT keeps a copy, takes the update off, then puts its own copy back"
-        Step.UNINSTALL -> "Android Auto belongs to ${installerOfAndroidAuto(context) ?: "another installer"}" to
-            "FT keeps a copy, removes it, then puts its own copy back"
-        Step.INSTALL -> if (stashed(context).isNotEmpty()) "A copy of Android Auto is waiting" to
-            "FT will put it back and become its installer"
-        else "Android Auto is not really installed" to
-            "Pick a saved apk or apks of it and FT will install it"
+    fun forgetOldCopy(context: Context) {
+        val dir = File(context.cacheDir, "aa")
+        if (dir.exists() && dir.deleteRecursively()) DiagLog.i(TAG, "removed the copy of Android Auto older FT versions kept")
     }
 
-    private fun receipt(context: Context, job: String, id: Int): PendingIntent =
+    private fun receipt(context: Context, id: Int): PendingIntent =
         PendingIntent.getBroadcast(
             context, id,
-            Intent(ACTION_RESULT).setPackage(context.packageName).putExtra(EXTRA_JOB, job),
+            Intent(ACTION_RESULT).setPackage(context.packageName),
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-
-    fun removeUpdates(context: Context): Boolean = runCatching {
-        DiagLog.i(TAG, "Android Auto shipped with the phone, so confirm Uninstall updates on the next screen")
-        context.startActivity(
-            Intent(Intent.ACTION_DELETE, Uri.parse("package:$GEARHEAD"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-        true
-    }.onFailure { DiagLog.e(TAG, "could not open the uninstall screen", it) }.getOrDefault(false)
-
-    fun uninstall(context: Context): Boolean = runCatching {
-        DiagLog.i(TAG, "removing Android Auto so FT can put it back as its installer")
-        context.packageManager.packageInstaller.uninstall(GEARHEAD, receipt(context, JOB_UNINSTALL, 2).intentSender)
-        true
-    }.onFailure { DiagLog.e(TAG, "could not remove Android Auto", it) }.getOrDefault(false)
 
     private fun open(context: Context, uri: Uri) =
         context.contentResolver.openInputStream(uri) ?: error("cannot read the chosen file")
@@ -194,54 +166,11 @@ object AaInstaller {
                     }
                 }
             }
-            session.commit(receipt(context, JOB_INSTALL, sessionId).intentSender)
+            session.commit(receipt(context, sessionId).intentSender)
         }
         DiagLog.i(TAG, "installing Android Auto; confirm the prompt on the phone")
         true
     }.onFailure { DiagLog.e(TAG, "could not start the Android Auto install", it) }.getOrDefault(false)
-
-    fun stash(context: Context): Boolean {
-        val a = info(context) ?: return false
-        if (!isUpdatedSystem(a) && isSystem(a)) return false
-        val dir = File(context.cacheDir, "aa").apply { deleteRecursively(); mkdirs() }
-        val parts = (listOf(a.sourceDir) + (a.splitSourceDirs?.toList() ?: emptyList())).filterNotNull()
-        var kept = 0
-        for (p in parts) {
-            val src = File(p)
-            val out = File(dir, if (src.name.endsWith(".apk", true)) src.name else "${src.name}.apk")
-            val ok = runCatching { src.inputStream().use { i -> out.outputStream().use { o -> i.copyTo(o, 1 shl 16) } }; true }
-                .getOrElse { DiagLog.w(TAG, "could not keep ${src.name}: ${it.message}"); false }
-            if (ok) kept++
-        }
-        if (kept == 0) { dir.deleteRecursively(); return false }
-        DiagLog.i(TAG, "kept a copy of Android Auto ${version(context)} so FT can put it back")
-        return true
-    }
-
-    fun stashed(context: Context): List<File> =
-        File(context.cacheDir, "aa").listFiles()?.filter { it.name.endsWith(".apk", true) }?.sortedBy { it.name } ?: emptyList()
-
-    fun installStash(context: Context): Boolean = runCatching {
-        val parts = stashed(context)
-        require(parts.isNotEmpty()) { "no kept copy of Android Auto" }
-        val installer = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setAppPackageName(GEARHEAD)
-            runCatching { setInstallReason(PackageManager.INSTALL_REASON_USER) }
-        }
-        val sessionId = installer.createSession(params)
-        installer.openSession(sessionId).use { session ->
-            for (p in parts) {
-                session.openWrite(p.name, 0, p.length()).use { out ->
-                    p.inputStream().use { it.copyTo(out, 1 shl 16) }
-                    session.fsync(out)
-                }
-            }
-            session.commit(receipt(context, JOB_INSTALL, sessionId).intentSender)
-        }
-        DiagLog.i(TAG, "putting the kept copy of Android Auto back; confirm the prompt on the phone")
-        true
-    }.onFailure { DiagLog.e(TAG, "could not put Android Auto back", it) }.getOrDefault(false)
 
     fun enableWirelessComponents(context: Context): Boolean {
         if (!weInstalledIt(context)) {
@@ -265,22 +194,5 @@ object AaInstaller {
             ok = ok && done
         }
         return ok
-    }
-
-    fun stopAutoUpdates(context: Context): Boolean {
-        val hasPlay = runCatching { context.packageManager.getApplicationInfo(PLAY, 0); true }.getOrDefault(false)
-        if (!hasPlay) {
-            DiagLog.i(TAG, "no store on this phone, so nothing can take Android Auto back from FT")
-            return true
-        }
-        DiagLog.w(TAG, "turn off auto-update for Android Auto on the store page that just opened, or the store will take it back from FT")
-        return runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$GEARHEAD"))
-                    .setPackage(PLAY)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-            true
-        }.onFailure { DiagLog.w(TAG, "could not open the store page: ${it.message}") }.getOrDefault(false)
     }
 }

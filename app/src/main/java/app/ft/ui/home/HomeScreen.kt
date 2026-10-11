@@ -78,7 +78,7 @@ import app.ft.aa.AaInstaller
 import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepState
 import app.ft.ui.components.StepMark
-import app.ft.ui.components.AaStartChoice
+import app.ft.ui.components.AaStart
 import app.ft.ui.components.rememberRootGranted
 import app.ft.core.RootPrep
 import app.ft.ui.components.rememberAaServerOn
@@ -110,7 +110,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val touchOn = remember(resumed) { FTTouchService.enabled }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
     val backgroundOn = remember(resumed) { (context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) != false }
-    val aaStep = remember(resumed) { AaInstaller.step(context) }
+    val aaOwnCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
     val aaInstalled = remember(resumed) { AaInstaller.installed(context) }
 
     val on = car.running || autoConnect
@@ -238,11 +238,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 }
                 if (aaInstalled) {
                     if (!rememberRootGranted()) {
-                        AaStartChoice(rememberAaServerOn(), reinstalled = aaStep == AaInstaller.Step.DONE) {
-                            if (aaStep != AaInstaller.Step.DONE) {
-                                FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text(stringResource(R.string.home_aa_set_up), maxLines = 1) }
-                            }
-                        }
+                        AaStart(rememberAaServerOn(), aaOwnCopy)
                         Spacer(Modifier.height(8.dp))
                     }
                     SwitchRow(stringResource(R.string.home_aa_start_with_car), aaAuto) {

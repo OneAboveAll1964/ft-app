@@ -55,13 +55,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import app.ft.ui.components.AaStartChoice
+import app.ft.ui.components.AaMissing
+import app.ft.ui.components.AaStart
 import app.ft.ui.components.rememberRootGranted
 import app.ft.ui.components.rememberAaServerOn
-import app.ft.ui.components.Stepper
-import app.ft.ui.components.StepItem
 import app.ft.ui.components.CornerPicker
 import app.ft.ui.car.CarStyles
 import app.ft.aa.AaInstaller
@@ -92,7 +89,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
 }
 
 @Composable
-fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onTakeOverAa: () -> Unit, onOpen: (SettingsPage) -> Unit) {
+fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> Unit, onOpen: (SettingsPage) -> Unit) {
     val root = rememberRootGranted()
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -103,7 +100,7 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onTakeOverAa: () -> 
             items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
             item { MadeBy() }
         } else {
-            if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup(onTakeOverAa) } }
+            if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup(onPickAaFile) } }
             if (page == SettingsPage.CAR_SCREEN) item { Group { CornerSetting() } }
             item { Group { PageContent(page) } }
         }
@@ -153,50 +150,17 @@ private fun MadeBy() {
 private const val PROFILE = "https://github.com/OneAboveAll1964"
 
 @Composable
-private fun AaSetup(onTakeOverAa: () -> Unit) {
+private fun AaSetup(onPickAaFile: () -> Unit) {
     val context = LocalContext.current
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
         onPauseOrDispose { }
     }
-    val step = remember(resumed) { AaInstaller.step(context) }
-    val hasCopy = remember(resumed) { AaInstaller.stashed(context).isNotEmpty() }
     val installed = remember(resumed) { AaInstaller.installed(context) }
+    val ownCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
     val serverOn = rememberAaServerOn()
-    if (!installed && !hasCopy) {
-        Text(stringResource(R.string.aa_missing_title), style = MaterialTheme.typography.titleMedium)
-        Text(
-            stringResource(R.string.aa_missing_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Stepper(aaSetupSteps(step, hasCopy, onTakeOverAa), running = false)
-        return
-    }
-    AaStartChoice(serverOn, reinstalled = step == AaInstaller.Step.DONE) {
-        if (step != AaInstaller.Step.DONE) {
-            Spacer(Modifier.height(10.dp))
-            Stepper(aaSetupSteps(step, hasCopy, onTakeOverAa), running = false)
-            Text(
-                stringResource(R.string.aa_after_body),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun aaSetupSteps(step: AaInstaller.Step, hasCopy: Boolean, run: () -> Unit): List<StepItem> {
-    val remove = when (step) {
-        AaInstaller.Step.REMOVE_UPDATES -> StepItem(stringResource(R.string.aa_step_remove_update), false, hint = stringResource(R.string.aa_step_keeps_copy), action = stringResource(R.string.action_remove), onAction = run)
-        AaInstaller.Step.UNINSTALL -> StepItem(stringResource(R.string.aa_step_remove_aa), false, hint = stringResource(R.string.aa_step_keeps_copy), action = stringResource(R.string.action_remove), onAction = run)
-        else -> if (hasCopy) StepItem(stringResource(R.string.aa_step_remove_store_copy), true) else null
-    }
-    val install = if (hasCopy || remove != null) StepItem(stringResource(R.string.aa_step_put_back), step == AaInstaller.Step.DONE, action = stringResource(R.string.aa_action_put_back), onAction = run)
-    else StepItem(stringResource(R.string.aa_step_install), step == AaInstaller.Step.DONE, hint = stringResource(R.string.aa_step_pick_file), action = stringResource(R.string.aa_action_pick_file), onAction = run)
-    return listOfNotNull(remove, install)
+    if (installed) AaStart(serverOn, ownCopy, framed = false) else AaMissing(onPickAaFile, framed = false)
 }
 
 @Composable

@@ -37,6 +37,7 @@ class FTApp : Application() {
         DiagLog.i("App", "phone ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (${android.os.Build.DEVICE}), Android ${android.os.Build.VERSION.RELEASE} SDK ${android.os.Build.VERSION.SDK_INT}, " +
             "chip ${if (android.os.Build.VERSION.SDK_INT >= 31) "${android.os.Build.SOC_MANUFACTURER} ${android.os.Build.SOC_MODEL}" else android.os.Build.HARDWARE}, build ${android.os.Build.DISPLAY}")
         scope.launch(Dispatchers.IO) {
+            app.ft.aa.AaInstaller.forgetOldCopy(this@FTApp)
             if (app.ft.core.Root.ensure()) app.ft.core.RootPrep.grants(this@FTApp)
         }
     }

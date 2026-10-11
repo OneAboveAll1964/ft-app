@@ -28,12 +28,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MotionScheme
@@ -95,47 +91,38 @@ fun rememberAaServerOn(): Boolean? {
 }
 
 @Composable
-fun AaStartChoice(serverOn: Boolean?, reinstalled: Boolean, reinstall: @Composable ColumnScope.() -> Unit) {
+fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
+    val context = LocalContext.current
     var help by remember { mutableStateOf(false) }
-    if (reinstalled) {
-        OptionCard(1, stringResource(R.string.aa_own_copy), active = true, status = stringResource(R.string.state_ready)) {
-            Text(
-                stringResource(R.string.aa_own_copy_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            reinstall()
+    if (ownCopy) {
+        OptionCard(stringResource(R.string.aa_own_copy), active = true, status = stringResource(R.string.state_ready), framed = framed) {
+            Note(stringResource(R.string.aa_own_copy_body))
+            FilledTonalButton(onClick = { AaInstaller.openStore(context) }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                Text(stringResource(R.string.aa_open_store), maxLines = 1)
+            }
         }
         return
     }
-    Text(stringResource(R.string.aa_pick_way), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(10.dp))
     val on = serverOn == true
-    OptionCard(1, stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking })) {
-        Text(
-            stringResource(R.string.aa_server_option_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (!on) {
-            val context = LocalContext.current
-            ButtonPair(stringResource(R.string.aa_show_me_how), { help = true }, stringResource(R.string.aa_open_aa), { AaInstaller.openSettings(context) })
-        }
-    }
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        HorizontalDivider(Modifier.weight(1f))
-        Text(stringResource(R.string.aa_or), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp))
-        HorizontalDivider(Modifier.weight(1f))
-    }
-    OptionCard(2, stringResource(R.string.aa_downgrade_option), active = false, status = null) {
-        Text(
-            stringResource(R.string.aa_downgrade_option_body),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        reinstall()
+    OptionCard(stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking }), framed = framed) {
+        Note(stringResource(R.string.aa_server_option_body))
+        if (!on) ButtonPair(stringResource(R.string.aa_show_me_how), { help = true }, stringResource(R.string.aa_open_aa), { AaInstaller.openSettings(context) })
     }
     if (help) ServerHelpSheet(serverOn) { help = false }
+}
+
+@Composable
+fun AaMissing(onPickFile: () -> Unit, framed: Boolean = true) {
+    val context = LocalContext.current
+    OptionCard(stringResource(R.string.aa_missing_title), active = false, status = null, framed = framed) {
+        Note(stringResource(R.string.aa_missing_body))
+        ButtonPair(stringResource(R.string.aa_open_store), { AaInstaller.openStore(context) }, stringResource(R.string.aa_action_pick_file), onPickFile)
+    }
+}
+
+@Composable
+private fun Note(text: String) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -165,35 +152,37 @@ private fun ButtonPair(first: String, onFirst: () -> Unit, second: String, onSec
 
 @Composable
 private fun OptionCard(
-    number: Int,
     title: String,
     active: Boolean,
     status: String?,
+    framed: Boolean,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = if (active) scheme.primaryContainer.copy(alpha = 0.55f) else scheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+    val inside: @Composable () -> Unit = {
+        Column(if (framed) Modifier.padding(horizontal = 16.dp, vertical = 14.dp) else Modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(26.dp).clip(CircleShape).border(2.dp, if (active) scheme.primary else scheme.outline, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (active) Icon(Icons.Filled.Check, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
-                    else StepNumber(number, scheme.onSurfaceVariant, bold = false)
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(
+                    title,
+                    style = if (framed) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
                 if (status != null) StatusChip(status, active)
             }
             Spacer(Modifier.height(6.dp))
             content()
         }
     }
+    if (!framed) {
+        inside()
+        return
+    }
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = if (active) scheme.primaryContainer.copy(alpha = 0.55f) else scheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) { inside() }
 }
 
 @Composable

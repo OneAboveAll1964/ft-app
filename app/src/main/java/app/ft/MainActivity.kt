@@ -113,7 +113,6 @@ class MainActivity : ComponentActivity() {
 
     private val installResult = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
-            val job = i?.getStringExtra(AaInstaller.EXTRA_JOB) ?: AaInstaller.JOB_INSTALL
             when (i?.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
                 PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                     val next = if (Build.VERSION.SDK_INT >= 33)
@@ -122,15 +121,11 @@ class MainActivity : ComponentActivity() {
                     next?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     runCatching { startActivity(next) }
                 }
-                PackageInstaller.STATUS_SUCCESS -> if (job == AaInstaller.JOB_UNINSTALL) {
-                    DiagLog.i("AaSetup", "Android Auto removed, now pick the apk to put it back")
-                    takeOverAndroidAuto()
-                } else {
+                PackageInstaller.STATUS_SUCCESS -> {
                     DiagLog.i("AaSetup", "Android Auto installed by FT, so FT is now its installer")
                     AaInstaller.enableWirelessComponents(this@MainActivity)
-                    AaInstaller.stopAutoUpdates(this@MainActivity)
                 }
-                else -> DiagLog.w("AaSetup", "$job did not finish: ${i?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "cancelled"}")
+                else -> DiagLog.w("AaSetup", "the Android Auto install did not finish: ${i?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "cancelled"}")
             }
         }
     }
@@ -152,7 +147,7 @@ class MainActivity : ComponentActivity() {
                     FTRoot(
                         onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                         onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
-                        onTakeOverAa = { takeOverAndroidAuto() }
+                        onPickAaFile = { pickAndroidAuto() }
                     )
                 }
             }
@@ -190,8 +185,7 @@ class MainActivity : ComponentActivity() {
             val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
             am.mode = if (intent.getBooleanExtra("fakeCall", false)) android.media.AudioManager.MODE_IN_COMMUNICATION else android.media.AudioManager.MODE_NORMAL
         }
-        if (intent.getBooleanExtra("aaSetup", false)) takeOverAndroidAuto()
-        if (intent.getBooleanExtra("aaStash", false)) AaInstaller.stash(this)
+        if (intent.getBooleanExtra("aaSetup", false)) pickAndroidAuto()
         if (intent.getBooleanExtra("startAa", false)) CarLifeService.startAa()
         if (intent.getBooleanExtra("aaWireless", false)) CarLifeService.startAaWireless()
         intent.getStringExtra("btSend")?.let { CarLifeService.btSend(it) }
@@ -216,31 +210,15 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }
     }
 
-    private fun takeOverAndroidAuto() {
+    private fun pickAndroidAuto() {
         if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
-            DiagLog.i("AaSetup", "let FT install apps on the screen that just opened, then tap Set up again")
+            DiagLog.i("AaSetup", "let FT install apps on the screen that just opened, then tap Pick file again")
             runCatching { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))) }
             return
         }
-        when (AaInstaller.step(this)) {
-            AaInstaller.Step.DONE -> {
-                AaInstaller.enableWirelessComponents(this)
-                AaInstaller.stopAutoUpdates(this)
-            }
-            AaInstaller.Step.REMOVE_UPDATES -> {
-                AaInstaller.stash(this)
-                AaInstaller.removeUpdates(this)
-            }
-            AaInstaller.Step.UNINSTALL -> {
-                AaInstaller.stash(this)
-                AaInstaller.uninstall(this)
-            }
-            AaInstaller.Step.INSTALL -> if (AaInstaller.stashed(this).isNotEmpty()) AaInstaller.installStash(this) else {
-                DiagLog.i("AaSetup", "pick a saved copy of Android Auto, an apk or an apks, and FT will install it")
-                runCatching { pickAaApk.launch(arrayOf("*/*")) }
-                    .onFailure { DiagLog.e("AaSetup", "no file picker available", it) }
-            }
-        }
+        DiagLog.i("AaSetup", "pick a saved copy of Android Auto, an apk or an apks, and FT will install it")
+        runCatching { pickAaApk.launch(arrayOf("*/*")) }
+            .onFailure { DiagLog.e("AaSetup", "no file picker available", it) }
     }
 
     override fun onDestroy() {
@@ -278,7 +256,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOverAa: () -> Unit) {
+fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     val inPage = screen == Screen.SETTINGS && settingsPage != null
@@ -360,7 +338,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
                     }
                 )
                 Screen.LOG -> DiagnosticsScreen(pad)
-                Screen.SETTINGS -> SettingsScreen(pad, page, onTakeOverAa) { settingsPage = it }
+                Screen.SETTINGS -> SettingsScreen(pad, page, onPickAaFile) { settingsPage = it }
             }
         }
     }
