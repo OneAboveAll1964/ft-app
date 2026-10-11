@@ -22,6 +22,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -92,6 +93,7 @@ import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
 import app.ft.core.DiagLog
+import app.ft.core.CarInfo
 import app.ft.core.Links
 import app.ft.media.CarPlayer
 import app.ft.media.MediaLibrary
@@ -153,6 +155,12 @@ private fun CarRoot(style: CarStyle) {
         }
     }
     val pad = sidePadding(style.corner)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    DisposableEffect(style.widgets) {
+        CarInfo.start(context, scope, style.widgets)
+        onDispose { CarInfo.stop(context) }
+    }
     LaunchedEffect(view) { DiagLog.i("Car", "car screen: ${view.name}") }
     LaunchedEffect(nowPlaying) { if (view == CarView.MUSIC) DiagLog.i("Car", if (nowPlaying) "music: now playing" else "music: song list") }
     LaunchedEffect(Unit) {
@@ -261,14 +269,17 @@ private fun CornerPill(corner: Int, onClick: () -> Unit) {
 private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean) -> Unit) {
     val player by CarPlayer.state.collectAsState()
     val context = LocalContext.current
-    Box(Modifier.fillMaxSize()) {
-    Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-        Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Clock(style.clock24)
-            if (style.showLink) LinkChip(state)
-            CarHomeButton { CarLifeService.goToCarHome() }
-            Spacer(Modifier.weight(1f))
+    val hasInfo = style.showClock || style.showLink || style.showCarHome || style.showMusic || style.showAa || style.widgets.isNotEmpty()
+    val info: @Composable ColumnScope.() -> Unit = {
+        if (style.showClock) Clock(style.clock24)
+        if (style.showLink) LinkChip(state)
+        if (style.showCarHome) CarHomeButton { CarLifeService.goToCarHome() }
+        CarWidgets(style)
+        Spacer(Modifier.weight(1f))
+        if (style.showMusic) {
             NowPlayingCard(player, onOpen = { onOpen(CarView.MUSIC, player.track != null && !player.track!!.video) })
+        }
+        if (style.showAa) {
             Button(
                 onClick = { CarLifeService.startAa() },
                 modifier = Modifier.fillMaxWidth().height(84.dp),
@@ -280,19 +291,28 @@ private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean
                 Text("Android Auto", style = MaterialTheme.typography.headlineSmall, maxLines = 1)
             }
         }
-        TileGrid(style.tiles, Modifier.weight(0.58f).fillMaxHeight(), onOpen = onOpen)
     }
-    Text(
-        "OneAboveAll",
-        style = MaterialTheme.typography.labelMedium,
-        color = Color.White.copy(alpha = 0.3f),
-        modifier = Modifier
-            .align(AbsoluteAlignment.BottomRight)
-            .padding(PaddingValues.Absolute(right = 20.dp, bottom = 2.dp))
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { Links.openOnPhone(context, Links.GITHUB) }
-            .padding(horizontal = 6.dp, vertical = 3.dp)
-    )
+    Box(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            if (hasInfo && !style.infoRight) {
+                Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp), content = info)
+            }
+            TileGrid(style.tiles, Modifier.weight(if (hasInfo) 0.58f else 1f).fillMaxHeight(), columns = style.columns, onOpen = onOpen)
+            if (hasInfo && style.infoRight) {
+                Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp), content = info)
+            }
+        }
+        Text(
+            "OneAboveAll",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White.copy(alpha = 0.3f),
+            modifier = Modifier
+                .align(AbsoluteAlignment.BottomRight)
+                .padding(PaddingValues.Absolute(right = 20.dp, bottom = 2.dp))
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { Links.openOnPhone(context, Links.GITHUB) }
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+        )
     }
 }
 
@@ -440,10 +460,10 @@ private fun MiniKey(icon: ImageVector, size: androidx.compose.ui.unit.Dp, filled
 private data class TileSpec(val key: String, val label: String, val icon: ImageVector?, val app: ImageBitmap?)
 
 @Composable
-private fun TileGrid(keys: List<String>, modifier: Modifier, interactive: Boolean = true, onOpen: (CarView, Boolean) -> Unit) {
+private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, interactive: Boolean = true, onOpen: (CarView, Boolean) -> Unit) {
     val context = LocalContext.current
     val specs = remember(keys, context) { keys.map { tileSpec(context, it) } }
-    val columns = CarStyle.columns(specs.size)
+    val columns = if (columns > 0) columns.coerceAtMost(specs.size.coerceAtLeast(1)) else CarStyle.columns(specs.size)
     val rows = specs.chunked(columns)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         rows.forEach { row ->

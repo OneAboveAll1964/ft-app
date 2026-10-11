@@ -282,4 +282,38 @@
         <item>تشرين الثاني</item>
         <item>كانون الأول</item>
     </string-array>
+    <string name="weather_clear">صافٍ</string>
+    <string name="weather_cloudy">غائم</string>
+    <string name="weather_fog">ضباب</string>
+    <string name="weather_drizzle">رذاذ</string>
+    <string name="weather_rain">مطر</string>
+    <string name="weather_snow">ثلج</string>
+    <string name="weather_thunder">عاصفة رعدية</string>
+    <string name="look_layout">التخطيط</string>
+    <string name="look_info_side">عمود الساعة في الجهة الأخرى</string>
+    <string name="look_columns">عدد المربعات في الصف</string>
+    <string name="look_cards">اعرض في الشاشة الرئيسية</string>
+    <string name="look_show_clock">الساعة</string>
+    <string name="look_show_music">بطاقة الموسيقى</string>
+    <string name="look_show_aa">زر Android Auto</string>
+    <string name="look_show_car_home">زر شاشة السيارة</string>
+    <string name="look_widgets">البطاقات الصغيرة</string>
+    <string name="look_widgets_about">بطاقات صغيرة بجانب الساعة في شاشة السيارة</string>
+    <string name="widget_weather">الطقس</string>
+    <string name="widget_battery">بطارية الهاتف</string>
+    <string name="widget_speed">السرعة</string>
+    <string name="widget_calendar">الموعد القادم</string>
+    <string name="widget_no_event">لا مواعيد قادمة</string>
+    <string name="widget_temperature">درجة الحرارة</string>
+    <string name="widget_celsius">مئوية</string>
+    <string name="widget_fahrenheit">فهرنهايت</string>
+    <string name="widget_kmh">كم/س</string>
+    <string name="widget_mph">ميل/س</string>
+    <string name="widget_needs_location">اسمح بالوصول إلى الموقع ليعمل الطقس والسرعة</string>
+    <string name="widget_needs_calendar">اسمح بالوصول إلى التقويم لعرض موعدك القادم</string>
+    <string name="look_daynight">مظهر مختلف في الليل</string>
+    <string name="look_daynight_about">يتبدّل عند الغروب والشروق في موقعك</string>
+    <string name="look_night_background">خلفية الليل</string>
+    <string name="look_night_colour">لون الليل</string>
+    <string name="look_same_as_day">كما في النهار</string>
 </resources>

@@ -282,4 +282,38 @@
         <item>تشرینی دووەم</item>
         <item>کانوونی یەکەم</item>
     </string-array>
+    <string name="weather_clear">ساماڵ</string>
+    <string name="weather_cloudy">هەوراوی</string>
+    <string name="weather_fog">تەم</string>
+    <string name="weather_drizzle">خڵۆڕە باران</string>
+    <string name="weather_rain">باران</string>
+    <string name="weather_snow">بەفر</string>
+    <string name="weather_thunder">هەورەتریشقە</string>
+    <string name="look_layout">شێوازی ڕێکخستن</string>
+    <string name="look_info_side">ستوونی کاتژمێر لەلای تر</string>
+    <string name="look_columns">ژمارەی خشتەکان لە ڕیزێکدا</string>
+    <string name="look_cards">لە شاشەی سەرەکیدا پیشان بدە</string>
+    <string name="look_show_clock">کاتژمێر</string>
+    <string name="look_show_music">کارتی مۆسیقا</string>
+    <string name="look_show_aa">دوگمەی Android Auto</string>
+    <string name="look_show_car_home">دوگمەی شاشەی ئۆتۆمبێل</string>
+    <string name="look_widgets">ویجێتەکان</string>
+    <string name="look_widgets_about">کارتی بچووک لەتەنیشت کاتژمێر لە شاشەی ئۆتۆمبێل</string>
+    <string name="widget_weather">کەشوهەوا</string>
+    <string name="widget_battery">باتریی مۆبایل</string>
+    <string name="widget_speed">خێرایی</string>
+    <string name="widget_calendar">چالاکیی داهاتوو</string>
+    <string name="widget_no_event">هیچ شتێکی داهاتوو نییە</string>
+    <string name="widget_temperature">پلەی گەرمی</string>
+    <string name="widget_celsius">سەلسیۆس</string>
+    <string name="widget_fahrenheit">فەهرنهایت</string>
+    <string name="widget_kmh">کم/کاتژمێر</string>
+    <string name="widget_mph">مایل/کاتژمێر</string>
+    <string name="widget_needs_location">ڕێگە بە شوێن بدە تا کەشوهەوا و خێرایی کار بکەن</string>
+    <string name="widget_needs_calendar">ڕێگە بە ڕۆژژمێر بدە تا چالاکیی داهاتووت دەربکەوێت</string>
+    <string name="look_daynight">ڕووکارێکی جیاواز لە شەودا</string>
+    <string name="look_daynight_about">لە ئاوابوون و خۆرهەڵاتندا لە شوێنی خۆت دەگۆڕێت</string>
+    <string name="look_night_background">پاشبنەمای شەو</string>
+    <string name="look_night_colour">ڕەنگی شەو</string>
+    <string name="look_same_as_day">وەک ڕۆژ</string>
 </resources>

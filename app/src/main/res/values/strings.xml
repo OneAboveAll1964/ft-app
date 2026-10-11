@@ -283,4 +283,38 @@
         <item>November</item>
         <item>December</item>
     </string-array>
+    <string name="weather_clear">Clear</string>
+    <string name="weather_cloudy">Cloudy</string>
+    <string name="weather_fog">Fog</string>
+    <string name="weather_drizzle">Drizzle</string>
+    <string name="weather_rain">Rain</string>
+    <string name="weather_snow">Snow</string>
+    <string name="weather_thunder">Thunderstorm</string>
+    <string name="look_layout">Layout</string>
+    <string name="look_info_side">Clock column on the other side</string>
+    <string name="look_columns">Tiles across</string>
+    <string name="look_cards">Show on the home screen</string>
+    <string name="look_show_clock">Clock</string>
+    <string name="look_show_music">Music card</string>
+    <string name="look_show_aa">Android Auto button</string>
+    <string name="look_show_car_home">Car screen button</string>
+    <string name="look_widgets">Widgets</string>
+    <string name="look_widgets_about">Small cards beside the clock on the car home</string>
+    <string name="widget_weather">Weather</string>
+    <string name="widget_battery">Phone battery</string>
+    <string name="widget_speed">Speed</string>
+    <string name="widget_calendar">Next event</string>
+    <string name="widget_no_event">Nothing coming up</string>
+    <string name="widget_temperature">Temperature</string>
+    <string name="widget_celsius">Celsius</string>
+    <string name="widget_fahrenheit">Fahrenheit</string>
+    <string name="widget_kmh">km/h</string>
+    <string name="widget_mph">mph</string>
+    <string name="widget_needs_location">Allow location so weather and speed can work</string>
+    <string name="widget_needs_calendar">Allow the calendar so your next event can show</string>
+    <string name="look_daynight">A different look at night</string>
+    <string name="look_daynight_about">Switches at sunset and sunrise where you are</string>
+    <string name="look_night_background">Night background</string>
+    <string name="look_night_colour">Night colour</string>
+    <string name="look_same_as_day">Same as day</string>
 </resources>

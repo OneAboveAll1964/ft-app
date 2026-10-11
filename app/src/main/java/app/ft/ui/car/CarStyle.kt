@@ -22,6 +22,13 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import app.ft.FTApp
+import app.ft.core.Prefs
+import app.ft.core.SunTimes
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.Calendar
+import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,16 +42,42 @@ data class CarStyle(
     val clock24: Boolean = true,
     val showLink: Boolean = false,
     val corner: Int = 0,
-    val photoStamp: Long = 0
+    val photoStamp: Long = 0,
+    val infoRight: Boolean = false,
+    val columns: Int = 0,
+    val showClock: Boolean = true,
+    val showMusic: Boolean = true,
+    val showAa: Boolean = true,
+    val showCarHome: Boolean = true,
+    val widgets: List<String> = emptyList(),
+    val fahrenheit: Boolean = false,
+    val mph: Boolean = false,
+    val dayNight: Boolean = false,
+    val nightBackground: String = "",
+    val nightAccent: Int = 0,
+    val night: Boolean = false
 ) {
-    val accentColor: Color get() = Color(accent)
+    private val dark: Boolean get() = dayNight && night
+
+    val backgroundNow: String get() = if (dark && nightBackground.isNotEmpty()) nightBackground else background
+    val accentNow: Int get() = if (dark && nightAccent != 0) nightAccent else accent
+    val accentColor: Color get() = Color(accentNow)
 
     companion object {
         const val PHOTO = "photo"
         const val DEFAULT_BACKGROUND = "deep"
         val DEFAULT_ACCENT = 0xFF5FE3C0.toInt()
         const val DEFAULT_TILES = "music,videos,youtube,maps,browser,apps"
-        const val MAX_TILES = 6
+        const val MAX_TILES = 8
+
+        const val WIDGET_WEATHER = "weather"
+        const val WIDGET_BATTERY = "battery"
+        const val WIDGET_SPEED = "speed"
+        const val WIDGET_CALENDAR = "calendar"
+        val WIDGETS = listOf(WIDGET_WEATHER, WIDGET_BATTERY, WIDGET_SPEED, WIDGET_CALENDAR)
+
+        fun parseWidgets(raw: String): List<String> =
+            raw.split(',').map { it.trim() }.filter { it in WIDGETS }.distinct()
 
         val PICTURES: List<Pair<String, Int>> = listOf(
             "blade" to R.drawable.car_bg_blade
@@ -97,8 +130,46 @@ object CarStyles {
             clock24 = p.carClock24,
             showLink = p.carShowLink,
             corner = p.aaCorner.coerceIn(0, 3),
-            photoStamp = if (photo.exists()) photo.lastModified() else 0
+            photoStamp = if (photo.exists()) photo.lastModified() else 0,
+            infoRight = p.carInfoRight,
+            columns = p.carColumns.coerceIn(0, 4),
+            showClock = p.carShowClock,
+            showMusic = p.carShowMusic,
+            showAa = p.carShowAa,
+            showCarHome = p.carShowCarHome,
+            widgets = CarStyle.parseWidgets(p.carWidgets),
+            fahrenheit = p.weatherFahrenheit,
+            mph = p.speedMph,
+            dayNight = p.carDayNight,
+            nightBackground = p.carNightBackground,
+            nightAccent = p.carNightAccent,
+            night = nightNow(p)
         )
+    }
+
+    fun nightNow(p: Prefs, millis: Long = System.currentTimeMillis()): Boolean {
+        if (!p.carDayNight) return false
+        val zone = TimeZone.getDefault()
+        val calendar = Calendar.getInstance(zone).apply { timeInMillis = millis }
+        val minute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+        val latitude = p.lastLatitude.toDouble()
+        val longitude = p.lastLongitude.toDouble()
+        val day = if (latitude != 0.0 || longitude != 0.0) SunTimes.of(latitude, longitude, millis, zone) else null
+        return SunTimes.night(minute, day)
+    }
+
+    fun watchDayNight(scope: CoroutineScope) {
+        scope.launch {
+            while (true) {
+                val p = FTApp.instance.prefs
+                val night = nightNow(p)
+                val style = _current.value
+                if (style.dayNight != p.carDayNight || style.night != night) {
+                    _current.value = style.copy(dayNight = p.carDayNight, night = night)
+                }
+                delay(60_000)
+            }
+        }
     }
 
     fun savePhoto(context: Context, uri: Uri): Boolean = runCatching {
@@ -129,7 +200,7 @@ fun carScheme(base: ColorScheme, accent: Color): ColorScheme = base.copy(
 
 @Composable
 fun CarBackground(style: CarStyle, modifier: Modifier = Modifier) {
-    val picture = CarStyle.picture(style.background)
+    val picture = CarStyle.picture(style.backgroundNow)
     if (picture != null) {
         Box(modifier.fillMaxSize().background(Color.Black)) {
             Image(painterResource(picture), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -137,7 +208,7 @@ fun CarBackground(style: CarStyle, modifier: Modifier = Modifier) {
         }
         return
     }
-    if (style.background == CarStyle.PHOTO && style.photoStamp > 0) {
+    if (style.backgroundNow == CarStyle.PHOTO && style.photoStamp > 0) {
         val photo by produceState<ImageBitmap?>(null, style.photoStamp) {
             value = withContext(Dispatchers.IO) {
                 runCatching {
@@ -151,5 +222,5 @@ fun CarBackground(style: CarStyle, modifier: Modifier = Modifier) {
         }
         return
     }
-    Box(modifier.fillMaxSize().background(Brush.linearGradient(CarStyle.gradient(style.background))))
+    Box(modifier.fillMaxSize().background(Brush.linearGradient(CarStyle.gradient(style.backgroundNow))))
 }

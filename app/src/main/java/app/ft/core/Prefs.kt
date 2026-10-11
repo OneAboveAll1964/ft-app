@@ -13,6 +13,24 @@ class Prefs(context: Context) {
     private fun set(key: String, v: Boolean) = sp.edit().putBoolean(key, v).apply()
     private fun str(key: String, def: String) = sp.getString(key, def) ?: def
     private fun set(key: String, v: String) = sp.edit().putString(key, v).apply()
+    private fun flt(key: String, def: Float) = sp.getFloat(key, def)
+    private fun set(key: String, v: Float) = sp.edit().putFloat(key, v).apply()
+    private fun lng(key: String, def: Long) = sp.getLong(key, def)
+    private fun set(key: String, v: Long) = sp.edit().putLong(key, v).apply()
+
+    val all: Map<String, *> get() = sp.all
+    fun put(key: String, value: Any?) {
+        val e = sp.edit()
+        when (value) {
+            is Boolean -> e.putBoolean(key, value)
+            is Int -> e.putInt(key, value)
+            is Long -> e.putLong(key, value)
+            is Float -> e.putFloat(key, value)
+            is String -> e.putString(key, value)
+            null -> e.remove(key)
+        }
+        e.apply()
+    }
 
     var cmdPort: Int get() = int("cmdPort", 7240); set(v) = set("cmdPort", v)
     var videoPort: Int get() = int("videoPort", 8240); set(v) = set("videoPort", v)
@@ -71,4 +89,31 @@ class Prefs(context: Context) {
     var musicPackage: String get() = str("pkgMusic", "com.spotify.music"); set(v) = set("pkgMusic", v)
     var videoPackage: String get() = str("pkgVideo", "com.teamsmart.videomanager.tv"); set(v) = set("pkgVideo", v)
     var phonePackage: String get() = str("pkgPhone", "com.samsung.android.dialer"); set(v) = set("pkgPhone", v)
+
+    var carInfoRight: Boolean get() = bool("carInfoRight", false); set(v) = set("carInfoRight", v)
+    var carColumns: Int get() = int("carColumns", 0); set(v) = set("carColumns", v)
+    var carShowClock: Boolean get() = bool("carShowClock", true); set(v) = set("carShowClock", v)
+    var carShowMusic: Boolean get() = bool("carShowMusic", true); set(v) = set("carShowMusic", v)
+    var carShowAa: Boolean get() = bool("carShowAa", true); set(v) = set("carShowAa", v)
+    var carShowCarHome: Boolean get() = bool("carShowCarHome", true); set(v) = set("carShowCarHome", v)
+
+    var carWidgets: String get() = str("carWidgets", ""); set(v) = set("carWidgets", v)
+    var weatherFahrenheit: Boolean get() = bool("weatherFahrenheit", false); set(v) = set("weatherFahrenheit", v)
+    var speedMph: Boolean get() = bool("speedMph", false); set(v) = set("speedMph", v)
+    var lastLatitude: Float get() = flt("lastLatitude", 0f); set(v) = set("lastLatitude", v)
+    var lastLongitude: Float get() = flt("lastLongitude", 0f); set(v) = set("lastLongitude", v)
+
+    var carDayNight: Boolean get() = bool("carDayNight", false); set(v) = set("carDayNight", v)
+    var carNightBackground: String get() = str("carNightBackground", "black"); set(v) = set("carNightBackground", v)
+    var carNightAccent: Int get() = int("carNightAccent", 0); set(v) = set("carNightAccent", v)
+
+    var wheelLongNext: Int get() = int("wheelLongNext", 0); set(v) = set("wheelLongNext", v)
+    var wheelLongPrev: Int get() = int("wheelLongPrev", 0); set(v) = set("wheelLongPrev", v)
+
+    var openOnConnect: String get() = str("openOnConnect", ""); set(v) = set("openOnConnect", v)
+    var openOnConnectSecond: String get() = str("openOnConnectSecond", ""); set(v) = set("openOnConnectSecond", v)
+
+    var weatherCelsius: Float get() = flt("weatherCelsius", 0f); set(v) = set("weatherCelsius", v)
+    var weatherCode: Int get() = int("weatherCode", -1); set(v) = set("weatherCode", v)
+    var weatherAt: Long get() = lng("weatherAt", 0L); set(v) = set("weatherAt", v)
 }

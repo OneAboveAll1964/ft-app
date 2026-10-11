@@ -69,6 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import app.ft.FTApp
+import androidx.compose.runtime.mutableIntStateOf
+import app.ft.core.CarInfo
 import app.ft.ui.car.CarIcons
 import app.ft.ui.car.CarPreview
 import app.ft.ui.car.CarStyle
@@ -100,6 +102,9 @@ fun CarLookSettings() {
         change()
         CarStyles.reload()
     }
+
+    var permissionTick by remember { mutableIntStateOf(0) }
+    val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissionTick++ }
 
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
@@ -200,6 +205,91 @@ fun CarLookSettings() {
         Toggle(stringResource(R.string.look_show_link), style.showLink) { on -> save { p.carShowLink = on } }
         Toggle(stringResource(R.string.look_song_info), p.carSongInfo) { on -> p.carSongInfo = on }
         Toggle(stringResource(R.string.look_hide_chat_audio), p.hideChatAudio) { on -> p.hideChatAudio = on }
+
+        Label(stringResource(R.string.look_layout))
+        Toggle(stringResource(R.string.look_info_side), style.infoRight) { on -> save { p.carInfoRight = on } }
+        Text(stringResource(R.string.look_columns), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val columnChoices = listOf(0, 2, 3, 4)
+        Choice(columnChoices.map { (if (it == 0) stringResource(R.string.choice_auto) else "$it") to (style.columns == it) }) { index ->
+            save { p.carColumns = columnChoices[index] }
+        }
+
+        Label(stringResource(R.string.look_cards))
+        Toggle(stringResource(R.string.look_show_clock), style.showClock) { on -> save { p.carShowClock = on } }
+        Toggle(stringResource(R.string.look_show_music), style.showMusic) { on -> save { p.carShowMusic = on } }
+        Toggle(stringResource(R.string.look_show_aa), style.showAa) { on -> save { p.carShowAa = on } }
+        Toggle(stringResource(R.string.look_show_car_home), style.showCarHome) { on -> save { p.carShowCarHome = on } }
+
+        Label(stringResource(R.string.look_widgets))
+        Text(stringResource(R.string.look_widgets_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        fun widget(key: String, on: Boolean) {
+            val list = style.widgets.toMutableList()
+            if (on) { if (key !in list) list += key } else list.remove(key)
+            save { p.carWidgets = list.joinToString(",") }
+        }
+        Toggle(stringResource(R.string.widget_weather), CarStyle.WIDGET_WEATHER in style.widgets) { on -> widget(CarStyle.WIDGET_WEATHER, on) }
+        Toggle(stringResource(R.string.widget_battery), CarStyle.WIDGET_BATTERY in style.widgets) { on -> widget(CarStyle.WIDGET_BATTERY, on) }
+        Toggle(stringResource(R.string.widget_speed), CarStyle.WIDGET_SPEED in style.widgets) { on -> widget(CarStyle.WIDGET_SPEED, on) }
+        Toggle(stringResource(R.string.widget_calendar), CarStyle.WIDGET_CALENDAR in style.widgets) { on -> widget(CarStyle.WIDGET_CALENDAR, on) }
+        if (CarStyle.WIDGET_WEATHER in style.widgets) {
+            Text(stringResource(R.string.widget_temperature), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Choice(listOf(stringResource(R.string.widget_celsius) to !style.fahrenheit, stringResource(R.string.widget_fahrenheit) to style.fahrenheit)) { index ->
+                save { p.weatherFahrenheit = index == 1 }
+            }
+        }
+        if (CarStyle.WIDGET_SPEED in style.widgets) {
+            Choice(listOf(stringResource(R.string.widget_kmh) to !style.mph, stringResource(R.string.widget_mph) to style.mph)) { index ->
+                save { p.speedMph = index == 1 }
+            }
+        }
+        val wantsLocation = CarStyle.WIDGET_WEATHER in style.widgets || CarStyle.WIDGET_SPEED in style.widgets
+        if (wantsLocation && CarInfo.needsLocation(context)) {
+            Need(stringResource(R.string.widget_needs_location)) {
+                permissions.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
+        }
+        if (CarStyle.WIDGET_CALENDAR in style.widgets && CarInfo.needsCalendar(context)) {
+            Need(stringResource(R.string.widget_needs_calendar)) {
+                permissions.launch(arrayOf(android.Manifest.permission.READ_CALENDAR))
+            }
+        }
+
+        Toggle(stringResource(R.string.look_daynight), style.dayNight) { on -> save { p.carDayNight = on } }
+        if (style.dayNight) {
+            Text(stringResource(R.string.look_daynight_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Label(stringResource(R.string.look_night_background))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    Swatch(chosen = style.nightBackground.isEmpty(), onClick = { save { p.carNightBackground = "" } }) {
+                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.look_same_as_day), style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+                items(CarStyle.BACKGROUNDS) { (name, colors) ->
+                    Swatch(chosen = style.nightBackground == name, onClick = { save { p.carNightBackground = name } }) {
+                        Box(Modifier.fillMaxSize().background(Brush.linearGradient(colors)))
+                    }
+                }
+            }
+            Label(stringResource(R.string.look_night_colour))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    Box(
+                        Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                            .border(if (style.nightAccent == 0) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                            .clickable { save { p.carNightAccent = 0 } }
+                    )
+                }
+                items(CarStyle.ACCENTS) { argb ->
+                    Box(
+                        Modifier.size(44.dp).clip(CircleShape).background(Color(argb))
+                            .border(if (style.nightAccent == argb) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                            .clickable { save { p.carNightAccent = argb } }
+                    )
+                }
+            }
+        }
     }
 
     if (picking >= 0) {
@@ -258,6 +348,30 @@ private fun ChipBody(label: String, icon: @Composable () -> Unit) {
     ) {
         icon()
         Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun Choice(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEachIndexed { index, (label, chosen) ->
+            Surface(
+                onClick = { onPick(index) },
+                shape = RoundedCornerShape(50),
+                color = if (chosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = if (chosen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Need(text: String, onAllow: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        TextButton(onClick = onAllow) { Text(stringResource(R.string.action_allow)) }
     }
 }
 

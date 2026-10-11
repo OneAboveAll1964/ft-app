@@ -80,6 +80,8 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import app.ft.core.Looks
+import app.ft.core.Language
+import app.ft.core.Lang
 import app.ft.core.Sizing
 import app.ft.ui.theme.Localized
 import app.ft.ui.theme.rememberDark
@@ -209,6 +211,16 @@ class MainActivity : ComponentActivity() {
             app.prefs.guidanceMode = intent.getIntExtra("guidance", CarAudioBus.GUIDANCE_UNTOUCHED)
             CarAudioBus.guidance = app.prefs.guidanceMode
         }
+        intent.getStringExtra("language")?.let { Lang.set(Language.of(it)) }
+        if (intent.hasExtra("carInfoRight")) { app.prefs.carInfoRight = intent.getBooleanExtra("carInfoRight", false); CarStyles.reload() }
+        if (intent.hasExtra("carColumns")) { app.prefs.carColumns = intent.getIntExtra("carColumns", 0); CarStyles.reload() }
+        if (intent.hasExtra("carShowClock")) { app.prefs.carShowClock = intent.getBooleanExtra("carShowClock", true); CarStyles.reload() }
+        if (intent.hasExtra("carShowMusic")) { app.prefs.carShowMusic = intent.getBooleanExtra("carShowMusic", true); CarStyles.reload() }
+        if (intent.hasExtra("carShowAa")) { app.prefs.carShowAa = intent.getBooleanExtra("carShowAa", true); CarStyles.reload() }
+        if (intent.hasExtra("carShowCarHome")) { app.prefs.carShowCarHome = intent.getBooleanExtra("carShowCarHome", true); CarStyles.reload() }
+        intent.getStringExtra("carWidgets")?.let { app.prefs.carWidgets = it; CarStyles.reload() }
+        if (intent.hasExtra("carDayNight")) { app.prefs.carDayNight = intent.getBooleanExtra("carDayNight", false); CarStyles.reload() }
+        intent.getStringExtra("carNightBackground")?.let { app.prefs.carNightBackground = it; CarStyles.reload() }
         if (intent.hasExtra("carClock24")) {
             app.prefs.carClock24 = intent.getBooleanExtra("carClock24", true)
             CarStyles.reload()

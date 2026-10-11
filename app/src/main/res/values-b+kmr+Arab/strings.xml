@@ -282,4 +282,38 @@
         <item>چریا دووێ</item>
         <item>کانوونا ئێکێ</item>
     </string-array>
+    <string name="weather_clear">ساف</string>
+    <string name="weather_cloudy">ئەورین</string>
+    <string name="weather_fog">موژ</string>
+    <string name="weather_drizzle">بارانا ورد</string>
+    <string name="weather_rain">باران</string>
+    <string name="weather_snow">بەرف</string>
+    <string name="weather_thunder">برووسک</string>
+    <string name="look_layout">شێوازێ رێکخستنێ</string>
+    <string name="look_info_side">ستوونێ دەمژمێرێ ل لایێ دی</string>
+    <string name="look_columns">ژمارا خانەیان د رێزەکێ دا</string>
+    <string name="look_cards">ل شاشەیا سەرەکی نیشان بدە</string>
+    <string name="look_show_clock">دەمژمێر</string>
+    <string name="look_show_music">کارتێ مۆزیکێ</string>
+    <string name="look_show_aa">دوگما Android Auto</string>
+    <string name="look_show_car_home">دوگما شاشەیا ترومبێلێ</string>
+    <string name="look_widgets">ویجێت</string>
+    <string name="look_widgets_about">کارتێن بچویک ل تەنیشتا دەمژمێرێ ل شاشەیا ترومبێلێ</string>
+    <string name="widget_weather">کەشوهەوا</string>
+    <string name="widget_battery">باتریا مۆبایلی</string>
+    <string name="widget_speed">لەز</string>
+    <string name="widget_calendar">بویەرا بهێت</string>
+    <string name="widget_no_event">چ تشتەکێ بهێت نینە</string>
+    <string name="widget_temperature">پلا گەرمییێ</string>
+    <string name="widget_celsius">سەلسیۆس</string>
+    <string name="widget_fahrenheit">فەهرنهایت</string>
+    <string name="widget_kmh">کم/دەمژمێر</string>
+    <string name="widget_mph">مایل/دەمژمێر</string>
+    <string name="widget_needs_location">رێ ب جهی بدە دا کەشوهەوا و لەز کار بکەن</string>
+    <string name="widget_needs_calendar">رێ ب رۆژژمێری بدە دا بویەرا تە یا بهێت دیار ببیت</string>
+    <string name="look_daynight">شێوەیەکێ جودا د شەڤێ دا</string>
+    <string name="look_daynight_about">ل ئاڤابوون و هلهاتنا رۆژێ ل جهێ تە دهێتە گوهۆڕین</string>
+    <string name="look_night_background">باکگراوندا شەڤێ</string>
+    <string name="look_night_colour">رەنگێ شەڤێ</string>
+    <string name="look_same_as_day">وەکی رۆژێ</string>
 </resources>
