@@ -92,6 +92,7 @@ import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
 import app.ft.core.DiagLog
+import app.ft.core.Links
 import app.ft.media.CarPlayer
 import app.ft.media.MediaLibrary
 import app.ft.projection.CarTouchZones
@@ -259,6 +260,8 @@ private fun CornerPill(corner: Int, onClick: () -> Unit) {
 @Composable
 private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean) -> Unit) {
     val player by CarPlayer.state.collectAsState()
+    val context = LocalContext.current
+    Box(Modifier.fillMaxSize()) {
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Clock(style.clock24)
@@ -278,6 +281,18 @@ private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean
             }
         }
         TileGrid(style.tiles, Modifier.weight(0.58f).fillMaxHeight(), onOpen = onOpen)
+    }
+    Text(
+        "OneAboveAll",
+        style = MaterialTheme.typography.labelMedium,
+        color = Color.White.copy(alpha = 0.3f),
+        modifier = Modifier
+            .align(AbsoluteAlignment.BottomRight)
+            .padding(PaddingValues.Absolute(right = 20.dp, bottom = 2.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { Links.openOnPhone(context, Links.GITHUB) }
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+    )
     }
 }
 

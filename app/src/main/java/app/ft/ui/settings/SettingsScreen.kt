@@ -136,7 +136,7 @@ private fun MadeBy() {
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         TextButton(onClick = {
             runCatching {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PROFILE)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.ft.core.Links.GITHUB)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
         }) {
             Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
@@ -147,7 +147,6 @@ private fun MadeBy() {
     }
 }
 
-private const val PROFILE = "https://github.com/OneAboveAll1964"
 
 @Composable
 private fun AaSetup(onPickAaFile: () -> Unit) {
