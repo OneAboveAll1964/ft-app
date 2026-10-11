@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
@@ -62,6 +63,7 @@ data class CarStyle(
     val backgroundNow: String get() = if (dark && nightBackground.isNotEmpty()) nightBackground else background
     val accentNow: Int get() = if (dark && nightAccent != 0) nightAccent else accent
     val accentColor: Color get() = Color(accentNow)
+    val cardColor: Color get() = if (backgroundNow in LIGHT_CARDS) Color.White.copy(alpha = 0.09f) else Color.Black.copy(alpha = 0.3f)
 
     companion object {
         const val PHOTO = "photo"
@@ -84,6 +86,8 @@ data class CarStyle(
         )
 
         fun picture(name: String): Int? = PICTURES.firstOrNull { it.first == name }?.second
+
+        private val LIGHT_CARDS = setOf("black", "graphite")
 
         val BACKGROUNDS: List<Pair<String, List<Color>>> = listOf(
             "deep" to listOf(Color(0xFF0B1D2A), Color(0xFF0F2634)),
@@ -197,6 +201,8 @@ fun carScheme(base: ColorScheme, accent: Color): ColorScheme = base.copy(
     onBackground = Color.White,
     onSurface = Color.White
 )
+
+val LocalCarCard = staticCompositionLocalOf { Color.Black.copy(alpha = 0.3f) }
 
 @Composable
 fun CarBackground(style: CarStyle, modifier: Modifier = Modifier) {

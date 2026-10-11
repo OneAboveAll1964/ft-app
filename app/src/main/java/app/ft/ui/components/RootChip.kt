@@ -67,7 +67,7 @@ fun RootChip() {
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White))
-            Text(stringResource(R.string.root_chip), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.8.sp)
+            InkText(stringResource(R.string.root_chip), androidx.compose.ui.text.TextStyle(fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.8.sp))
         }
     }
     if (open) RootSheet { open = false }

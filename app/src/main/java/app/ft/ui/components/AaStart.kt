@@ -193,7 +193,7 @@ private fun StatusChip(status: String, active: Boolean) {
         color = if (active) scheme.primary else scheme.surfaceContainerHighest,
         contentColor = if (active) scheme.onPrimary else scheme.onSurfaceVariant
     ) {
-        Text(status, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp))
+        InkText(status, MaterialTheme.typography.labelMedium, Modifier.padding(horizontal = 10.dp, vertical = 3.dp))
     }
 }
 

@@ -365,4 +365,22 @@
     <string name="tile_add">زیادکردنی دوگمەکە بۆ ڕێکخستنە خێراکان</string>
     <string name="tile_add_about">دوگمەیەکی FT دەخاتە ئەو پەڕەیەی لە سەرەوە ڕایدەکێشیت، تاکو بەبێ کردنەوەی FT بیکەیتەوە.</string>
     <string name="tile_add_do">دوگمەکە زیاد بکە</string>
+    <string name="look_section_colours">پاشبنەما و ڕەنگ</string>
+    <string name="look_section_home">شاشەی سەرەکی</string>
+    <string name="look_clock_side">ستوونی کاتژمێر</string>
+    <string name="side_left">چەپ</string>
+    <string name="side_right">ڕاست</string>
+    <string name="look_preview_day">ڕۆژ</string>
+    <string name="look_preview_night">شەو</string>
+    <string name="widget_speed_unit">یەکەی خێرایی</string>
+    <string name="widget_charging">شەحن دەکرێت</string>
+    <string name="widget_sample_event">نانی نیوەڕۆ</string>
+    <string name="corner_place">شوێن</string>
+    <string name="corner_top_left">سەرەوەی چەپ</string>
+    <string name="corner_top_right">سەرەوەی ڕاست</string>
+    <string name="corner_bottom_left">خوارەوەی چەپ</string>
+    <string name="corner_bottom_right">خوارەوەی ڕاست</string>
+    <string name="connect_section">کاتێک ئۆتۆمبێلەکە پەیوەست دەبێت</string>
+    <string name="look_default_buttons">دوگمە بنەڕەتییەکان بگەڕێنەوە</string>
+    <string name="sound_music_section">مۆسیقا</string>
 </resources>

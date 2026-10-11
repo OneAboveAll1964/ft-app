@@ -366,4 +366,22 @@
     <string name="tile_add">Add the button to Quick Settings</string>
     <string name="tile_add_about">Puts an FT button in the panel you pull down from the top, so you can switch FT on without opening it.</string>
     <string name="tile_add_do">Add the button</string>
+    <string name="look_section_colours">Background and colour</string>
+    <string name="look_section_home">Home screen</string>
+    <string name="look_clock_side">Clock column</string>
+    <string name="side_left">Left</string>
+    <string name="side_right">Right</string>
+    <string name="look_preview_day">Day</string>
+    <string name="look_preview_night">Night</string>
+    <string name="widget_speed_unit">Speed unit</string>
+    <string name="widget_charging">charging</string>
+    <string name="widget_sample_event">Lunch</string>
+    <string name="corner_place">Place</string>
+    <string name="corner_top_left">Top left</string>
+    <string name="corner_top_right">Top right</string>
+    <string name="corner_bottom_left">Bottom left</string>
+    <string name="corner_bottom_right">Bottom right</string>
+    <string name="connect_section">When the car connects</string>
+    <string name="look_default_buttons">Put the default buttons back</string>
+    <string name="sound_music_section">Music</string>
 </resources>

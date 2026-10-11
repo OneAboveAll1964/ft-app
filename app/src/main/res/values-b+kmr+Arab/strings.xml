@@ -365,4 +365,22 @@
     <string name="tile_add">زێدەکرنا دوگمەی بۆ ڕێکخستنێن خێرا</string>
     <string name="tile_add_about">دوگمەکا FT دئێخیتە وێ پەڕێ یا تو ژ سەرێ دکێشی خوارێ، دا ب بێ ڤەکرنا FT وێ ڤەکەی.</string>
     <string name="tile_add_do">دوگمەی زێدە بکە</string>
+    <string name="look_section_colours">پاشبنەما و ڕەنگ</string>
+    <string name="look_section_home">شاشا سەرەکی</string>
+    <string name="look_clock_side">ستوینا دەمژمێرێ</string>
+    <string name="side_left">چەپ</string>
+    <string name="side_right">ڕاست</string>
+    <string name="look_preview_day">ڕۆژ</string>
+    <string name="look_preview_night">شەڤ</string>
+    <string name="widget_speed_unit">یەکا لەزێ</string>
+    <string name="widget_charging">شەحن دبیت</string>
+    <string name="widget_sample_event">فراڤین</string>
+    <string name="corner_place">جه</string>
+    <string name="corner_top_left">سەرێ چەپێ</string>
+    <string name="corner_top_right">سەرێ ڕاستێ</string>
+    <string name="corner_bottom_left">بنێ چەپێ</string>
+    <string name="corner_bottom_right">بنێ ڕاستێ</string>
+    <string name="connect_section">دەمێ ترومبێل گرێ ددەت</string>
+    <string name="look_default_buttons">دوگمێن بنەڕەتی بزڤڕینە</string>
+    <string name="sound_music_section">مۆزیک</string>
 </resources>

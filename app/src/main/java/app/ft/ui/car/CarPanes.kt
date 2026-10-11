@@ -1,6 +1,7 @@
 package app.ft.ui.car
 
 import android.graphics.SurfaceTexture
+import app.ft.ui.components.InkText
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
@@ -152,7 +153,7 @@ private fun Pill(text: String, onClick: () -> Unit) {
         color = Color.Black.copy(alpha = 0.55f),
         contentColor = Color.White
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+        InkText(text, MaterialTheme.typography.labelMedium, Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
     }
 }
 
@@ -169,7 +170,7 @@ private fun Dock(panes: List<CarPane>, apps: List<Pair<String, String>>, onPick:
                 Card(
                     onClick = { onPick(apps.indexOfFirst { it.first == packageName }) },
                     shape = RoundedCornerShape(16.dp),
-                    color = if (running) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.35f),
+                    color = if (running) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else LocalCarCard.current,
                     contentColor = Color.White
                 ) {
                     Box(Modifier.width(150.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {

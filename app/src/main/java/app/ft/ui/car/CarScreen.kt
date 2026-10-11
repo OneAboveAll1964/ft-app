@@ -1,6 +1,7 @@
 package app.ft.ui.car
 
 import app.ft.ui.theme.ownDirection
+import app.ft.ui.components.InkText
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
@@ -211,70 +212,72 @@ private fun CarRoot(style: CarStyle) {
             }
         }
     }
-    Box(Modifier.fillMaxSize()) {
-        CarBackground(style)
-        when {
-            state.waitingForShare -> ShareWait(state.mirrorPackage, state.shareForSound)
-            state.aaOverlay -> LeftToRight { AaOverlay(aa) }
-            state.mirroring -> LeftToRight { MirrorOverlay(style.corner) }
-            view == CarView.DRAWER -> AppDrawer(drawerGrid, pad) { view = CarView.LAUNCHER }
-            view == CarView.BROWSER -> CarBrowser(browser) { view = CarView.LAUNCHER }
-            view == CarView.YOUTUBE -> CarBrowser(youtube) { view = CarView.LAUNCHER }
-            view == CarView.MUSIC -> CarMusic(pad, nowPlaying) { nowPlaying = it }
-            view == CarView.VIDEOS -> CarVideos(pad)
-            view == CarView.SUPERCAST -> SuperCastScreen(
-                panes = panes,
-                apps = dockApps,
-                pad = pad,
-                onPick = { index ->
-                    val chosen = dockApps.getOrNull(index) ?: return@SuperCastScreen
-                    val taken = panes.map { it.name }.toSet()
-                    val slot = listOf("pane-0", "pane-1").firstOrNull { it !in taken }
-                    panes = when {
-                        panes.any { it.packageName == chosen.first } -> panes
-                        slot != null -> panes + CarPane(slot, chosen.first, chosen.second)
-                        else -> listOf(panes.first(), CarPane(panes.last().name, chosen.first, chosen.second))
+    CompositionLocalProvider(LocalCarCard provides style.cardColor) {
+        Box(Modifier.fillMaxSize()) {
+            CarBackground(style)
+            when {
+                state.waitingForShare -> ShareWait(state.mirrorPackage, state.shareForSound)
+                state.aaOverlay -> LeftToRight { AaOverlay(aa) }
+                state.mirroring -> LeftToRight { MirrorOverlay(style.corner) }
+                view == CarView.DRAWER -> AppDrawer(drawerGrid, pad) { view = CarView.LAUNCHER }
+                view == CarView.BROWSER -> CarBrowser(browser) { view = CarView.LAUNCHER }
+                view == CarView.YOUTUBE -> CarBrowser(youtube) { view = CarView.LAUNCHER }
+                view == CarView.MUSIC -> CarMusic(pad, nowPlaying) { nowPlaying = it }
+                view == CarView.VIDEOS -> CarVideos(pad)
+                view == CarView.SUPERCAST -> SuperCastScreen(
+                    panes = panes,
+                    apps = dockApps,
+                    pad = pad,
+                    onPick = { index ->
+                        val chosen = dockApps.getOrNull(index) ?: return@SuperCastScreen
+                        val taken = panes.map { it.name }.toSet()
+                        val slot = listOf("pane-0", "pane-1").firstOrNull { it !in taken }
+                        panes = when {
+                            panes.any { it.packageName == chosen.first } -> panes
+                            slot != null -> panes + CarPane(slot, chosen.first, chosen.second)
+                            else -> listOf(panes.first(), CarPane(panes.last().name, chosen.first, chosen.second))
+                        }
+                    },
+                    onClose = { name ->
+                        SuperCast.closePane(name)
+                        panes = panes.filterNot { it.name == name }
+                    },
+                    onSwap = {
+                        if (panes.size == 2) {
+                            SuperCast.swap(panes[0].name, panes[1].name)
+                            panes = listOf(panes[1], panes[0])
+                        }
                     }
-                },
-                onClose = { name ->
-                    SuperCast.closePane(name)
-                    panes = panes.filterNot { it.name == name }
-                },
-                onSwap = {
-                    if (panes.size == 2) {
-                        SuperCast.swap(panes[0].name, panes[1].name)
-                        panes = listOf(panes[1], panes[0])
-                    }
+                )
+                else -> Launcher(state, style, onApp = { packageName ->
+                    val label = runCatching {
+                        val manager = context.packageManager
+                        manager.getApplicationLabel(manager.getApplicationInfo(packageName, 0)).toString()
+                    }.getOrDefault(packageName)
+                    panes = listOf(CarPane("pane-0", packageName, label))
+                    view = CarView.SUPERCAST
+                    true
+                }) { v, playing ->
+                    nowPlaying = playing
+                    view = v
                 }
-            )
-            else -> Launcher(state, style, onApp = { packageName ->
-                val label = runCatching {
-                    val manager = context.packageManager
-                    manager.getApplicationLabel(manager.getApplicationInfo(packageName, 0)).toString()
-                }.getOrDefault(packageName)
-                panes = listOf(CarPane("pane-0", packageName, label))
-                view = CarView.SUPERCAST
-                true
-            }) { v, playing ->
-                nowPlaying = playing
-                view = v
             }
-        }
-        AnimatedVisibility(
-            visible = state.notice != 0,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp, start = 120.dp, end = 120.dp)
-        ) {
-            Surface(shape = RoundedCornerShape(50), color = Color.Black.copy(alpha = 0.82f), contentColor = Color.White) {
-                if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+            AnimatedVisibility(
+                visible = state.notice != 0,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp, start = 120.dp, end = 120.dp)
+            ) {
+                Surface(shape = RoundedCornerShape(50), color = Color.Black.copy(alpha = 0.82f), contentColor = Color.White) {
+                    if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                }
             }
-        }
-        if (state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) {
-            CornerPill(style.corner) {
-                view = CarView.LAUNCHER
-                nowPlaying = false
-                CarLifeService.goHome()
+            if (state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) {
+                CornerPill(style.corner) {
+                    view = CarView.LAUNCHER
+                    nowPlaying = false
+                    CarLifeService.goHome()
+                }
             }
         }
     }
@@ -336,22 +339,22 @@ private fun CornerPill(corner: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Launcher(state: CarState, style: CarStyle, onApp: (String) -> Boolean, onOpen: (CarView, Boolean) -> Unit) {
+private fun Launcher(state: CarState, style: CarStyle, preview: Boolean = false, onApp: (String) -> Boolean = { false }, onOpen: (CarView, Boolean) -> Unit = { _, _ -> }) {
     val player by CarPlayer.state.collectAsState()
     val context = LocalContext.current
     val hasInfo = style.showClock || style.showLink || style.showCarHome || style.showMusic || style.showAa || style.widgets.isNotEmpty()
     val info: @Composable ColumnScope.() -> Unit = {
         if (style.showClock) Clock(style.clock24)
-        if (style.showLink) LinkChip(state)
-        if (style.showCarHome) CarHomeButton { CarLifeService.goToCarHome() }
-        CarWidgets(style)
+        if (style.showLink) LinkChip(state, preview)
+        if (style.showCarHome) CarHomeButton { if (!preview) CarLifeService.goToCarHome() }
+        CarWidgets(style, preview = preview)
         Spacer(Modifier.weight(1f))
         if (style.showMusic) {
-            NowPlayingCard(player, onOpen = { onOpen(CarView.MUSIC, player.track != null && !player.track!!.video) })
+            NowPlayingCard(player, onOpen = { if (!preview) onOpen(CarView.MUSIC, player.track != null && !player.track!!.video) }, interactive = !preview)
         }
         if (style.showAa) {
             Button(
-                onClick = { CarLifeService.startAa() },
+                onClick = { if (!preview) CarLifeService.startAa() },
                 modifier = Modifier.fillMaxWidth().height(84.dp),
                 shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -367,7 +370,7 @@ private fun Launcher(state: CarState, style: CarStyle, onApp: (String) -> Boolea
             if (hasInfo && !style.infoRight) {
                 Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp), content = info)
             }
-            TileGrid(style.tiles, Modifier.weight(if (hasInfo) 0.58f else 1f).fillMaxHeight(), columns = style.columns, onApp = onApp, onOpen = onOpen)
+            TileGrid(style.tiles, Modifier.weight(if (hasInfo) 0.58f else 1f).fillMaxHeight(), interactive = !preview, columns = style.columns, onApp = onApp, onOpen = onOpen)
             if (hasInfo && style.infoRight) {
                 Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp), content = info)
             }
@@ -380,7 +383,7 @@ private fun Launcher(state: CarState, style: CarStyle, onApp: (String) -> Boolea
                 .align(AbsoluteAlignment.BottomRight)
                 .padding(PaddingValues.Absolute(right = 20.dp, bottom = 2.dp))
                 .clip(RoundedCornerShape(8.dp))
-                .clickable { Links.openOnPhone(context, Links.GITHUB) }
+                .clickable(enabled = !preview) { Links.openOnPhone(context, Links.GITHUB) }
                 .padding(horizontal = 6.dp, vertical = 3.dp)
         )
     }
@@ -428,16 +431,17 @@ private fun CarHomeButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun LinkChip(state: CarState) {
+private fun LinkChip(state: CarState, preview: Boolean = false) {
     val s = state.session
-    val label = when (s) {
-        is CarLifeSession.State.Projecting -> stringResource(R.string.link_projecting, s.via, s.streamWidth, s.streamHeight, s.fps)
-        is CarLifeSession.State.Negotiated -> stringResource(R.string.link_getting_ready, s.via)
-        is CarLifeSession.State.Linked -> stringResource(R.string.link_connected, s.via)
+    val label = when {
+        s is CarLifeSession.State.Projecting -> stringResource(R.string.link_projecting, s.via, s.streamWidth, s.streamHeight, s.fps)
+        preview -> stringResource(R.string.link_projecting, "WiFi", 1920, 720, 30)
+        s is CarLifeSession.State.Negotiated -> stringResource(R.string.link_getting_ready, s.via)
+        s is CarLifeSession.State.Linked -> stringResource(R.string.link_connected, s.via)
         else -> stringResource(R.string.link_not_connected)
     }
     Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), contentColor = Color.White) {
-        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+        InkText(label, MaterialTheme.typography.labelLarge, Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
     }
 }
 
@@ -449,7 +453,7 @@ private fun NowPlayingCard(player: CarPlayer.State, onOpen: () -> Unit, interact
     Surface(
         onClick = onOpen,
         shape = RoundedCornerShape(26.dp),
-        color = Color.Black.copy(alpha = 0.32f),
+        color = LocalCarCard.current,
         contentColor = Color.White,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -613,7 +617,7 @@ private fun Tile(modifier: Modifier, spec: TileSpec, onClick: () -> Unit) {
         onClick = onClick,
         modifier = modifier.fillMaxHeight(),
         shape = RoundedCornerShape(28.dp),
-        color = Color.Black.copy(alpha = 0.3f),
+        color = LocalCarCard.current,
         contentColor = Color.White
     ) {
         Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.SpaceBetween) {
@@ -836,7 +840,7 @@ private fun AppCell(app: AppCatalog.App, px: Int, onClose: () -> Unit) {
     Surface(
         onClick = { onClose(); CarLifeService.launchApp(app.pkg) },
         shape = RoundedCornerShape(22.dp),
-        color = Color.Black.copy(alpha = 0.3f),
+        color = LocalCarCard.current,
         contentColor = Color.White,
         modifier = Modifier.height(120.dp)
     ) {
@@ -850,36 +854,22 @@ private fun AppCell(app: AppCatalog.App, px: Int, onClose: () -> Unit) {
 }
 
 @Composable
-fun CarPreview(style: CarStyle, modifier: Modifier = Modifier) {
+fun CarPreview(style: CarStyle, modifier: Modifier = Modifier, pill: Boolean = false) {
+    val state by CarLifeService.state.collectAsState()
     CarTheme(style.accentColor) {
-        CompositionLocalProvider(LocalContentColor provides Color.White) {
-        Box(modifier.clip(RoundedCornerShape(16.dp))) {
-            CarBackground(style)
-            Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Clock(style.clock24)
-                    if (style.showLink) {
-                        Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), contentColor = Color.White) {
-                            Text(stringResource(R.string.link_projecting, "WiFi", 1920, 720, 30), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
-                        }
-                    }
-                    CarHomeButton {}
-                    Spacer(Modifier.weight(1f))
-                    NowPlayingCard(CarPlayer.State(), onOpen = {}, interactive = false)
-                    Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(84.dp)) {
-                        Icon(CarIcons.AndroidAuto, contentDescription = null, modifier = Modifier.size(34.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text("Android Auto", style = MaterialTheme.typography.headlineSmall, maxLines = 1)
-                    }
+        CompositionLocalProvider(LocalContentColor provides Color.White, LocalCarCard provides style.cardColor) {
+            Box(modifier.clip(RoundedCornerShape(16.dp))) {
+                CarBackground(style)
+                Launcher(state, style, preview = true)
+                AnimatedVisibility(visible = pill, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.matchParentSize()) {
+                    CornerPill(style.corner) {}
                 }
-                TileGrid(style.tiles, Modifier.weight(0.58f).fillMaxHeight(), interactive = false) { _, _ -> }
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                )
             }
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
-            )
-        }
         }
     }
 }

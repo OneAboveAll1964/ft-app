@@ -365,4 +365,22 @@
     <string name="tile_add">إضافة الزر إلى الإعدادات السريعة</string>
     <string name="tile_add_about">يضع زر FT في اللوحة التي تسحبها من الأعلى، لتشغيل FT دون فتحه.</string>
     <string name="tile_add_do">إضافة الزر</string>
+    <string name="look_section_colours">الخلفية واللون</string>
+    <string name="look_section_home">الشاشة الرئيسية</string>
+    <string name="look_clock_side">عمود الساعة</string>
+    <string name="side_left">يسار</string>
+    <string name="side_right">يمين</string>
+    <string name="look_preview_day">نهار</string>
+    <string name="look_preview_night">ليل</string>
+    <string name="widget_speed_unit">وحدة السرعة</string>
+    <string name="widget_charging">يشحن</string>
+    <string name="widget_sample_event">غداء</string>
+    <string name="corner_place">المكان</string>
+    <string name="corner_top_left">أعلى اليسار</string>
+    <string name="corner_top_right">أعلى اليمين</string>
+    <string name="corner_bottom_left">أسفل اليسار</string>
+    <string name="corner_bottom_right">أسفل اليمين</string>
+    <string name="connect_section">عند اتصال السيارة</string>
+    <string name="look_default_buttons">إرجاع الأزرار الافتراضية</string>
+    <string name="sound_music_section">الموسيقى</string>
 </resources>
