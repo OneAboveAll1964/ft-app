@@ -39,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
 data class StepItem(
     val title: String,
@@ -115,7 +117,7 @@ fun StepMark(number: Int, state: StepState, working: Boolean) {
                 Modifier.fillMaxSize().clip(CircleShape).background(scheme.primary),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Check, contentDescription = "Done", tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.state_done), tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
             }
             working -> CircularProgressIndicator(Modifier.fillMaxSize().padding(2.dp), strokeWidth = 3.dp, color = scheme.primary)
             state == StepState.NOW -> Box(

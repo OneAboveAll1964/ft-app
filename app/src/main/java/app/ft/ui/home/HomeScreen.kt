@@ -61,10 +61,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +86,8 @@ import app.ft.ui.components.StepItem
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
 private data class Status(val title: String, val detail: String, val level: Int)
 
@@ -121,26 +125,30 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         direct -> directSteps(context, radios, car, running, connected, projecting)
         else -> hotspotSteps(context, radios, running, connected, projecting, car.hotspotClients)
     }
-    val way = when {
-        car.usb -> "Using USB"
-        car.running -> if (car.direct) "Using WiFi + BL" else "Using Hotspot"
-        else -> when (linkMode) { 1 -> "Using WiFi + BL"; 2 -> "Using USB"; else -> "Using Hotspot" }
-    }
+    val way = stringResource(
+        when {
+            car.usb -> R.string.home_way_usb
+            car.running -> if (car.direct) R.string.home_way_direct else R.string.home_way_hotspot
+            else -> when (linkMode) { 1 -> R.string.home_way_direct; 2 -> R.string.home_way_usb; else -> R.string.home_way_hotspot }
+        }
+    )
     val status = when {
         projecting -> Status(
-            "Connected",
-            when {
-                car.aaOverlay -> "Android Auto is on the car"
-                car.mirroring -> "Your app is on the car"
-                car.usb -> "FT is on the car screen over USB"
-                else -> "FT is on the car screen"
-            },
+            stringResource(R.string.home_status_connected),
+            stringResource(
+                when {
+                    car.aaOverlay -> R.string.home_detail_aa
+                    car.mirroring -> R.string.home_detail_app
+                    car.usb -> R.string.home_detail_ft_usb
+                    else -> R.string.home_detail_ft
+                }
+            ),
             3
         )
-        connected -> Status("Connecting", if (car.usb) "Starting the car screen over USB" else "Starting the car screen", 2)
-        car.running -> Status("Waiting for your car", way, 1)
-        on -> Status("Starting", way, 1)
-        else -> Status("Off", "Turn on to connect to your car", 0)
+        connected -> Status(stringResource(R.string.home_status_connecting), stringResource(if (car.usb) R.string.home_detail_starting_usb else R.string.home_detail_starting), 2)
+        car.running -> Status(stringResource(R.string.home_status_waiting), way, 1)
+        on -> Status(stringResource(R.string.home_status_starting), way, 1)
+        else -> Status(stringResource(R.string.home_status_off), stringResource(R.string.home_detail_off), 0)
     }
 
     fun pickMode(value: Int) {
@@ -163,14 +171,16 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         }
 
         item {
-            Section("Connection") {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    listOf(0 to "Hotspot", 1 to "WiFi + BL", 2 to "USB").forEachIndexed { i, (value, label) ->
-                        SegmentedButton(
-                            selected = linkMode == value,
-                            onClick = { pickMode(value) },
-                            shape = SegmentedButtonDefaults.itemShape(i, 3)
-                        ) { Text(label, maxLines = 1) }
+            Section(stringResource(R.string.home_connection)) {
+                key(LocalLayoutDirection.current) {
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        listOf(0 to stringResource(R.string.mode_hotspot), 1 to stringResource(R.string.mode_direct), 2 to stringResource(R.string.mode_usb)).forEachIndexed { i, (value, label) ->
+                            SegmentedButton(
+                                selected = linkMode == value,
+                                onClick = { pickMode(value) },
+                                shape = SegmentedButtonDefaults.itemShape(i, 3)
+                            ) { Text(label, maxLines = 1) }
+                        }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -179,62 +189,63 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 }
                 if (car.usb && linkMode != 2) {
                     Text(
-                        "The car is on the USB cable. FT goes back to ${if (linkMode == 1) "WiFi + BL" else "Hotspot"} when it is unplugged.",
+                        stringResource(R.string.home_usb_takes_over, stringResource(if (linkMode == 1) R.string.mode_direct else R.string.mode_hotspot)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                AnimatedVisibility(visible = car.blocked.isNotBlank() && !connected) {
+                AnimatedVisibility(visible = car.blocked != 0 && !connected) {
                     val baidu = remember(car.blocked) { runCatching { context.packageManager.getPackageInfo("com.baidu.carlife", 0); true }.getOrDefault(false) }
-                    if (baidu) Notice(car.blocked, "Open") {
+                    if (car.blocked == 0) Unit
+                    else if (baidu) Notice(stringResource(car.blocked), stringResource(R.string.action_open)) {
                         runCatching {
                             context.startActivity(android.content.Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:com.baidu.carlife")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                         }
-                    } else Notice(car.blocked)
+                    } else Notice(stringResource(car.blocked))
                 }
                 val refused = car.refused
-                AnimatedVisibility(visible = refused.isNotBlank() && !connected && !cable) {
-                    Notice(refused, if (direct) "Use Hotspot" else "Use WiFi + BL") { pickMode(if (direct) 0 else 1) }
+                AnimatedVisibility(visible = refused != 0 && !connected && !cable) {
+                    if (refused != 0) Notice(stringResource(refused), stringResource(R.string.home_use_mode, stringResource(if (direct) R.string.mode_hotspot else R.string.mode_direct))) { pickMode(if (direct) 0 else 1) }
                 }
                 if (direct && running && !connected) {
-                    TextButton(onClick = { CarLifeService.tryAgain() }, modifier = Modifier.align(Alignment.End)) { Text("Try again") }
+                    TextButton(onClick = { CarLifeService.tryAgain() }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.home_try_again)) }
                 }
             }
         }
 
         if (!touchOn || !overlayOn || !backgroundOn) {
             item {
-                Section("Finish setup") {
-                    Text("Needed to use phone apps on the car and to start with the car", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Section(stringResource(R.string.home_finish_setup)) {
+                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Check("Touch control", touchOn, onOpenAccessibility)
-                    Check("Open apps from the car", overlayOn, onOpenOverlay)
-                    Check("Run in the background", backgroundOn) { Fixes.open(context, Fixes.background(context)) }
+                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
+                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
             }
         }
 
         item {
-            Section("Android Auto") {
+            Section(stringResource(R.string.settings_aa_title)) {
                 if (!aaInstalled) {
                     Text(
-                        "Android Auto is not on this phone. Install it from the Play Store, or let FT install it in Settings, Android Auto.",
+                        stringResource(R.string.home_aa_missing),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    TextButton(onClick = onOpenAaSetup, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Open Settings, Android Auto") }
+                    TextButton(onClick = onOpenAaSetup, contentPadding = PaddingValues(horizontal = 0.dp)) { Text(stringResource(R.string.home_aa_open_settings)) }
                 }
                 if (aaInstalled) {
                     if (!rememberRootGranted()) {
                         AaStartChoice(rememberAaServerOn(), reinstalled = aaStep == AaInstaller.Step.DONE) {
                             if (aaStep != AaInstaller.Step.DONE) {
-                                FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("Set it up in Settings", maxLines = 1) }
+                                FilledTonalButton(onClick = onOpenAaSetup, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text(stringResource(R.string.home_aa_set_up), maxLines = 1) }
                             }
                         }
                         Spacer(Modifier.height(8.dp))
                     }
-                    SwitchRow("Start with the car", aaAuto) {
+                    SwitchRow(stringResource(R.string.home_aa_start_with_car), aaAuto) {
                         aaAuto = it
                         app.prefs.aaAutoStart = it
                     }
@@ -242,10 +253,10 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                         onClick = { CarLifeService.startAa() },
                         enabled = projecting,
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                    ) { Text("Start Android Auto on the car", maxLines = 1) }
+                    ) { Text(stringResource(R.string.home_aa_start), maxLines = 1) }
                     if (!projecting) {
                         Text(
-                            if (on) "Works once FT is on the car screen." else "Turn FT on first.",
+                            stringResource(if (on) R.string.home_aa_works_once else R.string.home_aa_turn_on_first),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
@@ -258,11 +269,13 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     }
 }
 
+@Composable
 private fun usbSteps(running: Boolean, connected: Boolean, projecting: Boolean) = listOf(
-    StepItem("Cable to the car", connected, hint = if (running) "Plug into the car's USB and open CarLife there. If the phone asks, pick FT and tap Always" else null),
-    StepItem("On the car screen", projecting, hint = if (connected) "Starting the picture" else null)
+    StepItem(stringResource(R.string.step_cable), connected, hint = if (running) stringResource(R.string.step_cable_hint) else null),
+    StepItem(stringResource(R.string.step_on_car_screen), projecting, hint = if (connected) stringResource(R.string.step_starting_picture) else null)
 )
 
+@Composable
 private fun hotspotSteps(
     context: android.content.Context,
     radios: Radios,
@@ -271,19 +284,20 @@ private fun hotspotSteps(
     projecting: Boolean,
     clients: List<String>?
 ) = listOf(
-    StepItem("Hotspot on", radios.hotspot || !clients.isNullOrEmpty(), action = "Turn on", onAction = { Fixes.openHotspot(context) }),
+    StepItem(stringResource(R.string.step_hotspot_on), radios.hotspot || !clients.isNullOrEmpty(), action = stringResource(R.string.action_turn_on), onAction = { Fixes.openHotspot(context) }),
     StepItem(
-        "Car connected",
+        stringResource(R.string.step_car_connected),
         connected,
         hint = when {
             !running -> null
-            !clients.isNullOrEmpty() -> "${clients.joinToString()} joined the hotspot but has not connected yet. Open CarLife on the car"
-            else -> "Join this hotspot from the car. Some cars only have Wi-Fi inside their CarLife settings"
+            !clients.isNullOrEmpty() -> stringResource(R.string.step_hotspot_joined, clients.joinToString())
+            else -> stringResource(R.string.step_hotspot_join)
         }
     ),
-    StepItem("On the car screen", projecting, hint = if (connected) "Starting the picture" else null)
+    StepItem(stringResource(R.string.step_on_car_screen), projecting, hint = if (connected) stringResource(R.string.step_starting_picture) else null)
 )
 
+@Composable
 private fun directSteps(
     context: android.content.Context,
     radios: Radios,
@@ -293,30 +307,30 @@ private fun directSteps(
     projecting: Boolean
 ): List<StepItem> {
     val bluetooth = when {
-        !radios.nearby -> StepItem("Bluetooth on", false, hint = "Allow nearby devices", action = "Allow", onAction = { Fixes.open(context, Fixes.appSettings(context)) })
-        else -> StepItem("Bluetooth on", radios.bluetooth, action = "Turn on", onAction = { Fixes.open(context, Fixes.bluetooth(context)) })
+        !radios.nearby -> StepItem(stringResource(R.string.step_bluetooth_on), false, hint = stringResource(R.string.step_allow_nearby), action = stringResource(R.string.action_allow), onAction = { Fixes.open(context, Fixes.appSettings(context)) })
+        else -> StepItem(stringResource(R.string.step_bluetooth_on), radios.bluetooth, action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.bluetooth(context)) })
     }
     val wifi = when {
-        !radios.wifi -> StepItem("WiFi on", false, action = "Turn on", onAction = { Fixes.open(context, Fixes.wifi()) })
-        !radios.wifiAllowed -> StepItem("WiFi on", false, hint = "Allow nearby devices", action = "Allow", onAction = { Fixes.open(context, Fixes.appSettings(context)) })
-        !radios.location -> StepItem("WiFi on", false, hint = "WiFi Direct needs location on", action = "Turn on", onAction = { Fixes.open(context, Fixes.location()) })
-        else -> StepItem("WiFi on", true)
+        !radios.wifi -> StepItem(stringResource(R.string.step_wifi_on), false, action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.wifi()) })
+        !radios.wifiAllowed -> StepItem(stringResource(R.string.step_wifi_on), false, hint = stringResource(R.string.step_allow_nearby), action = stringResource(R.string.action_allow), onAction = { Fixes.open(context, Fixes.appSettings(context)) })
+        !radios.location -> StepItem(stringResource(R.string.step_wifi_on), false, hint = stringResource(R.string.step_wifi_needs_location), action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.location()) })
+        else -> StepItem(stringResource(R.string.step_wifi_on), true)
     }
     return listOf(
         bluetooth,
         wifi,
-        StepItem("Car found", car.btCar != null || car.carWifi != null, hint = if (running) "Waiting for the car over Bluetooth" else null),
+        StepItem(stringResource(R.string.step_car_found), car.btCar != null || car.carWifi != null, hint = if (running) stringResource(R.string.step_waiting_bt) else null),
         StepItem(
-            "WiFi Direct connected",
+            stringResource(R.string.step_wifi_direct_connected),
             car.wifiDirect,
-            hint = if (running) car.carWifi?.let { "Joining $it" } ?: "Asking the car to turn it on" else null
+            hint = if (running) car.carWifi?.let { stringResource(R.string.step_joining, it) } ?: stringResource(R.string.step_asking_car) else null
         ),
         StepItem(
-            "On the car screen",
+            stringResource(R.string.step_on_car_screen),
             projecting,
             hint = when {
-                connected -> "Starting the picture"
-                running && car.wifiDirect -> "Waiting for the car to connect"
+                connected -> stringResource(R.string.step_starting_picture)
+                running && car.wifiDirect -> stringResource(R.string.step_waiting_car_connect)
                 else -> null
             }
         )
@@ -373,8 +387,8 @@ private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
         StepMark(0, if (granted) StepState.DONE else StepState.LATER, working = false)
         Spacer(Modifier.width(14.dp))
         Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (!granted) FilledTonalButton(onClick = onGrant) { Text("Allow") }
-        else Text("Done", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+        if (!granted) FilledTonalButton(onClick = onGrant) { Text(stringResource(R.string.action_allow)) }
+        else Text(stringResource(R.string.state_done), style = MaterialTheme.typography.labelLarge, color = scheme.primary)
     }
 }
 

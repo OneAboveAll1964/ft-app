@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.FT" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowBackground">@color/ft_window</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightStatusBar">@bool/ft_light_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/ft_light_bars</item>
     </style>
 
     <style name="Theme.FT.Quiet" parent="@android:style/Theme.Translucent.NoTitleBar">

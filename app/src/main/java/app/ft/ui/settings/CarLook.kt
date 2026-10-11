@@ -77,6 +77,8 @@ import app.ft.ui.car.tileLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
 private const val CAR_W = 1280f
 private const val CAR_H = 480f
@@ -117,7 +119,7 @@ fun CarLookSettings() {
             }
         }
 
-        Label("Background")
+        Label(stringResource(R.string.look_background))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(CarStyle.PICTURES) { (name, res) ->
                 Swatch(chosen = style.background == name, onClick = { save { p.carBackground = name } }) {
@@ -134,14 +136,14 @@ fun CarLookSettings() {
                     photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Add, contentDescription = "Your photo", tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.look_your_photo), tint = MaterialTheme.colorScheme.onSecondaryContainer)
                     }
                 }
             }
         }
-        if (photoFailed) Text("That photo could not be used, try another one", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        if (photoFailed) Text(stringResource(R.string.look_photo_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
 
-        Label("Colour")
+        Label(stringResource(R.string.look_colour))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(CarStyle.ACCENTS) { argb ->
                 val c = Color(argb)
@@ -159,7 +161,7 @@ fun CarLookSettings() {
             }
         }
 
-        Label("Buttons")
+        Label(stringResource(R.string.look_buttons))
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -178,25 +180,25 @@ fun CarLookSettings() {
                     contentColor = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f).height(76.dp)
                 ) {
-                    ChipBody(label = "Add") { Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(24.dp)) }
+                    ChipBody(label = stringResource(R.string.action_add)) { Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(24.dp)) }
                 }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { pickingMaps = true }) { Text("Maps app: ${tileLabel(context, "app:${p.mapsPackage}")}") }
+            TextButton(onClick = { pickingMaps = true }) { Text(stringResource(R.string.look_maps_app_value, tileLabel(context, "app:${p.mapsPackage}"))) }
             TextButton(onClick = {
                 save {
                     p.carTiles = CarStyle.DEFAULT_TILES
                     p.carAccent = CarStyle.DEFAULT_ACCENT
                     p.carBackground = CarStyle.DEFAULT_BACKGROUND
                 }
-            }) { Text("Reset") }
+            }) { Text(stringResource(R.string.action_reset)) }
         }
 
-        Toggle("24-hour clock", style.clock24) { on -> save { p.carClock24 = on } }
-        Toggle("Show connection details", style.showLink) { on -> save { p.carShowLink = on } }
-        Toggle("Show the song on the car's own display", p.carSongInfo) { on -> p.carSongInfo = on }
-        Toggle("Hide WhatsApp and Telegram audio in Music", p.hideChatAudio) { on -> p.hideChatAudio = on }
+        Toggle(stringResource(R.string.look_clock24), style.clock24) { on -> save { p.carClock24 = on } }
+        Toggle(stringResource(R.string.look_show_link), style.showLink) { on -> save { p.carShowLink = on } }
+        Toggle(stringResource(R.string.look_song_info), p.carSongInfo) { on -> p.carSongInfo = on }
+        Toggle(stringResource(R.string.look_hide_chat_audio), p.hideChatAudio) { on -> p.hideChatAudio = on }
     }
 
     if (picking >= 0) {
@@ -217,7 +219,7 @@ fun CarLookSettings() {
         )
     }
     if (pickingMaps) {
-        AppPicker(title = "Maps app", onDismiss = { pickingMaps = false }) { pkg ->
+        AppPicker(title = stringResource(R.string.look_maps_app), onDismiss = { pickingMaps = false }) { pkg ->
             p.mapsPackage = pkg
             CarStyles.reload()
             pickingMaps = false
@@ -303,7 +305,7 @@ private fun TilePicker(current: String?, canRemove: Boolean, onDismiss: () -> Un
     val apps = installedApps()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (current == null) "Add a button" else "Change ${tileLabel(context, current)}") },
+        title = { Text(if (current == null) stringResource(R.string.look_add_button) else stringResource(R.string.look_change_button, tileLabel(context, current))) },
         text = {
             LazyColumn(Modifier.heightIn(max = 460.dp)) {
                 items(CarStyle.BUILT_IN_TILES) { key ->
@@ -321,8 +323,8 @@ private fun TilePicker(current: String?, canRemove: Boolean, onDismiss: () -> Un
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        dismissButton = { if (canRemove) TextButton(onClick = { onPick(null) }) { Text("Remove") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+        dismissButton = { if (canRemove) TextButton(onClick = { onPick(null) }) { Text(stringResource(R.string.action_remove)) } }
     )
 }
 
@@ -337,7 +339,7 @@ private fun AppPicker(title: String, onDismiss: () -> Unit, onPick: (String) -> 
                 items(apps, key = { it.pkg }) { a -> AppRow(a, chosen = false) { onPick(a.pkg) } }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } }
     )
 }
 

@@ -72,6 +72,9 @@ import app.ft.media.CarPlayer
 import app.ft.media.MediaLibrary
 import app.ft.media.Track
 import app.ft.media.formatTime
+import androidx.compose.ui.res.stringResource
+import app.ft.R
+import app.ft.ui.theme.LeftToRight
 
 private enum class MusicTab { SONGS, ALBUMS }
 
@@ -94,9 +97,9 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
 
     Column(Modifier.fillMaxSize().padding(pad)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Music", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(end = 6.dp))
-            FilterChip(selected = tab == MusicTab.SONGS && album == null, onClick = { tab = MusicTab.SONGS; album = null }, label = { Text("Songs") })
-            FilterChip(selected = tab == MusicTab.ALBUMS || album != null, onClick = { tab = MusicTab.ALBUMS; album = null }, label = { Text("Albums") })
+            Text(stringResource(R.string.tile_music), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(end = 6.dp))
+            FilterChip(selected = tab == MusicTab.SONGS && album == null, onClick = { tab = MusicTab.SONGS; album = null }, label = { Text(stringResource(R.string.music_songs)) })
+            FilterChip(selected = tab == MusicTab.ALBUMS || album != null, onClick = { tab = MusicTab.ALBUMS; album = null }, label = { Text(stringResource(R.string.music_albums)) })
             Spacer(Modifier.weight(1f))
             val list = songs.orEmpty()
             if (list.isNotEmpty()) {
@@ -106,26 +109,26 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
                     onPlaying(true)
                 }) {
                     Icon(CarIcons.Shuffle, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Text("Shuffle all", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.music_shuffle_all), modifier = Modifier.padding(start = 8.dp))
                 }
             }
             if (player.track != null) {
                 FilledTonalButton(onClick = { onPlaying(true) }) {
                     Icon(CarIcons.Music, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Text("Playing", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.music_playing), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
         when {
-            !allowed -> Empty("Allow FT to see the music on your phone", CarIcons.Music)
+            !allowed -> Empty(stringResource(R.string.music_allow), CarIcons.Music)
             songs == null -> Unit
             album != null -> {
                 val a = album!!
                 val inAlbum = songs.orEmpty().filter { it.albumId == a.id }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                     Surface(onClick = { album = null }, shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.size(44.dp)) {
-                        Box(contentAlignment = Alignment.Center) { Icon(CarIcons.Back, contentDescription = "Back", modifier = Modifier.size(22.dp)) }
+                        Box(contentAlignment = Alignment.Center) { Icon(CarIcons.Back, contentDescription = stringResource(R.string.key_back), modifier = Modifier.size(22.dp)) }
                     }
                     Artwork(a.uri, null, 56.dp, 12.dp, CarIcons.Album, Modifier.padding(start = 12.dp))
                     Column(Modifier.padding(start = 14.dp)) {
@@ -137,7 +140,7 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
             }
             tab == MusicTab.ALBUMS -> {
                 val list = albums.orEmpty()
-                if (list.isEmpty()) Empty("No albums on this phone", CarIcons.Album) else {
+                if (list.isEmpty()) Empty(stringResource(R.string.music_no_albums), CarIcons.Album) else {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(170.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -155,7 +158,7 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
             }
             else -> {
                 val list = songs.orEmpty()
-                if (list.isEmpty()) Empty("No music on this phone", CarIcons.Music)
+                if (list.isEmpty()) Empty(stringResource(R.string.music_no_music), CarIcons.Music)
                 else SongList(list, player.track) { i -> CarPlayer.play(context, list, i); onPlaying(true) }
             }
         }
@@ -240,7 +243,7 @@ fun NowPlaying(pad: PaddingValues, player: CarPlayer.State, onClose: () -> Unit)
                 ) {
                     Row(Modifier.padding(start = 12.dp, end = 18.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(CarIcons.Back, contentDescription = null, modifier = Modifier.size(22.dp))
-                        Text("All songs", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
+                        Text(stringResource(R.string.music_all_songs), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
                 Text(t.title, style = MaterialTheme.typography.headlineLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
@@ -248,6 +251,7 @@ fun NowPlaying(pad: PaddingValues, player: CarPlayer.State, onClose: () -> Unit)
                 if (t.album.isNotBlank()) Text(t.album, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.6f))
                 Spacer(Modifier.height(12.dp))
                 SeekBar(player)
+                LeftToRight {
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     RoundKey(CarIcons.Shuffle, big * 0.6f, active = player.shuffle) { CarPlayer.setShuffle(!player.shuffle) }
                     RoundKey(CarIcons.Previous, big * 0.7f) { CarPlayer.previous() }
@@ -258,6 +262,7 @@ fun NowPlaying(pad: PaddingValues, player: CarPlayer.State, onClose: () -> Unit)
                         big * 0.6f,
                         active = player.repeat != Player.REPEAT_MODE_OFF
                     ) { CarPlayer.cycleRepeat() }
+                }
                 }
             }
         }
@@ -272,6 +277,7 @@ fun SeekBar(player: CarPlayer.State, light: Boolean = true) {
     val dur = player.durationMs.coerceAtLeast(1)
     val shown = if (dragging) drag else (player.positionMs.toFloat() / dur).coerceIn(0f, 1f)
     val text = if (light) Color.White.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant
+    LeftToRight {
     Column {
         Slider(
             value = shown,
@@ -289,6 +295,7 @@ fun SeekBar(player: CarPlayer.State, light: Boolean = true) {
             Text(formatTime((shown * dur).toLong()), style = MaterialTheme.typography.labelLarge, color = text)
             Text(formatTime(player.durationMs), style = MaterialTheme.typography.labelLarge, color = text)
         }
+    }
     }
 }
 

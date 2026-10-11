@@ -11,6 +11,9 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import app.ft.core.Looks
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -76,7 +79,13 @@ val FTTypography = Typography(
 )
 
 @Composable
-fun FTTheme(dark: Boolean = isSystemInDarkTheme(), dynamic: Boolean = true, content: @Composable () -> Unit) {
+fun rememberDark(): Boolean {
+    val mode by Looks.mode.collectAsState()
+    return Looks.dark(mode, isSystemInDarkTheme())
+}
+
+@Composable
+fun FTTheme(dark: Boolean = rememberDark(), dynamic: Boolean = true, content: @Composable () -> Unit) {
     val context = LocalContext.current
     val scheme = when {
         dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

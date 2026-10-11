@@ -21,6 +21,8 @@ import app.ft.core.DiagReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
 @Composable
 fun ReportButton() {
@@ -35,19 +37,19 @@ fun ReportButton() {
             val uri = report?.let { withContext(Dispatchers.IO) { DiagReport.saveToDownloads(app, it) } }
             busy = false
             if (report == null || uri == null) {
-                Toast.makeText(context, "Could not make the report", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.report_failed), Toast.LENGTH_LONG).show()
                 return@launch
             }
-            Toast.makeText(context, "Report saved in Downloads/FT", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, context.getString(R.string.report_saved), Toast.LENGTH_LONG).show()
             val send = Intent(Intent.ACTION_SEND)
                 .setType("application/zip")
                 .putExtra(Intent.EXTRA_STREAM, uri)
                 .putExtra(Intent.EXTRA_SUBJECT, report.name)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            runCatching { context.startActivity(Intent.createChooser(send, "Send the FT report").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            runCatching { context.startActivity(Intent.createChooser(send, context.getString(R.string.report_send)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }) {
         if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-        else Icon(Icons.Filled.Share, contentDescription = "Make a report for the developer")
+        else Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.report_cd))
     }
 }

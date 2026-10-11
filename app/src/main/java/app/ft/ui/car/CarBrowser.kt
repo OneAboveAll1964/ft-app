@@ -47,6 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.ft.core.DiagLog
+import androidx.compose.ui.res.stringResource
+import app.ft.R
+import androidx.compose.foundation.layout.absolutePadding
 
 private const val FOCUS_WATCH_JS = """
 (function(){
@@ -191,7 +194,7 @@ fun CarBrowser(page: WebPage, onExit: () -> Unit) {
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                 val pillLeft = CarStyles.current.value.corner.let { it == 0 || it == 2 }
                 Row(
-                    Modifier.fillMaxWidth().height(72.dp).padding(start = if (pillLeft) 104.dp else 10.dp, end = if (pillLeft) 10.dp else 104.dp),
+                    Modifier.fillMaxWidth().height(72.dp).absolutePadding(left = if (pillLeft) 104.dp else 10.dp, right = if (pillLeft) 10.dp else 104.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -199,10 +202,10 @@ fun CarBrowser(page: WebPage, onExit: () -> Unit) {
                         onClick = { if (!page.back()) onExit() },
                         modifier = Modifier.size(44.dp)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.key_back))
                     }
                     FilledTonalIconButton(onClick = { page.view?.reload() }, modifier = Modifier.size(44.dp)) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Reload")
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.browser_reload))
                     }
                     Surface(
                         onClick = { editing = true; typed = "" },
@@ -212,7 +215,7 @@ fun CarBrowser(page: WebPage, onExit: () -> Unit) {
                     ) {
                         Box(Modifier.fillMaxSize().padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
                             Text(
-                                if (editing) typed.ifEmpty { "Type an address" } else title.ifEmpty { page.startUrl },
+                                if (editing) typed.ifEmpty { stringResource(R.string.browser_type_address) } else title.ifEmpty { page.startUrl },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.bodyLarge
@@ -220,7 +223,7 @@ fun CarBrowser(page: WebPage, onExit: () -> Unit) {
                         }
                     }
                     FilledTonalIconButton(onClick = { onExit() }, modifier = Modifier.size(44.dp)) {
-                        Icon(Icons.Filled.Home, contentDescription = "Car home")
+                        Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.browser_car_home))
                     }
                 }
             }
@@ -254,7 +257,7 @@ fun CarBrowser(page: WebPage, onExit: () -> Unit) {
             )
         } else if (webField) {
             CarKeyboard(
-                goLabel = "Enter",
+                goLabel = stringResource(R.string.keyboard_enter),
                 onInsert = { page.view?.evaluateJavascript(insertJs(it), null) },
                 onBackspace = { page.view?.evaluateJavascript("document.execCommand('delete',false,null);", null) },
                 onClose = { webField = false; page.view?.evaluateJavascript("if(document.activeElement)document.activeElement.blur();", null) },

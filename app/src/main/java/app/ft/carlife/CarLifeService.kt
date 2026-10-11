@@ -54,6 +54,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import app.ft.core.Lang
+import kotlinx.coroutines.flow.drop
 
 data class CarState(
     val running: Boolean = false,
@@ -70,12 +72,12 @@ data class CarState(
     val wifiDirect: Boolean = false,
     val beacon: Boolean = false,
     val step: String = "",
-    val refused: String = "",
+    val refused: Int = 0,
     val waitingForShare: Boolean = false,
     val shareForSound: Boolean = false,
-    val notice: String = "",
+    val notice: Int = 0,
     val usb: Boolean = false,
-    val blocked: String = "",
+    val blocked: Int = 0,
     val hotspotClients: List<String>? = null
 )
 
@@ -207,6 +209,7 @@ class CarLifeService : Service() {
     @Volatile private var usbAccessory: android.hardware.usb.UsbAccessory? = null
     private var usbAsk: android.content.BroadcastReceiver? = null
     private var testCable: Job? = null
+    private var languageWatch: Job? = null
     @Volatile private var testCableServer: java.net.ServerSocket? = null
     private var finder: CarFinder? = null
     private var stateJob: Job? = null
@@ -217,7 +220,7 @@ class CarLifeService : Service() {
     private var callWatch: Any? = null
     private var callPoll: Job? = null
     private var p2pWatch: Job? = null
-    @Volatile private var noteText = "FT"
+    @Volatile private var note: () -> String = { Lang.str(R.string.app_name) }
     @Volatile private var carNetworkIface: String? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
@@ -454,7 +457,16 @@ class CarLifeService : Service() {
         }
         carDisplay = CarDisplay(this)
         getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel(CHANNEL, "FT projection", NotificationManager.IMPORTANCE_LOW))
+            .createNotificationChannel(NotificationChannel(CHANNEL, Lang.str(R.string.channel_projection), NotificationManager.IMPORTANCE_LOW))
+        languageWatch = scope.launch {
+            Lang.current.drop(1).collect {
+                runCatching {
+                    getSystemService(NotificationManager::class.java)
+                        .createNotificationChannel(NotificationChannel(CHANNEL, Lang.str(R.string.channel_projection), NotificationManager.IMPORTANCE_LOW))
+                }
+                if (_state.value.running) updateNotification(note)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -471,7 +483,7 @@ class CarLifeService : Service() {
             }
             ACTION_AUDIO -> {
                 audio.stop()
-                foreground(noteText, projection = true, microphone = canRecord())
+                foreground(note, projection = true, microphone = canRecord())
                 startAudioToCar()
                 _state.update { it.copy(waitingForShare = false, shareForSound = false) }
                 pendingLaunch?.let { (i, p) ->
@@ -502,7 +514,7 @@ class CarLifeService : Service() {
                     useUsb(acc)
                 } else {
                     DiagLog.w(tag, "USB: Android did not pass on the car's accessory")
-                    foreground(noteText)
+                    foreground(note)
                     if (mode == -1) startChosenWay()
                 }
             }
@@ -535,7 +547,7 @@ class CarLifeService : Service() {
     private fun startChosenWay() {
         listenForTestCable()
         if (mode == 2 && usbLink != null) {
-            foreground(noteText)
+            foreground(note)
             DiagLog.i(tag, "the car is on the USB cable, staying on it")
             return
         }
@@ -551,14 +563,14 @@ class CarLifeService : Service() {
         }
         if (wanted == 2) {
             mode = 2
-            foreground(waitingText())
+            foreground(waitingNote())
             _state.update { it.copy(direct = false, usb = true) }
             step("Plug the phone into the car's USB and open CarLife on the car")
             return
         }
         val fresh = mode != wanted || wifiLink == null
         mode = wanted
-        foreground(if (fresh) waitingText() else noteText)
+        foreground(if (fresh) waitingNote() else note)
         _state.update { it.copy(direct = wanted == 1, usb = false) }
         startWifiLink()
         if (fresh) {
@@ -620,7 +632,7 @@ class CarLifeService : Service() {
         mode = 2
         usbAccessory = acc
         usbStartedAt = android.os.SystemClock.elapsedRealtime()
-        foreground("Connected to the car over USB")
+        foreground({ Lang.str(R.string.note_usb_connected) })
         _state.update { it.copy(direct = false, usb = true, listening = true) }
         val l = AccessoryLink("USB", what, open)
         usbLink = l
@@ -660,25 +672,32 @@ class CarLifeService : Service() {
         if (app.prefs.autoConnect) startChosenWay()
     }
 
-    private fun waitingText() = when (mode) {
-        1 -> "Waiting for the car over bluetooth"
-        2 -> "Waiting for the car on USB"
-        else -> "Waiting for the car on the hotspot"
+    private fun waitingNote(): () -> String {
+        val m = mode
+        return {
+            Lang.str(
+                when (m) {
+                    1 -> R.string.note_waiting_bt
+                    2 -> R.string.note_waiting_usb
+                    else -> R.string.note_waiting_hotspot
+                }
+            )
+        }
     }
 
-    private fun foreground(text: String, projection: Boolean = false, microphone: Boolean = false) {
-        noteText = text
+    private fun foreground(text: () -> String, projection: Boolean = false, microphone: Boolean = false) {
+        note = text
         val keepProjection = projection || this.projection != null
         val keepMicrophone = microphone || audio.active
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
         if (keepProjection) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         if (keepMicrophone) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-        val note = notification(text)
+        val built = notification(text())
         val fallback = type and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE.inv()
-        runCatching { startForeground(NOTIFICATION_ID, note, type) }
+        runCatching { startForeground(NOTIFICATION_ID, built, type) }
             .onFailure { t ->
                 DiagLog.w(tag, "foreground type $type refused (${t.message}), continuing without the microphone type")
-                runCatching { startForeground(NOTIFICATION_ID, note, fallback) }
+                runCatching { startForeground(NOTIFICATION_ID, built, fallback) }
             }
         awake()
         _state.update { it.copy(running = true, ip = NetUtil.localIpv4()) }
@@ -769,15 +788,14 @@ class CarLifeService : Service() {
         val baidu = installed("com.baidu.carlife")
         DiagLog.w(tag, "port $port is held by another app${if (baidu) ", and Baidu CarLife is installed" else ""}; FT keeps trying, the car cannot reach FT until it is free")
         _state.update {
-            it.copy(blocked = if (baidu) "Baidu CarLife is holding the car's connection. Force stop it so the car reaches FT."
-                else "Another app is holding CarLife's connection ports. Close other car apps so the car reaches FT.")
+            it.copy(blocked = if (baidu) R.string.blocked_baidu else R.string.blocked_other)
         }
     }
 
     private fun portBound(port: Int) {
         if (!busyPorts.remove(port) || busyPorts.isNotEmpty()) return
         DiagLog.i(tag, "CarLife's ports are free again, FT is listening")
-        _state.update { it.copy(blocked = "") }
+        _state.update { it.copy(blocked = 0) }
     }
 
     private fun installed(pkg: String): Boolean = runCatching { packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
@@ -909,8 +927,8 @@ class CarLifeService : Service() {
             it.copy(
                 link = "", session = CarLifeSession.State.Idle, listening = false, aaOverlay = false,
                 mirroring = false, mirrorPackage = "", btCar = null, carWifi = null, wifiDirect = false,
-                beacon = false, step = "", refused = "", waitingForShare = false, usb = false,
-                blocked = "", hotspotClients = null
+                beacon = false, step = "", refused = 0, waitingForShare = false, usb = false,
+                blocked = 0, hotspotClients = null
             )
         }
     }
@@ -1019,9 +1037,10 @@ class CarLifeService : Service() {
         } else {
             if (!side) null else "The car tried WiFi Direct, but FT is set to Hotspot"
         }
-        if (why != null && _state.value.refused != why) {
+        val shown = if (mode == 1) R.string.refused_hotspot else R.string.refused_direct
+        if (why != null && _state.value.refused != shown) {
             DiagLog.w(tag, "$why ($iface), refused")
-            _state.update { it.copy(refused = why) }
+            _state.update { it.copy(refused = shown) }
         }
         return why
     }
@@ -1072,7 +1091,7 @@ class CarLifeService : Service() {
         stateJob?.cancel()
         stateJob = scope.launch {
             s.state.collect { st ->
-                _state.update { it.copy(link = l.name, session = st, refused = if (st !is CarLifeSession.State.Idle) "" else it.refused) }
+                _state.update { it.copy(link = l.name, session = st, refused = if (st !is CarLifeSession.State.Idle) 0 else it.refused) }
                 updateBeacon()
                 if (st is CarLifeSession.State.Projecting && !mediaReady) {
                     mediaReady = true
@@ -1144,7 +1163,9 @@ class CarLifeService : Service() {
             CarTheme { CarScreen() }
         }
         if (thermalCap > 0) carDisplay.setFrameRate(VideoPlans.withinCap(plan.fps, thermalCap))
-        updateNotification("Projecting ${plan.streamWidth}×${plan.streamHeight} to the car")
+        val w = plan.streamWidth
+        val h = plan.streamHeight
+        updateNotification({ Lang.str(R.string.note_projecting, w, h) })
         startAudioToCar()
     }
 
@@ -1171,7 +1192,7 @@ class CarLifeService : Service() {
         carDisplay.stop()
         aaAutoLaunched = false
         _state.update { it.copy(aaOverlay = false) }
-        updateNotification(waitingText())
+        updateNotification(waitingNote())
     }
 
     private fun sendBluetooth(hex: String) {
@@ -1619,7 +1640,7 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun ensureProjection(reason: String, quiet: Boolean = false): MediaProjection? {
+    private fun ensureProjection(reason: () -> String, quiet: Boolean = false): MediaProjection? {
         projection?.let { return it }
         val code = app.mirrorResultCode
         val data = app.mirrorData
@@ -1674,7 +1695,7 @@ class CarLifeService : Service() {
             DiagLog.w(tag, "no microphone permission, the car will get picture without sound")
             return
         }
-        val mp = ensureProjection("Sending sound to the car", quiet = true) ?: return
+        val mp = ensureProjection({ Lang.str(R.string.note_sound) }, quiet = true) ?: return
         if (audio.start(mp)) silencePhone()
     }
 
@@ -1758,7 +1779,8 @@ class CarLifeService : Service() {
     }
 
     private fun mirrorOpen(pkg: String, ownDisplay: Boolean): Boolean {
-        val mp = ensureProjection("Showing $pkg on the car") ?: return false
+        val shownName = runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+        val mp = ensureProjection({ Lang.str(R.string.note_showing_app, shownName) }) ?: return false
         return try {
             val useCar = ownDisplay && app.prefs.carSizedApps && carDisplay.width > 0 && carDisplay.height > 0
             val metrics = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).maximumWindowMetrics.bounds
@@ -1933,14 +1955,14 @@ class CarLifeService : Service() {
         if (!blocked) return
         blockedSoundNoticed = true
         DiagLog.i(tag, "the phone is playing but the car hears silence: that app does not let its sound be shared")
-        notice("The app playing on your phone won't share its sound. Play it through Android Auto to hear it in the car.")
+        notice(R.string.notice_sound_blocked)
     }
 
-    private fun notice(text: String) {
+    private fun notice(text: Int) {
         _state.update { it.copy(notice = text) }
         scope.launch {
             delay(8000)
-            _state.update { if (it.notice == text) it.copy(notice = "") else it }
+            _state.update { if (it.notice == text) it.copy(notice = 0) else it }
         }
     }
 
@@ -2145,9 +2167,9 @@ class CarLifeService : Service() {
             .build()
     }
 
-    private fun updateNotification(text: String) {
-        noteText = text
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text))
+    private fun updateNotification(text: () -> String) {
+        note = text
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text()))
     }
 
     override fun onDestroy() {

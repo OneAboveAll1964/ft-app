@@ -57,6 +57,9 @@ import app.ft.media.MediaLibrary
 import app.ft.media.Track
 import app.ft.media.formatTime
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.stringResource
+import app.ft.R
+import app.ft.ui.theme.LeftToRight
 
 @Composable
 fun CarVideos(pad: PaddingValues) {
@@ -82,12 +85,12 @@ fun CarVideos(pad: PaddingValues) {
     }
 
     Column(Modifier.fillMaxSize().padding(pad)) {
-        Text("Videos", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
+        Text(stringResource(R.string.tile_videos), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
         val list = videos
         when {
-            !allowed -> Empty("Allow FT to see the videos on your phone", CarIcons.Movie)
+            !allowed -> Empty(stringResource(R.string.videos_allow), CarIcons.Movie)
             list == null -> Unit
-            list.isEmpty() -> Empty("No videos on this phone", CarIcons.Movie)
+            list.isEmpty() -> Empty(stringResource(R.string.videos_none), CarIcons.Movie)
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(220.dp),
                 state = grid,
@@ -142,7 +145,10 @@ private fun VideoThumb(v: Track, modifier: Modifier) {
 }
 
 @Composable
-private fun VideoPlayer(onClose: () -> Unit) {
+private fun VideoPlayer(onClose: () -> Unit) = LeftToRight { VideoPlayerBody(onClose) }
+
+@Composable
+private fun VideoPlayerBody(onClose: () -> Unit) {
     val player by CarPlayer.state.collectAsState()
     var controls by remember { mutableStateOf(true) }
     var poke by remember { mutableIntStateOf(0) }
@@ -200,7 +206,7 @@ private fun VideoPlayer(onClose: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(onClick = onClose, shape = CircleShape, color = Color.White.copy(alpha = 0.16f), contentColor = Color.White, modifier = Modifier.size(48.dp)) {
-                        Box(contentAlignment = Alignment.Center) { Icon(CarIcons.Back, contentDescription = "Back", modifier = Modifier.size(24.dp)) }
+                        Box(contentAlignment = Alignment.Center) { Icon(CarIcons.Back, contentDescription = stringResource(R.string.key_back), modifier = Modifier.size(24.dp)) }
                     }
                     Text(
                         player.track?.title.orEmpty(),

@@ -13,11 +13,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
 @Composable
 fun CornerPicker(selected: Int, carWidth: Int, carHeight: Int, onPick: (Int) -> Unit) {
@@ -32,13 +35,13 @@ fun CornerPicker(selected: Int, carWidth: Int, carHeight: Int, onPick: (Int) -> 
             .border(2.dp, scheme.outlineVariant, RoundedCornerShape(14.dp))
     ) {
         Text(
-            "Car screen",
+            stringResource(R.string.settings_car_screen_title),
             style = MaterialTheme.typography.labelSmall,
             color = scheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.Center)
         )
-        listOf(0 to Alignment.TopStart, 1 to Alignment.TopEnd, 2 to Alignment.BottomStart, 3 to Alignment.BottomEnd).forEach { (value, align) ->
+        listOf(0 to AbsoluteAlignment.TopLeft, 1 to AbsoluteAlignment.TopRight, 2 to AbsoluteAlignment.BottomLeft, 3 to AbsoluteAlignment.BottomRight).forEach { (value, align) ->
             val chosen = selected == value
             Box(
                 Modifier

@@ -7,8 +7,8 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
 object CarIcons {
-    private fun icon(name: String, path: String): ImageVector =
-        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
+    private fun icon(name: String, path: String, mirror: Boolean = false): ImageVector =
+        ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f, autoMirror = mirror)
             .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))
             .build()
 
@@ -38,7 +38,7 @@ object CarIcons {
         "Apps",
         "M4,8h4V4H4v4zM10,20h4v-4h-4v4zM4,20h4v-4H4v4zM4,14h4v-4H4v4zM10,14h4v-4h-4v4zM16,4v4h4V4h-4zM10,8h4V4h-4v4zM16,14h4v-4h-4v4zM16,20h4v-4h-4v4z"
     )
-    val Back = icon("Back", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z")
+    val Back = icon("Back", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z", mirror = true)
     const val ANDROID_AUTO_PATH =
         "M12 0c-.6 0-1.11.32-1.39.8L.48 18.4a1.6 1.6 0 0 0 1.39 2.4h2l7.7-13.58.43-.77 8.13 14.35h2a1.6 1.6 0 0 0 1.39-2.4L13.39.8A1.6 1.6 0 0 0 12 0zm0 7.47l-9.07 16 .54.53L12 20.8l8.53 3.2.54-.53z"
     val AndroidAuto = icon("AndroidAuto", ANDROID_AUTO_PATH)

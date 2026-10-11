@@ -67,17 +67,22 @@ import app.ft.ui.car.CarStyles
 import app.ft.aa.AaInstaller
 import app.ft.core.CarAudioBus
 import app.ft.projection.VideoPlans
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
-enum class SettingsPage(val title: String, val about: String) {
-    CAR_SCREEN("Car screen", "Background, colours and the buttons on the car"),
-    PICTURE("Picture", "Size, frame rate and quality of the picture sent to the car"),
-    SOUND("Sound", "Directions over music, bluetooth sound and sharing the phone's sound"),
-    CAR("Car and connection", "Names, WiFi Direct, bluetooth and steering wheel keys"),
-    ANDROID_AUTO("Android Auto", "How Android Auto is drawn on the car"),
-    ADVANCED("Advanced", "CarLife ports the head unit connects to")
+enum class SettingsPage(@StringRes val title: Int, @StringRes val about: Int) {
+    LOOK(R.string.settings_look_title, R.string.settings_look_about),
+    CAR_SCREEN(R.string.settings_car_screen_title, R.string.settings_car_screen_about),
+    PICTURE(R.string.settings_picture_title, R.string.settings_picture_about),
+    SOUND(R.string.settings_sound_title, R.string.settings_sound_about),
+    CAR(R.string.settings_car_title, R.string.settings_car_about),
+    ANDROID_AUTO(R.string.settings_aa_title, R.string.settings_aa_about),
+    ADVANCED(R.string.settings_advanced_title, R.string.settings_advanced_about)
 }
 
 private fun SettingsPage.icon(): ImageVector = when (this) {
+    SettingsPage.LOOK -> CarIcons.Tune
     SettingsPage.CAR_SCREEN -> CarIcons.Apps
     SettingsPage.PICTURE -> CarIcons.Tune
     SettingsPage.SOUND -> CarIcons.Music
@@ -117,8 +122,8 @@ private fun PageButton(page: SettingsPage, onClick: () -> Unit) {
                 Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
             }
             Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(page.title, style = MaterialTheme.typography.titleMedium)
-                Text(page.about, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -137,7 +142,7 @@ private fun MadeBy() {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PROFILE)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
         }) {
-            Text("Made by OneAboveAll1964", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
         }
         if (version.isNotBlank()) {
             Text("FT $version", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -160,9 +165,9 @@ private fun AaSetup(onTakeOverAa: () -> Unit) {
     val installed = remember(resumed) { AaInstaller.installed(context) }
     val serverOn = rememberAaServerOn()
     if (!installed && !hasCopy) {
-        Text("Android Auto is not on this phone", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.aa_missing_title), style = MaterialTheme.typography.titleMedium)
         Text(
-            "Install it from the Play Store, or pick an Android Auto file and FT installs it so it starts by itself.",
+            stringResource(R.string.aa_missing_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -174,7 +179,7 @@ private fun AaSetup(onTakeOverAa: () -> Unit) {
             Spacer(Modifier.height(10.dp))
             Stepper(aaSetupSteps(step, hasCopy, onTakeOverAa), running = false)
             Text(
-                "Afterwards turn off Play Store auto-update for Android Auto, or an update takes it back from FT and this needs doing again.",
+                stringResource(R.string.aa_after_body),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -182,14 +187,15 @@ private fun AaSetup(onTakeOverAa: () -> Unit) {
     }
 }
 
+@Composable
 private fun aaSetupSteps(step: AaInstaller.Step, hasCopy: Boolean, run: () -> Unit): List<StepItem> {
     val remove = when (step) {
-        AaInstaller.Step.REMOVE_UPDATES -> StepItem("Remove the Android Auto update", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
-        AaInstaller.Step.UNINSTALL -> StepItem("Remove Android Auto", false, hint = "FT keeps a copy first", action = "Remove", onAction = run)
-        else -> if (hasCopy) StepItem("Remove the Play Store copy", true) else null
+        AaInstaller.Step.REMOVE_UPDATES -> StepItem(stringResource(R.string.aa_step_remove_update), false, hint = stringResource(R.string.aa_step_keeps_copy), action = stringResource(R.string.action_remove), onAction = run)
+        AaInstaller.Step.UNINSTALL -> StepItem(stringResource(R.string.aa_step_remove_aa), false, hint = stringResource(R.string.aa_step_keeps_copy), action = stringResource(R.string.action_remove), onAction = run)
+        else -> if (hasCopy) StepItem(stringResource(R.string.aa_step_remove_store_copy), true) else null
     }
-    val install = if (hasCopy || remove != null) StepItem("Put Android Auto back", step == AaInstaller.Step.DONE, action = "Put back", onAction = run)
-    else StepItem("Install Android Auto", step == AaInstaller.Step.DONE, hint = "Pick the Android Auto file", action = "Pick file", onAction = run)
+    val install = if (hasCopy || remove != null) StepItem(stringResource(R.string.aa_step_put_back), step == AaInstaller.Step.DONE, action = stringResource(R.string.aa_action_put_back), onAction = run)
+    else StepItem(stringResource(R.string.aa_step_install), step == AaInstaller.Step.DONE, hint = stringResource(R.string.aa_step_pick_file), action = stringResource(R.string.aa_action_pick_file), onAction = run)
     return listOfNotNull(remove, install)
 }
 
@@ -197,9 +203,9 @@ private fun aaSetupSteps(step: AaInstaller.Step, hasCopy: Boolean, run: () -> Un
 private fun CornerSetting() {
     val p = FTApp.instance.prefs
     var corner by remember { mutableIntStateOf(p.aaCorner) }
-    Text("FT button on the car", style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.corner_title), style = MaterialTheme.typography.titleMedium)
     Text(
-        "Where the FT button sits on the car screen over Android Auto, phone apps and FT's own screens. It always takes you back to FT's car home.",
+        stringResource(R.string.corner_body),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -214,46 +220,47 @@ private fun CornerSetting() {
 private fun PageContent(page: SettingsPage) {
     val p = FTApp.instance.prefs
     when (page) {
+        SettingsPage.LOOK -> LookSettings()
         SettingsPage.CAR_SCREEN -> CarLookSettings()
         SettingsPage.PICTURE -> PictureSettings()
         SettingsPage.SOUND -> {
             GuidanceSetting()
-            BoolSetting("Use the car's bluetooth for sound instead", p.soundOverBluetooth) { p.soundOverBluetooth = it }
-            BoolSetting("Silence the phone while FT streams the sound", p.muteWhileProjecting) { p.muteWhileProjecting = it }
+            BoolSetting(stringResource(R.string.sound_bluetooth), p.soundOverBluetooth) { p.soundOverBluetooth = it }
+            BoolSetting(stringResource(R.string.sound_silence_phone), p.muteWhileProjecting) { p.muteWhileProjecting = it }
             QuietShareSetting()
         }
         SettingsPage.CAR -> {
-            TextSetting("Name shown to the head unit", p.carName) { p.carName = it }
-            TextSetting("WiFi Direct name (blank = any CarLife)", p.carP2pName) { p.carP2pName = it }
-            TextSetting("Bluetooth name for auto-start (blank = any)", p.carBtName) { p.carBtName = it }
-            TextSetting("WiFi Direct PIN (blank = push button)", p.carWpsPin) { p.carWpsPin = it }
-            BoolSetting("Swap the steering wheel's next and previous", p.swapTrackKeys) { p.swapTrackKeys = it }
+            TextSetting(stringResource(R.string.car_name_label), p.carName) { p.carName = it }
+            TextSetting(stringResource(R.string.car_p2p_label), p.carP2pName) { p.carP2pName = it }
+            TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
+            TextSetting(stringResource(R.string.car_pin_label), p.carWpsPin) { p.carWpsPin = it }
+            BoolSetting(stringResource(R.string.car_swap_keys), p.swapTrackKeys) { p.swapTrackKeys = it }
         }
         SettingsPage.ANDROID_AUTO -> {
-            BoolSetting("Draw at the car's own size", p.aaMatchCar) { p.aaMatchCar = it }
-            BoolSetting("Put its controls on the left", p.aaControlsLeft) { p.aaControlsLeft = it }
-            IntSetting("TCP port", p.aaPort) { p.aaPort = it }
-            IntSetting("Video width", p.aaWidth) { p.aaWidth = it }
-            IntSetting("Video height", p.aaHeight) { p.aaHeight = it }
-            IntSetting("Frame rate", p.aaFps) { p.aaFps = it }
-            IntSetting("Density", p.aaDensity) { p.aaDensity = it }
+            BoolSetting(stringResource(R.string.aa_match_car), p.aaMatchCar) { p.aaMatchCar = it }
+            BoolSetting(stringResource(R.string.aa_controls_left), p.aaControlsLeft) { p.aaControlsLeft = it }
+            IntSetting(stringResource(R.string.aa_port), p.aaPort) { p.aaPort = it }
+            IntSetting(stringResource(R.string.aa_width), p.aaWidth) { p.aaWidth = it }
+            IntSetting(stringResource(R.string.aa_height), p.aaHeight) { p.aaHeight = it }
+            IntSetting(stringResource(R.string.aa_fps), p.aaFps) { p.aaFps = it }
+            IntSetting(stringResource(R.string.aa_density), p.aaDensity) { p.aaDensity = it }
         }
         SettingsPage.ADVANCED -> {
-            Text("Ports the head unit connects to", style = MaterialTheme.typography.labelLarge)
-            IntSetting("Command", p.cmdPort) { p.cmdPort = it }
-            IntSetting("Video", p.videoPort) { p.videoPort = it }
-            IntSetting("Media", p.mediaPort) { p.mediaPort = it }
-            IntSetting("TTS", p.ttsPort) { p.ttsPort = it }
-            IntSetting("Voice", p.vrPort) { p.vrPort = it }
-            IntSetting("Touch", p.touchPort) { p.touchPort = it }
+            Text(stringResource(R.string.adv_ports), style = MaterialTheme.typography.labelLarge)
+            IntSetting(stringResource(R.string.adv_command), p.cmdPort) { p.cmdPort = it }
+            IntSetting(stringResource(R.string.adv_video), p.videoPort) { p.videoPort = it }
+            IntSetting(stringResource(R.string.adv_media), p.mediaPort) { p.mediaPort = it }
+            IntSetting(stringResource(R.string.adv_tts), p.ttsPort) { p.ttsPort = it }
+            IntSetting(stringResource(R.string.adv_voice), p.vrPort) { p.vrPort = it }
+            IntSetting(stringResource(R.string.adv_touch), p.touchPort) { p.touchPort = it }
         }
     }
 }
 
 private val GUIDANCE = listOf(
-    Triple(CarAudioBus.GUIDANCE_UNTOUCHED, "Like Baidu", "Directions go to the car on their own channel the moment they arrive and the car decides how the music sits under them, the way Baidu CarLife does it."),
-    Triple(CarAudioBus.GUIDANCE_IN_STEP, "In step", "FT mixes directions into the music and dips the music exactly while they speak. On drives where the car holds the music longer, directions wait for it."),
-    Triple(CarAudioBus.GUIDANCE_DIP, "On time", "Directions speak the moment they arrive and FT dips the music with them, which on some drives reaches the car late.")
+    Triple(CarAudioBus.GUIDANCE_UNTOUCHED, R.string.guidance_like_baidu, R.string.guidance_like_baidu_body),
+    Triple(CarAudioBus.GUIDANCE_IN_STEP, R.string.guidance_in_step, R.string.guidance_in_step_body),
+    Triple(CarAudioBus.GUIDANCE_DIP, R.string.guidance_on_time, R.string.guidance_on_time_body)
 )
 
 @Composable
@@ -262,17 +269,17 @@ private fun GuidanceSetting() {
     var mode by remember { mutableIntStateOf(p.guidanceMode) }
     val chosen = GUIDANCE.firstOrNull { it.first == mode } ?: GUIDANCE.first()
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Directions over music", style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.bodyLarge)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GUIDANCE.forEach { (value, label, _) ->
-                ValueChip(label, chosen.first == value, Modifier.weight(1f)) {
+                ValueChip(stringResource(label), chosen.first == value, Modifier.weight(1f)) {
                     mode = value
                     p.guidanceMode = value
                     CarAudioBus.guidance = value
                 }
             }
         }
-        Text(chosen.third, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(chosen.third), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -295,18 +302,17 @@ private fun QuietShareSetting() {
     val command = if (allowed) QuietShare.undo(context) else QuietShare.command(context)
     Column(Modifier.fillMaxWidth().padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Share sound without asking", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.quiet_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Surface(
                 shape = RoundedCornerShape(50),
                 color = if (allowed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
                 contentColor = if (allowed) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
             ) {
-                Text(if (allowed) "On" else "Off", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                Text(stringResource(if (allowed) R.string.state_on else R.string.state_off), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
         }
         Text(
-            if (allowed) "FT passes other apps' sound to the car by itself, with no question on the phone. To turn this off, run:"
-            else "Android asks on the phone before FT can pass other apps' sound to the car. Run this once from a computer with USB debugging on, and it stops asking:",
+            stringResource(if (allowed) R.string.quiet_on_body else R.string.quiet_off_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -318,11 +324,11 @@ private fun QuietShareSetting() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = {
                 context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("FT", command))
-            }) { Text("Copy") }
+            }) { Text(stringResource(R.string.action_copy)) }
             OutlinedButton(onClick = {
                 val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, command)
                 runCatching { context.startActivity(Intent.createChooser(send, null)) }
-            }) { Text("Share") }
+            }) { Text(stringResource(R.string.action_share)) }
         }
     }
 }
@@ -371,16 +377,16 @@ private fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> 
 }
 
 private val SIZE_CHOICES = listOf(
-    VideoPlans.SIZE_CAR to "Car's own",
-    VideoPlans.SIZE_BAIDU to "Like Baidu",
-    VideoPlans.SIZE_CUSTOM to "Custom"
+    VideoPlans.SIZE_CAR to R.string.picture_size_car,
+    VideoPlans.SIZE_BAIDU to R.string.picture_size_baidu,
+    VideoPlans.SIZE_CUSTOM to R.string.picture_size_custom
 )
 
-private val FPS_CHOICES = listOf(0 to "Auto", 15 to "15", 20 to "20", 24 to "24", 30 to "30")
+private val FPS_CHOICES = listOf(0 to "", 15 to "15", 20 to "20", 24 to "24", 30 to "30")
 
 private val RATE_CHOICES = listOf(2_000_000 to "2", 2_560_000 to "2.56", 3_000_000 to "3", 3_840_000 to "3.84", 5_000_000 to "5")
 
-private val FLOOR_CHOICES = listOf(0 to "Off", 18 to "18", 22 to "22", 26 to "26")
+private val FLOOR_CHOICES = listOf(0 to "", 18 to "18", 22 to "22", 26 to "26")
 
 @Composable
 private fun PictureSettings() {
@@ -392,51 +398,50 @@ private fun PictureSettings() {
     var floor by remember(rev) { mutableIntStateOf(p.videoQpFloor) }
     val defaults = size == VideoPlans.SIZE_CAR && fps == 0 && rate == VideoPlans.DEFAULT_BITRATE && p.videoMinFps == 0 && floor == DEFAULT_FLOOR
     Text(
-        if (defaults) "FT sends the car its own screen size, 1920×720 on a Corolla, with 3 Mbps of picture data. That is the most the Corolla has been tested with, and it kept up at 30 frames a second. FT starts at 20 frames a second and follows what the car asks for."
-        else "Changes take effect the next time the car connects.",
+        stringResource(if (defaults) R.string.picture_defaults_body else R.string.picture_changed_body),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    Text("Size sent to the car", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.picture_size_label), style = MaterialTheme.typography.labelLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         SIZE_CHOICES.forEach { (value, label) ->
-            ValueChip(label, size == value, Modifier.weight(1f)) { size = value; p.videoSize = value }
+            ValueChip(stringResource(label), size == value, Modifier.weight(1f)) { size = value; p.videoSize = value }
         }
     }
     if (size == VideoPlans.SIZE_CUSTOM) {
-        IntSetting("Width", p.videoWidth, rev) { p.videoWidth = it }
-        IntSetting("Height", p.videoHeight, rev) { p.videoHeight = it }
+        IntSetting(stringResource(R.string.picture_width), p.videoWidth, rev) { p.videoWidth = it }
+        IntSetting(stringResource(R.string.picture_height), p.videoHeight, rev) { p.videoHeight = it }
     }
-    Text("Frames a second", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.picture_fps_label), style = MaterialTheme.typography.labelLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FPS_CHOICES.forEach { (value, label) ->
-            ValueChip(label, fps == value, Modifier.weight(1f)) { fps = value; p.videoFps = value }
+            ValueChip(label.ifEmpty { stringResource(R.string.choice_auto) }, fps == value, Modifier.weight(1f)) { fps = value; p.videoFps = value }
         }
     }
-    Text("Picture data in Mbps", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.picture_rate_label), style = MaterialTheme.typography.labelLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         RATE_CHOICES.forEach { (value, label) ->
             ValueChip(label, rate == value, Modifier.weight(1f)) { rate = value; p.videoBitrate = value }
         }
     }
     Text(
-        "Baidu sends a Corolla 2.56. Anything above 3 is untested on the Corolla; if it is too much, the car asks for fewer frames a second.",
+        stringResource(R.string.picture_rate_note),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    Text("Quality floor", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.picture_floor_label), style = MaterialTheme.typography.labelLarge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FLOOR_CHOICES.forEach { (value, label) ->
-            ValueChip(label, floor == value, Modifier.weight(1f)) { floor = value; p.videoQpFloor = value }
+            ValueChip(label.ifEmpty { stringResource(R.string.state_off) }, floor == value, Modifier.weight(1f)) { floor = value; p.videoQpFloor = value }
         }
     }
     Text(
-        "Keeps every full picture small enough for the car to take, so the screen comes back after the car shows its own screens. Baidu does this on its newest phones. Lower numbers are sharper and bigger, Off sends whatever the phone makes.",
+        stringResource(R.string.picture_floor_note),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    IntSetting("Lowest frame rate to accept, 0 means no floor", p.videoMinFps, rev) { p.videoMinFps = it }
-    IntSetting("Sharpness of apps on the car screen", p.carDensity, rev) { p.carDensity = it }
+    IntSetting(stringResource(R.string.picture_min_fps), p.videoMinFps, rev) { p.videoMinFps = it }
+    IntSetting(stringResource(R.string.picture_density), p.carDensity, rev) { p.carDensity = it }
     OutlinedButton(
         onClick = {
             p.videoSize = VideoPlans.SIZE_CAR
@@ -452,7 +457,7 @@ private fun PictureSettings() {
         enabled = !defaults || p.carDensity != 160,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(if (defaults && p.carDensity == 160) "Already at the defaults" else "Put everything back to the defaults")
+        Text(stringResource(if (defaults && p.carDensity == 160) R.string.picture_at_defaults else R.string.picture_reset))
     }
 }
 

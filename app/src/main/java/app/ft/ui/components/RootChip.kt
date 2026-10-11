@@ -36,6 +36,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.core.Root
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
 private val RootGreen = Color(0xFF1E8E52)
 
@@ -64,7 +66,7 @@ fun RootChip() {
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White))
-            Text("ROOT", fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.8.sp)
+            Text(stringResource(R.string.root_chip), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.8.sp)
         }
     }
     if (open) RootSheet { open = false }
@@ -80,19 +82,19 @@ private fun RootSheet(onDismiss: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.size(10.dp).clip(CircleShape).background(RootGreen))
-                Text("Root is on", style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.root_title), style = MaterialTheme.typography.headlineSmall)
             }
             Text(
-                "Your phone is rooted and you let FT use it, so FT sets everything up by itself. Without root FT works the same, it just asks you to do these by hand.",
+                stringResource(R.string.root_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             listOf(
-                "Turns on Wi-Fi, Bluetooth and the hotspot for the car",
-                "Gives FT the permissions it needs",
-                "Sends the phone's sound to the car with no share-screen pop-up",
-                "Switches on touch control and drawing over apps",
-                "Keeps FT awake so it connects faster and stays connected"
+                stringResource(R.string.root_does_radios),
+                stringResource(R.string.root_does_permissions),
+                stringResource(R.string.root_does_sound),
+                stringResource(R.string.root_does_touch),
+                stringResource(R.string.root_does_awake)
             ).forEach { line ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("•", color = RootGreen, fontWeight = FontWeight.Bold)

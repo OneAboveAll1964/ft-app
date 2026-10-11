@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import app.ft.core.Lang
 
 data class AaState(
     val listening: Boolean = false,
@@ -88,7 +89,7 @@ class AaHeadUnitService : Service() {
         super.onCreate()
         running = true
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "FT Android Auto", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, Lang.str(R.string.channel_aa), NotificationManager.IMPORTANCE_LOW))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -103,7 +104,7 @@ class AaHeadUnitService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_START -> {
-                foreground("Android Auto head unit ready")
+                foreground(Lang.str(R.string.note_aa_ready))
                 listen(intent.getBooleanExtra(EXTRA_BLUETOOTH, false))
             }
         }
@@ -196,12 +197,12 @@ class AaHeadUnitService : Service() {
             if (current != null) {
                 current = null
                 _state.update { it.copy(connected = false, phase = null, deviceName = "") }
-                updateNotification("Android Auto head unit ready")
+                updateNotification(Lang.str(R.string.note_aa_ready))
             }
         }
         current = session
         _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED) }
-        scope.launch { session.phase.collect { p -> _state.update { it.copy(phase = p) }; if (p == AaSession.Phase.STREAMING) updateNotification("Android Auto streaming") } }
+        scope.launch { session.phase.collect { p -> _state.update { it.copy(phase = p) }; if (p == AaSession.Phase.STREAMING) updateNotification(Lang.str(R.string.note_aa_streaming)) } }
         scope.launch { session.deviceName.collect { n -> _state.update { it.copy(deviceName = n) } } }
         session.start()
     }

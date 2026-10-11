@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import app.ft.core.Lang
+import app.ft.core.Looks
 
 class FTApp : Application() {
     lateinit var prefs: Prefs
@@ -22,6 +24,8 @@ class FTApp : Application() {
         super.onCreate()
         instance = this
         prefs = Prefs(this)
+        Lang.init(prefs)
+        Looks.init(prefs)
         DiagLog.attach(getExternalFilesDir("logs"))
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->

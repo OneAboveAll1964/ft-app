@@ -22,6 +22,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import app.ft.R
+import app.ft.ui.theme.LeftToRight
 
 private val ROWS = listOf(
     "1234567890",
@@ -36,9 +39,9 @@ fun CarKeyboard(
     onBackspace: () -> Unit,
     onGo: () -> Unit,
     onClose: () -> Unit,
-    goLabel: String = "Go",
+    goLabel: String = "",
     modifier: Modifier = Modifier
-) {
+) = LeftToRight {
     var shift by remember { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -53,22 +56,22 @@ fun CarKeyboard(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Key(if (shift) "ABC" else "abc", Modifier.width(100.dp)) { shift = !shift }
                 Key("/", Modifier.width(70.dp)) { onInsert("/") }
-                Key("space", Modifier.weight(1f)) { onInsert(" ") }
+                Key(stringResource(R.string.keyboard_space), Modifier.weight(1f)) { onInsert(" ") }
                 Key(".com", Modifier.width(100.dp)) { onInsert(".com") }
-                Key("del", Modifier.width(88.dp), onClick = onBackspace)
+                Key(stringResource(R.string.keyboard_delete), Modifier.width(88.dp), onClick = onBackspace)
                 OutlinedButton(
                     onClick = onClose,
                     modifier = Modifier.width(96.dp).height(56.dp),
                     shapes = ButtonDefaults.shapes(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp)
-                ) { Text("Close", maxLines = 1) }
+                ) { Text(stringResource(R.string.action_close), maxLines = 1) }
                 Button(
                     onClick = onGo,
                     modifier = Modifier.width(104.dp).height(56.dp),
                     shapes = ButtonDefaults.shapes(),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp)
-                ) { Text(goLabel, maxLines = 1) }
+                ) { Text(goLabel.ifEmpty { stringResource(R.string.keyboard_go) }, maxLines = 1) }
             }
         }
     }

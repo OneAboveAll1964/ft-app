@@ -30,6 +30,8 @@ import app.ft.core.DiagLog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import app.ft.R
 
 @Composable
 fun DiagnosticsScreen(pad: PaddingValues) {
@@ -45,7 +47,7 @@ fun DiagnosticsScreen(pad: PaddingValues) {
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("All") })
+            FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text(stringResource(R.string.log_filter_all)) })
             tags.forEach { t -> FilterChip(selected = filter == t, onClick = { filter = if (filter == t) null else t }, label = { Text(t) }) }
         }
         LazyColumn(

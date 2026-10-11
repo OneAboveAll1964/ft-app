@@ -112,7 +112,7 @@
         <service
             android:name=".FTTouchService"
             android:exported="true"
-            android:label="FT car touch"
+            android:label="@string/touch_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

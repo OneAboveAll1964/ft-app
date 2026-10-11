@@ -100,6 +100,12 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.AbsoluteAlignment
+import app.ft.R
+import app.ft.ui.theme.Localized
+import app.ft.ui.theme.LeftToRight
+import java.util.Calendar
 
 enum class CarView { LAUNCHER, DRAWER, BROWSER, YOUTUBE, MUSIC, VIDEOS }
 
@@ -113,14 +119,16 @@ fun Modifier.touchZone(key: String): Modifier = composed {
 
 private fun sidePadding(corner: Int): PaddingValues {
     val left = corner == 0 || corner == 2
-    return PaddingValues(start = if (left) 108.dp else 28.dp, end = if (left) 28.dp else 108.dp, top = 22.dp, bottom = 20.dp)
+    return PaddingValues.Absolute(left = if (left) 108.dp else 28.dp, right = if (left) 28.dp else 108.dp, top = 22.dp, bottom = 20.dp)
 }
 
 @Composable
 fun CarScreen() {
     val style by CarStyles.current.collectAsState()
-    CarTheme(style.accentColor) {
-        CompositionLocalProvider(LocalContentColor provides Color.White) { CarRoot(style) }
+    Localized {
+        CarTheme(style.accentColor) {
+            CompositionLocalProvider(LocalContentColor provides Color.White) { CarRoot(style) }
+        }
     }
 }
 
@@ -157,8 +165,8 @@ private fun CarRoot(style: CarStyle) {
         CarBackground(style)
         when {
             state.waitingForShare -> ShareWait(state.mirrorPackage, state.shareForSound)
-            state.aaOverlay -> AaOverlay(aa)
-            state.mirroring -> MirrorOverlay(style.corner)
+            state.aaOverlay -> LeftToRight { AaOverlay(aa) }
+            state.mirroring -> LeftToRight { MirrorOverlay(style.corner) }
             view == CarView.DRAWER -> AppDrawer(drawerGrid, pad) { view = CarView.LAUNCHER }
             view == CarView.BROWSER -> CarBrowser(browser) { view = CarView.LAUNCHER }
             view == CarView.YOUTUBE -> CarBrowser(youtube) { view = CarView.LAUNCHER }
@@ -170,13 +178,13 @@ private fun CarRoot(style: CarStyle) {
             }
         }
         AnimatedVisibility(
-            visible = state.notice.isNotEmpty(),
+            visible = state.notice != 0,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp, start = 120.dp, end = 120.dp)
         ) {
             Surface(shape = RoundedCornerShape(50), color = Color.Black.copy(alpha = 0.82f), contentColor = Color.White) {
-                Text(state.notice, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+                if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
             }
         }
         if (state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) {
@@ -202,20 +210,20 @@ private fun ShareWait(pkg: String, forSound: Boolean) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
             LoadingIndicator()
             Text(
-                if (forSound) "Allow sound on your phone" else "Allow screen sharing on your phone",
+                stringResource(if (forSound) R.string.car_allow_sound else R.string.car_allow_share),
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White
             )
             Text(
                 when {
-                    forSound -> "The sound will play here as soon as you allow it"
-                    label.isNotBlank() -> "$label will open here as soon as you allow it"
-                    else -> "The app will open here as soon as you allow it"
+                    forSound -> stringResource(R.string.car_sound_soon)
+                    label.isNotBlank() -> stringResource(R.string.car_app_soon, label)
+                    else -> stringResource(R.string.car_any_app_soon)
                 },
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.7f)
             )
-            Button(onClick = { CarLifeService.cancelShareWait() }) { Text(if (forSound) "Not now" else "Cancel") }
+            Button(onClick = { CarLifeService.cancelShareWait() }) { Text(stringResource(if (forSound) R.string.action_not_now else R.string.action_cancel)) }
         }
     }
 }
@@ -223,10 +231,10 @@ private fun ShareWait(pkg: String, forSound: Boolean) {
 @Composable
 private fun CornerPill(corner: Int, onClick: () -> Unit) {
     val align = when (corner) {
-        1 -> Alignment.TopEnd
-        2 -> Alignment.BottomStart
-        3 -> Alignment.BottomEnd
-        else -> Alignment.TopStart
+        1 -> AbsoluteAlignment.TopRight
+        2 -> AbsoluteAlignment.BottomLeft
+        3 -> AbsoluteAlignment.BottomRight
+        else -> AbsoluteAlignment.TopLeft
     }
     Box(Modifier.fillMaxSize().padding(14.dp), contentAlignment = align) {
         Surface(
@@ -271,18 +279,24 @@ private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean
 
 @Composable
 private fun Clock(h24: Boolean) {
-    var time by remember { mutableStateOf("") }
-    var half by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf("") }
-    LaunchedEffect(h24) {
+    val res = LocalContext.current.resources
+    var now by remember { mutableStateOf(Calendar.getInstance()) }
+    LaunchedEffect(Unit) {
         while (true) {
-            val now = Date()
-            time = SimpleDateFormat(if (h24) "HH:mm" else "h:mm", Locale.getDefault()).format(now)
-            half = if (h24) "" else SimpleDateFormat("a", Locale.getDefault()).format(now)
-            date = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(now)
+            now = Calendar.getInstance()
             delay(1000)
         }
     }
+    val hour = now.get(Calendar.HOUR_OF_DAY)
+    val minute = now.get(Calendar.MINUTE)
+    val time = if (h24) String.format(Locale.US, "%02d:%02d", hour, minute) else String.format(Locale.US, "%d:%02d", if (hour % 12 == 0) 12 else hour % 12, minute)
+    val half = if (h24) "" else res.getString(if (hour < 12) R.string.car_am else R.string.car_pm)
+    val date = res.getString(
+        R.string.car_date,
+        res.getStringArray(R.array.car_days)[now.get(Calendar.DAY_OF_WEEK) - 1],
+        now.get(Calendar.DAY_OF_MONTH).toString(),
+        res.getStringArray(R.array.car_months)[now.get(Calendar.MONTH)]
+    )
     Column {
         Row {
             Text(time, style = MaterialTheme.typography.displayLarge, color = Color.White, fontWeight = FontWeight.Medium, modifier = Modifier.alignByBaseline())
@@ -299,7 +313,7 @@ private fun CarHomeButton(onClick: () -> Unit) {
     Surface(onClick = onClick, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), contentColor = Color.White) {
         Row(Modifier.padding(start = 12.dp, end = 18.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(CarIcons.Back, contentDescription = null, modifier = Modifier.size(22.dp))
-            Text("Car screen", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
+            Text(stringResource(R.string.settings_car_screen_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
         }
     }
 }
@@ -308,10 +322,10 @@ private fun CarHomeButton(onClick: () -> Unit) {
 private fun LinkChip(state: CarState) {
     val s = state.session
     val label = when (s) {
-        is CarLifeSession.State.Projecting -> "${s.via} · ${s.streamWidth}×${s.streamHeight} · ${s.fps} fps"
-        is CarLifeSession.State.Negotiated -> "${s.via} · getting ready"
-        is CarLifeSession.State.Linked -> "${s.via} · connected"
-        else -> "not connected"
+        is CarLifeSession.State.Projecting -> stringResource(R.string.link_projecting, s.via, s.streamWidth, s.streamHeight, s.fps)
+        is CarLifeSession.State.Negotiated -> stringResource(R.string.link_getting_ready, s.via)
+        is CarLifeSession.State.Linked -> stringResource(R.string.link_connected, s.via)
+        else -> stringResource(R.string.link_not_connected)
     }
     Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), contentColor = Color.White) {
         Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
@@ -344,14 +358,14 @@ private fun NowPlayingCard(player: CarPlayer.State, onOpen: () -> Unit, interact
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                     Text(
-                        t?.title ?: "Music",
+                        t?.title ?: stringResource(R.string.tile_music),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        t?.artist?.takeIf { it.isNotBlank() } ?: if (t == null) "Play something from your phone" else "",
+                        t?.artist?.takeIf { it.isNotBlank() } ?: if (t == null) stringResource(R.string.car_play_something) else "",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f),
                         maxLines = 1,
@@ -359,9 +373,13 @@ private fun NowPlayingCard(player: CarPlayer.State, onOpen: () -> Unit, interact
                     )
                 }
                 if (t != null) {
-                    MiniKey(CarIcons.Previous, 40.dp) { CarPlayer.previous() }
-                    MiniKey(if (player.playing) CarIcons.Pause else CarIcons.Play, 50.dp, filled = true) { CarPlayer.toggle() }
-                    MiniKey(CarIcons.Next, 40.dp) { CarPlayer.next() }
+                    LeftToRight {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MiniKey(CarIcons.Previous, 40.dp) { CarPlayer.previous() }
+                            MiniKey(if (player.playing) CarIcons.Pause else CarIcons.Play, 50.dp, filled = true) { CarPlayer.toggle() }
+                            MiniKey(CarIcons.Next, 40.dp) { CarPlayer.next() }
+                        }
+                    }
                 } else {
                     MiniKey(CarIcons.Shuffle, 50.dp, filled = true) {
                         if (interactive) scope.launch {
@@ -374,7 +392,7 @@ private fun NowPlayingCard(player: CarPlayer.State, onOpen: () -> Unit, interact
                     }
                 }
             }
-            if (t != null && player.durationMs > 0) {
+            if (t != null && player.durationMs > 0) LeftToRight {
                 LinearProgressIndicator(
                     progress = { (player.positionMs.toFloat() / player.durationMs).coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp).height(4.dp),
@@ -405,7 +423,7 @@ private data class TileSpec(val key: String, val label: String, val icon: ImageV
 @Composable
 private fun TileGrid(keys: List<String>, modifier: Modifier, interactive: Boolean = true, onOpen: (CarView, Boolean) -> Unit) {
     val context = LocalContext.current
-    val specs = remember(keys) { keys.map { tileSpec(context, it) } }
+    val specs = remember(keys, context) { keys.map { tileSpec(context, it) } }
     val columns = CarStyle.columns(specs.size)
     val rows = specs.chunked(columns)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -433,14 +451,14 @@ private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit) {
 }
 
 fun tileLabel(context: android.content.Context, key: String): String = when {
-    key == "music" -> "Music"
-    key == "videos" -> "Videos"
-    key == "youtube" -> "YouTube"
-    key == "browser" -> "Browser"
-    key == "apps" -> "All apps"
-    key == "maps" -> "Maps"
-    key == "aa" -> "Android Auto"
-    key == "phone" -> "Phone screen"
+    key == "music" -> context.getString(R.string.tile_music)
+    key == "videos" -> context.getString(R.string.tile_videos)
+    key == "youtube" -> context.getString(R.string.tile_youtube)
+    key == "browser" -> context.getString(R.string.tile_browser)
+    key == "apps" -> context.getString(R.string.tile_apps)
+    key == "maps" -> context.getString(R.string.tile_maps)
+    key == "aa" -> context.getString(R.string.tile_aa)
+    key == "phone" -> context.getString(R.string.tile_phone)
     key.startsWith("app:") -> runCatching {
         val pm = context.packageManager
         pm.getApplicationLabel(pm.getApplicationInfo(key.removePrefix("app:"), 0)).toString()
@@ -520,9 +538,9 @@ private fun AaOverlay(aa: app.ft.aa.AaState) {
                     LoadingIndicator()
                     Text(
                         when {
-                            aa.connected -> "Connecting to ${aa.deviceName.ifBlank { "your phone" }}…"
-                            aa.listening -> "Waiting for a phone on port ${aa.port}"
-                            else -> "Starting Android Auto head unit…"
+                            aa.connected -> stringResource(R.string.car_aa_connecting, aa.deviceName.ifBlank { stringResource(R.string.car_aa_your_phone) })
+                            aa.listening -> stringResource(R.string.car_aa_waiting, aa.port)
+                            else -> stringResource(R.string.car_aa_starting)
                         },
                         color = Color.White,
                         style = MaterialTheme.typography.titleLarge
@@ -567,7 +585,7 @@ private fun MirrorOverlay(corner: Int) {
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp)
             ) {
                 Text(
-                    "Turn on FT in your phone's accessibility settings to use touch here",
+                    stringResource(R.string.car_touch_needs_accessibility),
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
@@ -611,11 +629,11 @@ private fun PhoneKeys(left: Boolean, rotate: Boolean, modifier: Modifier) {
                     exit = shrinkHorizontally(spring(stiffness = Spring.StiffnessMedium), shrinkTowards = if (left) Alignment.Start else Alignment.End) + fadeOut()
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 6.dp)) {
-                        PhoneKey(CarIcons.Back, "Back") { CarLifeService.navBack(); poke++ }
-                        PhoneKey(Icons.Filled.Home, "Home") { CarLifeService.navHome(); poke++ }
-                        PhoneKey(CarIcons.Recents, "Recent apps") { CarLifeService.navRecents(); poke++ }
-                        if (rotate) PhoneKey(CarIcons.Rotate, "Rotate") { CarLifeService.rotatePhone(); poke++ }
-                        PhoneKey(Icons.Filled.Notifications, "Notifications") { CarLifeService.navNotifications(); poke++ }
+                        PhoneKey(CarIcons.Back, stringResource(R.string.key_back)) { CarLifeService.navBack(); poke++ }
+                        PhoneKey(Icons.Filled.Home, stringResource(R.string.key_home)) { CarLifeService.navHome(); poke++ }
+                        PhoneKey(CarIcons.Recents, stringResource(R.string.key_recents)) { CarLifeService.navRecents(); poke++ }
+                        if (rotate) PhoneKey(CarIcons.Rotate, stringResource(R.string.key_rotate)) { CarLifeService.rotatePhone(); poke++ }
+                        PhoneKey(Icons.Filled.Notifications, stringResource(R.string.key_notifications)) { CarLifeService.navNotifications(); poke++ }
                     }
                 }
             }
@@ -630,7 +648,7 @@ private fun PhoneKeys(left: Boolean, rotate: Boolean, modifier: Modifier) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             CarIcons.Chevron,
-                            contentDescription = if (open) "Hide phone keys" else "Phone keys",
+                            contentDescription = stringResource(if (open) R.string.keys_hide else R.string.keys_show),
                             modifier = Modifier.size(28.dp).graphicsLayer { rotationZ = turn + if (left) 180f else 0f }
                         )
                     }
@@ -664,7 +682,7 @@ private fun AppDrawer(gridState: LazyGridState, pad: PaddingValues, onClose: () 
         AppCatalog.apps.value?.let { AppCatalog.warm(context, it.take(30), px) }
     }
     Column(Modifier.fillMaxSize().padding(pad)) {
-        Text("All apps", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
+        Text(stringResource(R.string.tile_apps), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 12.dp))
         val list = apps
         if (list == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
@@ -714,7 +732,7 @@ fun CarPreview(style: CarStyle, modifier: Modifier = Modifier) {
                     Clock(style.clock24)
                     if (style.showLink) {
                         Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), contentColor = Color.White) {
-                            Text("WiFi · 1920×720 · 30 fps", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+                            Text(stringResource(R.string.link_projecting, "WiFi", 1920, 720, 30), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
                         }
                     }
                     CarHomeButton {}

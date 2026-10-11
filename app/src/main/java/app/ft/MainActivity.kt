@@ -73,11 +73,20 @@ import app.ft.ui.settings.SettingsScreen
 import app.ft.ui.components.RootChip
 import app.ft.ui.components.ReportButton
 import app.ft.ui.theme.FTTheme
+import androidx.activity.SystemBarStyle
+import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
+import androidx.annotation.StringRes
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.res.stringResource
+import app.ft.core.Looks
+import app.ft.ui.theme.Localized
+import app.ft.ui.theme.rememberDark
 
-enum class Screen(val label: String, val icon: ImageVector) {
-    HOME("Home", Icons.Filled.Home),
-    LOG("Log", Icons.Filled.Info),
-    SETTINGS("Settings", Icons.Filled.Settings)
+enum class Screen(@StringRes val label: Int, val icon: ImageVector) {
+    HOME(R.string.nav_home, Icons.Filled.Home),
+    LOG(R.string.nav_log, Icons.Filled.Info),
+    SETTINGS(R.string.nav_settings, Icons.Filled.Settings)
 }
 
 class MainActivity : ComponentActivity() {
@@ -128,20 +137,34 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        applyBars(Looks.dark(Looks.mode.value, (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES))
         registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
         if (app.prefs.autoConnect) CarLifeService.startAuto(this)
         setContent {
-            FTTheme {
-                FTRoot(
-                    onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                    onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
-                    onTakeOverAa = { takeOverAndroidAuto() }
-                )
+            val dark = rememberDark()
+            LaunchedEffect(dark) { applyBars(dark) }
+            FTTheme(dark) {
+                val background = MaterialTheme.colorScheme.background
+                LaunchedEffect(background) { window.setBackgroundDrawable(ColorDrawable(background.toArgb())) }
+                Localized {
+                    FTRoot(
+                        onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                        onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
+                        onTakeOverAa = { takeOverAndroidAuto() }
+                    )
+                }
             }
         }
+    }
+
+    private fun applyBars(dark: Boolean) {
+        val clear = android.graphics.Color.TRANSPARENT
+        val style = if (dark) SystemBarStyle.dark(clear) else SystemBarStyle.light(clear, clear)
+        enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+        window.isNavigationBarContrastEnforced = false
+        window.isStatusBarContrastEnforced = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -268,7 +291,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
         topBar = {
             TopAppBar(
                 title = {
-                    val heading = if (inPage) settingsPage?.title.orEmpty() else screen.label
+                    val heading = stringResource(if (inPage) settingsPage?.title ?: screen.label else screen.label)
                     AnimatedContent(targetState = screen to heading, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { (s, text) ->
                         if (s == Screen.HOME) Image(
                             painter = painterResource(R.drawable.ft_logo),
@@ -279,12 +302,12 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
                     }
                 },
                 navigationIcon = {
-                    if (inPage) IconButton(onClick = { settingsPage = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    if (inPage) IconButton(onClick = { settingsPage = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back)) }
                 },
                 actions = {
                     if (screen == Screen.LOG) {
                         ReportButton()
-                        IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = "Clear") }
+                        IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.cd_clear_log)) }
                     }
                     RootChip()
                 },
@@ -301,8 +324,8 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onTakeOve
                                 if (s == Screen.SETTINGS) settingsPage = null
                                 screen = s
                             },
-                            icon = { Icon(s.icon, contentDescription = s.label) },
-                            label = { Text(s.label) }
+                            icon = { Icon(s.icon, contentDescription = stringResource(s.label)) },
+                            label = { Text(stringResource(s.label)) }
                         )
                     }
                 }

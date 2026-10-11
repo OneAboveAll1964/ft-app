@@ -75,6 +75,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun rememberAaServerOn(): Boolean? {
@@ -97,9 +98,9 @@ fun rememberAaServerOn(): Boolean? {
 fun AaStartChoice(serverOn: Boolean?, reinstalled: Boolean, reinstall: @Composable ColumnScope.() -> Unit) {
     var help by remember { mutableStateOf(false) }
     if (reinstalled) {
-        OptionCard(1, "FT's own copy of Android Auto", active = true, status = "Ready") {
+        OptionCard(1, stringResource(R.string.aa_own_copy), active = true, status = stringResource(R.string.state_ready)) {
             Text(
-                "FT installed Android Auto, so it starts by itself when the car connects. There is nothing to switch on in Android Auto.",
+                stringResource(R.string.aa_own_copy_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -107,28 +108,28 @@ fun AaStartChoice(serverOn: Boolean?, reinstalled: Boolean, reinstall: @Composab
         }
         return
     }
-    Text("Pick one of these two ways to start it", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Text(stringResource(R.string.aa_pick_way), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(10.dp))
     val on = serverOn == true
-    OptionCard(1, "Switch on its head unit server", active = on, status = when (serverOn) { true -> "On"; false -> "Off"; null -> "Checking" }) {
+    OptionCard(1, stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking })) {
         Text(
-            "Quick to do in Android Auto's settings. Android Auto switches it off again when the phone restarts or Android Auto updates.",
+            stringResource(R.string.aa_server_option_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (!on) {
             val context = LocalContext.current
-            ButtonPair("Show me how", { help = true }, "Open Android Auto", { AaInstaller.openSettings(context) })
+            ButtonPair(stringResource(R.string.aa_show_me_how), { help = true }, stringResource(R.string.aa_open_aa), { AaInstaller.openSettings(context) })
         }
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         HorizontalDivider(Modifier.weight(1f))
-        Text("or", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp))
+        Text(stringResource(R.string.aa_or), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp))
         HorizontalDivider(Modifier.weight(1f))
     }
-    OptionCard(2, "Downgrade it through FT, once", active = false, status = null) {
+    OptionCard(2, stringResource(R.string.aa_downgrade_option), active = false, status = null) {
         Text(
-            "FT removes the Play Store update and puts the same version back as its own install. Android Auto then starts by itself every drive and needs no server.",
+            stringResource(R.string.aa_downgrade_option_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -218,8 +219,8 @@ fun ServerHelpSheet(serverOn: Boolean?, onDismiss: () -> Unit) {
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
             Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Switch on the head unit server", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                    if (serverOn == true) StatusChip("On", active = true)
+                    Text(stringResource(R.string.aa_help_title), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    if (serverOn == true) StatusChip(stringResource(R.string.state_on), active = true)
                 }
                 Spacer(Modifier.height(18.dp))
                 TallestPage(HELP_PAGES, { HelpPage(it, icon, shotMax) }) { height ->
@@ -239,7 +240,7 @@ fun ServerHelpSheet(serverOn: Boolean?, onDismiss: () -> Unit) {
                         TextButton(
                             onClick = { scope.launch { pager.animateScrollToPage((pager.targetPage - 1).coerceAtLeast(0)) } },
                             modifier = Modifier.align(Alignment.CenterStart)
-                        ) { Text("Back") }
+                        ) { Text(stringResource(R.string.action_back)) }
                     }
                     Dots(HELP_PAGES, page, Modifier.align(Alignment.Center))
                     Button(
@@ -248,7 +249,7 @@ fun ServerHelpSheet(serverOn: Boolean?, onDismiss: () -> Unit) {
                             else scope.launch { pager.animateScrollToPage((pager.targetPage + 1).coerceAtMost(HELP_PAGES - 1)) }
                         },
                         modifier = Modifier.align(Alignment.CenterEnd)
-                    ) { Text(if (done) "Done" else "Next") }
+                    ) { Text(stringResource(if (done) R.string.state_done else R.string.action_next)) }
                 }
             }
         }
@@ -264,7 +265,7 @@ private object SheetMotion : MotionScheme by MotionScheme.standard() {
 @Composable
 private fun HelpPage(page: Int, icon: ImageBitmap?, shotMax: Dp) {
     when (page) {
-        0 -> HelpStep(1, "Open Android Auto's settings", "FT takes you straight there. Come back here for the next step.") {
+        0 -> HelpStep(1, stringResource(R.string.aa_help_1), stringResource(R.string.aa_help_1_body)) {
             val context = LocalContext.current
             Box(
                 Modifier
@@ -279,17 +280,17 @@ private fun HelpPage(page: Int, icon: ImageBitmap?, shotMax: Dp) {
                         if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.fillMaxSize())
                     }
                     Spacer(Modifier.height(14.dp))
-                    FilledTonalButton(onClick = { AaInstaller.openSettings(context) }) { Text("Open Android Auto", maxLines = 1) }
+                    FilledTonalButton(onClick = { AaInstaller.openSettings(context) }) { Text(stringResource(R.string.aa_open_aa), maxLines = 1) }
                 }
             }
         }
-        1 -> HelpStep(2, "Scroll to the bottom and tap Version ten times", "If Android Auto asks to allow development settings, tap OK. Only needed the first time.") {
+        1 -> HelpStep(2, stringResource(R.string.aa_help_2), stringResource(R.string.aa_help_2_body)) {
             Shot(R.drawable.aa_server_version, shotMax)
         }
-        2 -> HelpStep(3, "Tap the three dots at the top right") {
+        2 -> HelpStep(3, stringResource(R.string.aa_help_3)) {
             Shot(R.drawable.aa_server_menu, shotMax)
         }
-        else -> HelpStep(4, "Tap Start head unit server", "FT connects to it by itself. After the phone restarts or Android Auto updates, do steps 1, 3 and 4 again.") {
+        else -> HelpStep(4, stringResource(R.string.aa_help_4), stringResource(R.string.aa_help_4_body)) {
             Shot(R.drawable.aa_server_start, shotMax)
         }
     }

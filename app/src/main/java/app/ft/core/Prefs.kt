@@ -54,6 +54,9 @@ class Prefs(context: Context) {
     var carShowLink: Boolean get() = bool("carShowLink", false); set(v) = set("carShowLink", v)
     var carSongInfo: Boolean get() = bool("carSongInfo", true); set(v) = set("carSongInfo", v)
 
+    var language: String get() = str("language", ""); set(v) = set("language", v)
+    var themeMode: Int get() = int("themeMode", 0); set(v) = set("themeMode", v)
+
     var carName: String get() = str("carName", "FT"); set(v) = set("carName", v)
     var autoConnect: Boolean get() = bool("autoConnect", false); set(v) = set("autoConnect", v)
     var carP2pName: String get() = str("carP2pName", ""); set(v) = set("carP2pName", v)
