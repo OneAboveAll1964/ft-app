@@ -78,6 +78,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.toBitmap
@@ -125,9 +126,11 @@ private fun sidePadding(corner: Int): PaddingValues {
 @Composable
 fun CarScreen() {
     val style by CarStyles.current.collectAsState()
-    Localized {
-        CarTheme(style.accentColor) {
-            CompositionLocalProvider(LocalContentColor provides Color.White) { CarRoot(style) }
+    CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1f)) {
+        Localized {
+            CarTheme(style.accentColor) {
+                CompositionLocalProvider(LocalContentColor provides Color.White) { CarRoot(style) }
+            }
         }
     }
 }

@@ -110,7 +110,7 @@ object AaInstaller {
 
     private fun partsWanted(context: Context): (String) -> Boolean {
         val abis = Build.SUPPORTED_ABIS.map { it.replace('-', '_').lowercase() }.toSet()
-        val dpi = context.resources.displayMetrics.densityDpi
+        val dpi = android.content.res.Resources.getSystem().displayMetrics.densityDpi
         val bucket = when {
             dpi <= 120 -> "ldpi"; dpi <= 160 -> "mdpi"; dpi <= 213 -> "tvdpi"; dpi <= 240 -> "hdpi"
             dpi <= 320 -> "xhdpi"; dpi <= 480 -> "xxhdpi"; else -> "xxxhdpi"

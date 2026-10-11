@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.SubcomposeLayout
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -204,7 +203,8 @@ fun ServerHelpSheet(serverOn: Boolean?, onDismiss: () -> Unit) {
         val pager = rememberPagerState { HELP_PAGES }
         val scope = rememberCoroutineScope()
         val icon = rememberAaIcon()
-        val shotMax = minOf(200.dp, (LocalConfiguration.current.screenHeightDp * 0.3f).dp)
+        val tall = LocalContext.current.resources.displayMetrics.heightPixels
+        val shotMax = minOf(200.dp, with(LocalDensity.current) { (tall * 0.3f).toDp() })
         ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
             Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {

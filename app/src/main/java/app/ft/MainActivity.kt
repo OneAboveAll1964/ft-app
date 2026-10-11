@@ -80,6 +80,7 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import app.ft.core.Looks
+import app.ft.core.Sizing
 import app.ft.ui.theme.Localized
 import app.ft.ui.theme.rememberDark
 
@@ -128,6 +129,11 @@ class MainActivity : ComponentActivity() {
                 else -> DiagLog.w("AaSetup", "the Android Auto install did not finish: ${i?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "cancelled"}")
             }
         }
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        applyOverrideConfiguration(Sizing.phone(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

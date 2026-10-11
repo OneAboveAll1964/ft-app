@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import app.ft.carlife.CarTouch
 import app.ft.core.DiagLog
+import app.ft.core.Sizing
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -76,7 +77,7 @@ class CarDisplay(private val context: Context) {
         }
         encoder = enc
         val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-        val density = context.resources.displayMetrics.densityDpi.coerceIn(120, 240)
+        val density = Sizing.carDpi(height)
         val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
         val vd = dm.createVirtualDisplay("FT", width, height, density, surface, flags)
         virtualDisplay = vd
