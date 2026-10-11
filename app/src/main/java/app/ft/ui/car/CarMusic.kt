@@ -1,5 +1,6 @@
 package app.ft.ui.car
 
+import app.ft.ui.theme.ownDirection
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.material3.SliderDefaults
 import android.Manifest
@@ -132,8 +133,8 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
                     }
                     Artwork(a.uri, null, 56.dp, 12.dp, CarIcons.Album, Modifier.padding(start = 12.dp))
                     Column(Modifier.padding(start = 14.dp)) {
-                        Text(a.title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(a.artist, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        Text(a.title, style = MaterialTheme.typography.titleLarge.ownDirection(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(a.artist, style = MaterialTheme.typography.bodyLarge.ownDirection(), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
                 }
                 SongList(inAlbum, player.track) { i -> CarPlayer.play(context, inAlbum, i); onPlaying(true) }
@@ -149,8 +150,8 @@ fun CarMusic(pad: PaddingValues, showPlaying: Boolean, onPlaying: (Boolean) -> U
                         items(list, key = { it.id }) { a ->
                             Column(Modifier.clip(RoundedCornerShape(18.dp)).clickable { album = a }.padding(6.dp)) {
                                 Artwork(a.uri, null, null, 16.dp, CarIcons.Album, Modifier.fillMaxWidth().aspectRatio(1f))
-                                Text(a.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
-                                Text(a.artist, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(a.title, style = MaterialTheme.typography.titleMedium.ownDirection(), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+                                Text(a.artist, style = MaterialTheme.typography.bodyMedium.ownDirection(), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -193,14 +194,14 @@ private fun SongList(list: List<Track>, current: Track?, onPlay: (Int) -> Unit) 
                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                     Text(
                         t.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.ownDirection(),
                         color = if (now) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         listOf(t.artist, t.album).filter { it.isNotBlank() }.joinToString(" · "),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.ownDirection(),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -246,9 +247,9 @@ fun NowPlaying(pad: PaddingValues, player: CarPlayer.State, onClose: () -> Unit)
                         Text(stringResource(R.string.music_all_songs), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
-                Text(t.title, style = MaterialTheme.typography.headlineLarge, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
-                Text(t.artist, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.8f))
-                if (t.album.isNotBlank()) Text(t.album, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.6f))
+                Text(t.title, style = MaterialTheme.typography.headlineLarge.ownDirection(), maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
+                Text(t.artist, style = MaterialTheme.typography.titleLarge.ownDirection(), maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.8f))
+                if (t.album.isNotBlank()) Text(t.album, style = MaterialTheme.typography.titleMedium.ownDirection(), maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.6f))
                 Spacer(Modifier.height(12.dp))
                 SeekBar(player)
                 LeftToRight {

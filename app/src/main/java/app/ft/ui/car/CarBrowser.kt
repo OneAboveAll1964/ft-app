@@ -1,5 +1,6 @@
 package app.ft.ui.car
 
+import app.ft.ui.theme.ownDirection
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
@@ -218,7 +219,7 @@ fun CarBrowser(page: WebPage, onExit: () -> Unit) {
                                 if (editing) typed.ifEmpty { stringResource(R.string.browser_type_address) } else title.ifEmpty { page.startUrl },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodyLarge
+                                style = MaterialTheme.typography.bodyLarge.ownDirection()
                             )
                         }
                     }

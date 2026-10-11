@@ -1,5 +1,6 @@
 package app.ft.ui.car
 
+import app.ft.ui.theme.ownDirection
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
@@ -362,14 +363,14 @@ private fun NowPlayingCard(player: CarPlayer.State, onOpen: () -> Unit, interact
                 Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                     Text(
                         t?.title ?: stringResource(R.string.tile_music),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.ownDirection(),
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         t?.artist?.takeIf { it.isNotBlank() } ?: if (t == null) stringResource(R.string.car_play_something) else "",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.ownDirection(),
                         color = Color.White.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -508,7 +509,7 @@ private fun Tile(modifier: Modifier, spec: TileSpec, onClick: () -> Unit) {
                 if (spec.app != null) Image(spec.app, contentDescription = null, modifier = Modifier.fillMaxSize())
                 else Icon(spec.icon ?: CarIcons.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(30.dp))
             }
-            Text(spec.label, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(spec.label, style = MaterialTheme.typography.titleLarge.ownDirection(), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -719,7 +720,7 @@ private fun AppCell(app: AppCatalog.App, px: Int, onClose: () -> Unit) {
             val i = icon
             if (i != null) Image(i, contentDescription = null, modifier = Modifier.size(44.dp))
             else Icon(CarIcons.Apps, contentDescription = null, modifier = Modifier.size(44.dp))
-            Text(app.label, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(app.label, style = MaterialTheme.typography.titleMedium.ownDirection(), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

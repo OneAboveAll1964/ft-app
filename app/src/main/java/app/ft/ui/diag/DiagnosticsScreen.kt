@@ -1,5 +1,6 @@
 package app.ft.ui.diag
 
+import app.ft.ui.theme.LeftToRight
 import android.util.Log
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -50,25 +51,27 @@ fun DiagnosticsScreen(pad: PaddingValues) {
             FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text(stringResource(R.string.log_filter_all)) })
             tags.forEach { t -> FilterChip(selected = filter == t, onClick = { filter = if (filter == t) null else t }, label = { Text(t) }) }
         }
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            state = listState,
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = pad.calculateBottomPadding() + 16.dp)
-        ) {
-            items(shown) { e ->
-                val color = when (e.level) {
-                    Log.ERROR -> MaterialTheme.colorScheme.error
-                    Log.WARN -> MaterialTheme.colorScheme.tertiary
-                    Log.DEBUG -> MaterialTheme.colorScheme.onSurfaceVariant
-                    else -> MaterialTheme.colorScheme.onSurface
+        LeftToRight {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = pad.calculateBottomPadding() + 16.dp)
+            ) {
+                items(shown) { e ->
+                    val color = when (e.level) {
+                        Log.ERROR -> MaterialTheme.colorScheme.error
+                        Log.WARN -> MaterialTheme.colorScheme.tertiary
+                        Log.DEBUG -> MaterialTheme.colorScheme.onSurfaceVariant
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                    Text(
+                        "${fmt.format(Date(e.time))} ${e.tag.padEnd(8)} ${e.text}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = color,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
                 }
-                Text(
-                    "${fmt.format(Date(e.time))} ${e.tag.padEnd(8)} ${e.text}",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = color,
-                    modifier = Modifier.padding(vertical = 2.dp)
-                )
             }
         }
     }

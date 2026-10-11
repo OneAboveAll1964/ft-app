@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import app.ft.core.Lang
 
@@ -29,3 +31,5 @@ fun Localized(content: @Composable () -> Unit) {
 fun LeftToRight(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { content() }
 }
+
+fun TextStyle.ownDirection(): TextStyle = copy(textDirection = TextDirection.Content)

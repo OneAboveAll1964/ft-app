@@ -1,5 +1,6 @@
 package app.ft.ui.car
 
+import app.ft.ui.theme.ownDirection
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
@@ -123,7 +124,7 @@ fun CarVideos(pad: PaddingValues) {
                         }
                         Text(
                             v.title,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleMedium.ownDirection(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 8.dp, start = 2.dp)
@@ -210,7 +211,7 @@ private fun VideoPlayerBody(onClose: () -> Unit) {
                     }
                     Text(
                         player.track?.title.orEmpty(),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.ownDirection(),
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
                         maxLines = 1,
