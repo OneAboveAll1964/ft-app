@@ -3,6 +3,8 @@ package app.ft.supercast
 import android.content.Context
 import app.ft.core.DiagLog
 import app.ft.core.Root
+import app.ft.supercast.adb.AdbClient
+import app.ft.supercast.adb.AdbKeys
 import java.io.File
 
 object Helper {
@@ -68,6 +70,30 @@ object Helper {
         DiagLog.w(TAG, "the helper would not start: ${asRoot?.stderr?.trim()}")
         return false
     }
+
+    fun startWithAdb(context: Context, token: String): Adb {
+        val keys = AdbKeys.of(context) ?: return Adb.FAILED
+        val client = AdbClient(keys)
+        try {
+            when (client.connect()) {
+                AdbClient.Result.READY -> Unit
+                AdbClient.Result.NOT_ALLOWED -> return Adb.NOT_ALLOWED
+                AdbClient.Result.UNREACHABLE -> return Adb.NO_BRIDGE
+                AdbClient.Result.TIMED_OUT -> return Adb.NO_BRIDGE
+            }
+            val local = unpack(context) ?: return Adb.FAILED
+            client.shell("mkdir -p /data/local/tmp")
+            if (!client.push(local, REMOTE, 420)) return Adb.FAILED
+            client.shell("pkill -f $MAIN")
+            client.shell("CLASSPATH=$REMOTE nohup app_process / $MAIN token=$token >$LOG 2>&1 &", waitMs = 2000)
+            DiagLog.i(TAG, "helper started through the phone's own debug bridge")
+            return Adb.STARTED
+        } finally {
+            client.close()
+        }
+    }
+
+    enum class Adb { STARTED, NOT_ALLOWED, NO_BRIDGE, FAILED }
 
     fun stop() {
         Root.run("pkill -f $MAIN")

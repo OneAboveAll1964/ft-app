@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.Surface
 import app.ft.FTApp
 import app.ft.core.DiagLog
+import app.ft.core.Root
 import app.ft.server.IFtClient
 import app.ft.server.IFtServer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -132,6 +133,28 @@ object SuperCast {
     fun start(context: android.content.Context): Boolean {
         if (_ready.value) return true
         val fresh = freshToken()
-        return Helper.startWithRoot(context, fresh)
+        if (Root.ensure() && Helper.startWithRoot(context, fresh)) {
+            FTApp.instance.prefs.supercastWay = WAY_ROOT
+            return true
+        }
+        return when (Helper.startWithAdb(context, fresh)) {
+            Helper.Adb.STARTED -> {
+                FTApp.instance.prefs.supercastWay = WAY_BRIDGE
+                true
+            }
+            Helper.Adb.NOT_ALLOWED -> {
+                DiagLog.w(TAG, "the phone has not allowed FT on its debug bridge yet")
+                false
+            }
+            Helper.Adb.NO_BRIDGE -> {
+                DiagLog.w(TAG, "the phone's debug bridge is not switched on, so FT cannot set this up on its own")
+                false
+            }
+            Helper.Adb.FAILED -> false
+        }
     }
+
+    const val WAY_NONE = 0
+    const val WAY_ROOT = 1
+    const val WAY_BRIDGE = 2
 }
