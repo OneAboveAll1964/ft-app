@@ -19,6 +19,7 @@ $ADB devices | sed -n '2p'
 [ -f "$CERTDIR/sim_srv.pem" ] || openssl req -x509 -newkey rsa:2048 -nodes -keyout "$CERTDIR/sim_srv.key" -out "$CERTDIR/sim_srv.pem" -days 365 -subj "/CN=FT AA phone sim" >/dev/null 2>&1
 
 echo "== install =="
+$ADB shell pm clear $PKG >/dev/null 2>&1
 $ADB install -r -g "$APK" >/dev/null 2>&1 && ok "apk installed" || ko "apk install"
 $ADB shell am start -n $PKG/.MainActivity --ez off true >/dev/null 2>&1
 sleep 2
