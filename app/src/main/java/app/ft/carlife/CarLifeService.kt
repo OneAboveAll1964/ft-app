@@ -407,6 +407,7 @@ class CarLifeService : Service() {
     private var progressJob: Job? = null
     private var turnWatch: android.hardware.display.DisplayManager.DisplayListener? = null
     private var savedRotation: Pair<Int, Int>? = null
+    private var turnJob: Job? = null
     private var rotateJob: Job? = null
     private var lastSongPositionAt = 0L
     private var savedVolume = -1
@@ -2127,18 +2128,36 @@ class CarLifeService : Service() {
                 savedRotation = android.provider.Settings.System.getInt(cr, android.provider.Settings.System.ACCELEROMETER_ROTATION, 1) to
                     android.provider.Settings.System.getInt(cr, android.provider.Settings.System.USER_ROTATION, 0)
             }
-            val (w, h) = phoneSize() ?: (0 to 0)
+            val was = phoneSize()
+            val (w, h) = was ?: (0 to 0)
             val upright = h >= w
             val next = if (upright) android.view.Surface.ROTATION_90 else android.view.Surface.ROTATION_0
             android.provider.Settings.System.putInt(cr, android.provider.Settings.System.ACCELEROMETER_ROTATION, 0)
             android.provider.Settings.System.putInt(cr, android.provider.Settings.System.USER_ROTATION, next)
-            DiagLog.i(tag, "phone turned to ${if (upright) "landscape" else "portrait"}")
+            DiagLog.i(tag, "asked the phone to turn to ${if (upright) "landscape" else "portrait"}")
+            turnJob?.cancel()
+            turnJob = scope.launch { watchTheTurn(was) }
         }.onFailure { DiagLog.w(tag, "could not turn the phone: ${it.message}") }
+    }
+
+    private suspend fun watchTheTurn(was: Pair<Int, Int>?) {
+        repeat(20) {
+            delay(100)
+            val now = phoneSize()
+            if (now != null && now != was) {
+                DiagLog.i(tag, "phone turned to ${if (now.first > now.second) "landscape" else "portrait"}")
+                mirror.resize(now.first, now.second)
+                return
+            }
+        }
+        DiagLog.w(tag, "the phone would not turn: the app on its screen only works one way up")
     }
 
     private fun restoreRotation() {
         rotateJob?.cancel()
         rotateJob = null
+        turnJob?.cancel()
+        turnJob = null
         val (auto, user) = savedRotation ?: return
         savedRotation = null
         runCatching {
