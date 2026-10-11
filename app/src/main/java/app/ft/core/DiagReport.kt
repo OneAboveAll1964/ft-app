@@ -60,7 +60,7 @@ object DiagReport {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, r.name)
                 put(MediaStore.Downloads.MIME_TYPE, "application/zip")
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/FT")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
             val uri = c.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)

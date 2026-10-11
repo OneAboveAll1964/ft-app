@@ -184,7 +184,7 @@
     <string name="channel_aa">FT Android Auto</string>
     <string name="report_cd">Make a report for the developer</string>
     <string name="report_failed">Could not make the report</string>
-    <string name="report_saved">Report saved in Downloads/FT</string>
+    <string name="report_saved">Report saved in Downloads</string>
     <string name="report_send">Send the FT report</string>
     <string name="root_chip">ROOT</string>
     <string name="root_title">Root is on</string>

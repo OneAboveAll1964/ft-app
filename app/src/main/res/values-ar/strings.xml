@@ -183,7 +183,7 @@
     <string name="channel_aa">FT Android Auto</string>
     <string name="report_cd">إنشاء تقرير للمطوّر</string>
     <string name="report_failed">تعذّر إنشاء التقرير</string>
-    <string name="report_saved">حُفظ التقرير في Downloads/FT</string>
+    <string name="report_saved">حُفظ التقرير في التنزيلات</string>
     <string name="report_send">إرسال تقرير FT</string>
     <string name="root_chip">ROOT</string>
     <string name="root_title">صلاحيات الروت مفعّلة</string>

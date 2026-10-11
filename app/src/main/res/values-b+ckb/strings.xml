@@ -183,7 +183,7 @@
     <string name="channel_aa">FT Android Auto</string>
     <string name="report_cd">ڕاپۆرتێک بۆ گەشەپێدەر دروست بکە</string>
     <string name="report_failed">نەتوانرا ڕاپۆرتەکە دروست بکرێت</string>
-    <string name="report_saved">ڕاپۆرتەکە لە Downloads/FT پاشەکەوت کرا</string>
+    <string name="report_saved">ڕاپۆرتەکە لە Downloads پاشەکەوت کرا</string>
     <string name="report_send">ناردنی ڕاپۆرتی FT</string>
     <string name="root_chip">ROOT</string>
     <string name="root_title">ڕووت هەڵکراوە</string>
