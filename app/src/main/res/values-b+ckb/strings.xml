@@ -326,4 +326,16 @@
     <string name="wheel_action_voice">یاریدەدەری دەنگی</string>
     <string name="connect_open">کاتێک ئۆتۆمبێل پەیوەست دەبێت، ئەمە بکەرەوە</string>
     <string name="connect_open_none">هیچ</string>
+    <string name="settings_backup_title">پاشەکەوت</string>
+    <string name="settings_backup_about">ڕێکخستنەکانت پاشەکەوت بکە، یان ڕووکاری ئۆتۆمبێلەکەت هاوبەش بکە</string>
+    <string name="backup_about">هەموو ئەوەی ڕێکت خستووە لە فایلێکدا پاشەکەوت بکە، و لەسەر ئەم مۆبایلە یان یەکێکی تر بیگەڕێنەوە.</string>
+    <string name="backup_save">پاشەکەوتکردن لە فایلێکدا</string>
+    <string name="backup_load">هێنان لە فایلێکەوە</string>
+    <string name="backup_saved">ڕێکخستنەکان پاشەکەوت کران</string>
+    <string name="backup_restored">%1$d ڕێکخستن گەڕێنرانەوە</string>
+    <string name="backup_failed">ئەوە سەرکەوتوو نەبوو</string>
+    <string name="backup_look_about">تەنها ڕووکاری ئۆتۆمبێل وەک کۆدێک هاوبەش بکە. هاوڕێکەت دەتوانێت بە کامێرا بیخوێنێتەوە یان لێرە بیلکێنێت.</string>
+    <string name="backup_show_code">کۆدەکە پیشان بدە</string>
+    <string name="backup_paste_code">کۆدێک بلکێنە</string>
+    <string name="backup_look_applied">ڕووکاری ئۆتۆمبێل هێنرا</string>
 </resources>

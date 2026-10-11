@@ -326,4 +326,16 @@
     <string name="wheel_action_voice">المساعد الصوتي</string>
     <string name="connect_open">افتح عند اتصال السيارة</string>
     <string name="connect_open_none">لا شيء</string>
+    <string name="settings_backup_title">النسخ الاحتياطي</string>
+    <string name="settings_backup_about">احفظ إعداداتك أو شارك مظهر سيارتك</string>
+    <string name="backup_about">احفظ كل ما ضبطته في ملف، ثم استعده على هذا الهاتف أو هاتف آخر.</string>
+    <string name="backup_save">حفظ في ملف</string>
+    <string name="backup_load">تحميل من ملف</string>
+    <string name="backup_saved">تم حفظ الإعدادات</string>
+    <string name="backup_restored">تمت استعادة %1$d إعداد</string>
+    <string name="backup_failed">لم ينجح ذلك</string>
+    <string name="backup_look_about">شارك مظهر السيارة فقط كرمز. يمكن لصديقك مسحه بالكاميرا أو لصقه هنا.</string>
+    <string name="backup_show_code">إظهار الرمز</string>
+    <string name="backup_paste_code">لصق رمز</string>
+    <string name="backup_look_applied">تم جلب مظهر السيارة</string>
 </resources>

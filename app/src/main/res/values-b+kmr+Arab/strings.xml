@@ -326,4 +326,16 @@
     <string name="wheel_action_voice">هاریکارێ دەنگی</string>
     <string name="connect_open">دەمێ ترومبێل گرێ ددەت، ڤێ ڤەکە</string>
     <string name="connect_open_none">چ تشت</string>
+    <string name="settings_backup_title">پاشەکەفت</string>
+    <string name="settings_backup_about">رێکخستنێن خۆ پاشەکەفت بکە، یان شێوەیا ترومبێلا خۆ پارڤە بکە</string>
+    <string name="backup_about">هەمی ئەوێ تە رێکخستی د فایلەکێ دا پاشەکەفت بکە، و ل سەر ڤی مۆبایلی یان ئێکێ دی بزڤرینە.</string>
+    <string name="backup_save">پاشەکەفتکرن د فایلەکێ دا</string>
+    <string name="backup_load">ئینان ژ فایلەکێ</string>
+    <string name="backup_saved">رێکخستن هاتنە پاشەکەفتکرن</string>
+    <string name="backup_restored">%1$d رێکخستن هاتنە زڤراندن</string>
+    <string name="backup_failed">ئەڤە سەرکەفتی نەبوو</string>
+    <string name="backup_look_about">بتنێ شێوەیا ترومبێلێ وەکی کۆدەکێ پارڤە بکە. هەڤالێ تە دشێت ب کامێرایێ بخوینیت یان ل ڤێرێ بلکینیت.</string>
+    <string name="backup_show_code">کۆدی نیشان بدە</string>
+    <string name="backup_paste_code">کۆدەکێ بلکینە</string>
+    <string name="backup_look_applied">شێوەیا ترومبێلێ هاتە ئینان</string>
 </resources>

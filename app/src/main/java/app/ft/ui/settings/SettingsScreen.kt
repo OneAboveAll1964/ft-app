@@ -78,7 +78,8 @@ enum class SettingsPage(@StringRes val title: Int, @StringRes val about: Int) {
     SOUND(R.string.settings_sound_title, R.string.settings_sound_about),
     CAR(R.string.settings_car_title, R.string.settings_car_about),
     ANDROID_AUTO(R.string.settings_aa_title, R.string.settings_aa_about),
-    ADVANCED(R.string.settings_advanced_title, R.string.settings_advanced_about)
+    ADVANCED(R.string.settings_advanced_title, R.string.settings_advanced_about),
+    BACKUP(R.string.settings_backup_title, R.string.settings_backup_about)
 }
 
 private fun SettingsPage.icon(): ImageVector = when (this) {
@@ -89,6 +90,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.CAR -> Icons.Filled.Share
     SettingsPage.ANDROID_AUTO -> CarIcons.AndroidAuto
     SettingsPage.ADVANCED -> Icons.Filled.Build
+    SettingsPage.BACKUP -> Icons.Filled.Share
 }
 
 @Composable
@@ -228,6 +230,7 @@ private fun PageContent(page: SettingsPage) {
             IntSetting(stringResource(R.string.adv_voice), p.vrPort) { p.vrPort = it }
             IntSetting(stringResource(R.string.adv_touch), p.touchPort) { p.touchPort = it }
         }
+        SettingsPage.BACKUP -> BackupSettings()
     }
 }
 

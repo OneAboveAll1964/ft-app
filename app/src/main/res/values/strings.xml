@@ -327,4 +327,16 @@
     <string name="wheel_action_voice">Voice assistant</string>
     <string name="connect_open">Open when the car connects</string>
     <string name="connect_open_none">Nothing</string>
+    <string name="settings_backup_title">Backup</string>
+    <string name="settings_backup_about">Save your settings, or share your car look</string>
+    <string name="backup_about">Save everything you have set up to a file, and load it back on this phone or another one.</string>
+    <string name="backup_save">Save to a file</string>
+    <string name="backup_load">Load from a file</string>
+    <string name="backup_saved">Settings saved</string>
+    <string name="backup_restored">%1$d settings brought back</string>
+    <string name="backup_failed">That did not work</string>
+    <string name="backup_look_about">Share only the car look as a code. A friend can scan it with their camera or paste it here.</string>
+    <string name="backup_show_code">Show the code</string>
+    <string name="backup_paste_code">Paste a code</string>
+    <string name="backup_look_applied">Car look brought over</string>
 </resources>

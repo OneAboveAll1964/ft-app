@@ -80,6 +80,8 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import app.ft.core.Looks
+import android.widget.Toast
+import app.ft.core.Backup
 import app.ft.core.Language
 import app.ft.core.Lang
 import app.ft.core.Sizing
@@ -212,6 +214,14 @@ class MainActivity : ComponentActivity() {
             CarAudioBus.guidance = app.prefs.guidanceMode
         }
         intent.getStringExtra("language")?.let { Lang.set(Language.of(it)) }
+        intent.data?.takeIf { it.scheme == Backup.SCHEME && it.host == Backup.LOOK_HOST }?.let { link ->
+            val count = Backup.readLookCode(app.prefs, link.toString())
+            if (count > 0) {
+                CarStyles.reload()
+                DiagLog.i("Backup", "car look brought over from a shared code ($count settings)")
+                Toast.makeText(this, getString(R.string.backup_look_applied), Toast.LENGTH_LONG).show()
+            }
+        }
         intent.getStringExtra("openOnConnect")?.let { app.prefs.openOnConnect = it }
         if (intent.hasExtra("wheelNext")) app.prefs.wheelLongNext = intent.getIntExtra("wheelNext", 0)
         if (intent.hasExtra("wheelPrev")) app.prefs.wheelLongPrev = intent.getIntExtra("wheelPrev", 0)
