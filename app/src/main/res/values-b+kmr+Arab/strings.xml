@@ -79,7 +79,7 @@
     <string name="adv_voice">فەرمانێن دەنگی</string>
     <string name="adv_touch">دەست لێدان</string>
     <string name="car_name_label">ئەو ناڤێ ل سەر شاشەیا ترومبێلێ دیار دبیت</string>
-    <string name="car_p2p_label">ناڤێ WiFi Direct (ڤالا = هەر CarLife ەک)</string>
+    <string name="car_p2p_label">ناڤێ WiFi Direct (ڤالا = هەر CarLife)</string>
     <string name="car_bt_label">ناڤێ بلوتوسێ بۆ دەستپێکرنا ئۆتۆماتیک (ڤالا = هەر ئامیرەک)</string>
     <string name="car_pin_label">PIN یێ WiFi Direct (ڤالا = ب دوگمێ)</string>
     <string name="car_swap_keys">جهێ دوگمێن پێشڤە و پاشڤە ل سەر سوکانێ بگوهۆڕە</string>

@@ -225,7 +225,7 @@
     <string name="car_aa_your_phone">مۆبایلەکەت</string>
     <string name="car_aa_waiting">چاوەڕێی مۆبایلێک لەسەر پۆرتی %1$d</string>
     <string name="car_aa_starting">شاشەی Android Auto دەست پێدەکات…</string>
-    <string name="car_touch_needs_accessibility">FT لە ڕێکخستنەکانی Accessibility ی مۆبایلەکەت هەڵبکە بۆ ئەوەی لێرە دەستلێدان بەکاربهێنیت</string>
+    <string name="car_touch_needs_accessibility">FT لە ڕێکخستنەکانی Accessibilityی مۆبایلەکەت هەڵبکە بۆ ئەوەی لێرە دەستلێدان بەکاربهێنیت</string>
     <string name="car_am">پ.ن</string>
     <string name="car_pm">د.ن</string>
     <string name="car_date">%1$s، %2$sی %3$s</string>
