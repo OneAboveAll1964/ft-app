@@ -15,6 +15,23 @@ public final class Main {
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> Log.e("helper crashed on " + thread.getName(), error));
         try {
             Map<String, String> options = options(args);
+            if (options.containsKey("selftest")) {
+                Sys.context();
+                Commands check = new Commands("self", null);
+                Bundle request = new Bundle();
+                request.putString("token", "self");
+                request.putString("do", "selftest");
+                request.putString("package", options.getOrDefault("package", "com.android.settings"));
+                if (options.containsKey("shot")) request.putString("shot", options.get("shot"));
+                Bundle answer = check.binder().call(request);
+                Log.i("selftest display=" + (answer == null ? "none" : answer.getInt("display", -1))
+                    + " launched=" + (answer != null && answer.getBoolean("launched"))
+                    + " input=" + (answer != null && answer.getBoolean("input"))
+                    + " drawn=" + (answer != null && answer.getBoolean("drawn")));
+                Thread.sleep(Long.parseLong(options.getOrDefault("hold", "3000")));
+                Log.i("selftest done");
+                return;
+            }
             String token = options.get("token");
             if (token == null || token.isEmpty()) {
                 Log.w("no token given, refusing to start");
