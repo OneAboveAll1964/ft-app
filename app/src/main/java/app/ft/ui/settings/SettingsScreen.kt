@@ -1,6 +1,7 @@
 package app.ft.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import app.ft.ui.components.InkText
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
@@ -24,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.size
@@ -62,7 +66,8 @@ import app.ft.ui.components.AaMissing
 import app.ft.ui.components.AaStart
 import app.ft.ui.components.rememberRootGranted
 import app.ft.ui.components.rememberAaServerOn
-import app.ft.ui.components.CornerPicker
+import app.ft.ui.components.Option
+import app.ft.ui.components.PickSetting
 import app.ft.ui.car.CarStyles
 import app.ft.aa.AaInstaller
 import app.ft.core.CarAudioBus
@@ -98,18 +103,39 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
 @Composable
 fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> Unit, onOpen: (SettingsPage) -> Unit) {
     val root = rememberRootGranted()
+    val carPage = page == SettingsPage.CAR_SCREEN
+    val preview = rememberCarPreviewState()
+    val list = remember(page) { LazyListState() }
+    val pinned by remember(list) { derivedStateOf { list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0 } }
     LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 12.dp, bottom = pad.calculateBottomPadding() + 24.dp),
+        if (carPage) Modifier.fillMaxSize().padding(top = pad.calculateTopPadding()) else Modifier.fillMaxSize(),
+        state = list,
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = if (carPage) 12.dp else pad.calculateTopPadding() + 12.dp,
+            bottom = pad.calculateBottomPadding() + 24.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        if (page == null) {
-            items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
-            item { MadeBy() }
-        } else {
-            if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup(onPickAaFile) } }
-            if (page == SettingsPage.CAR_SCREEN) item { Group { CornerSetting() } }
-            item { Group { PageContent(page) } }
+        when {
+            page == null -> {
+                items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
+                item { MadeBy() }
+            }
+            carPage -> {
+                stickyHeader(key = "preview") { CarPreviewHeader(preview, pinned) }
+                item(key = "colours") { Group { CarColourSettings(preview) } }
+                item(key = "home") { Group { CarHomeSettings() } }
+                item(key = "buttons") { Group { CarButtonSettings() } }
+                item(key = "widgets") { Group { CarWidgetSettings() } }
+                item(key = "corner") { Group { CarCornerSettings(preview) } }
+                item(key = "connect") { Group { CarConnectSettings() } }
+            }
+            else -> {
+                if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup(onPickAaFile) } }
+                item { Group { PageContent(page) } }
+            }
         }
     }
 }
@@ -170,33 +196,19 @@ private fun AaSetup(onPickAaFile: () -> Unit) {
 }
 
 @Composable
-private fun CornerSetting() {
-    val p = FTApp.instance.prefs
-    var corner by remember { mutableIntStateOf(p.aaCorner) }
-    Text(stringResource(R.string.corner_title), style = MaterialTheme.typography.titleMedium)
-    Text(
-        stringResource(R.string.corner_body),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    CornerPicker(corner, p.aaWidth, p.aaHeight) {
-        corner = it
-        p.aaCorner = it
-        CarStyles.reload()
-    }
-}
-
-@Composable
 private fun PageContent(page: SettingsPage) {
     val p = FTApp.instance.prefs
     when (page) {
         SettingsPage.LOOK -> LookSettings()
-        SettingsPage.CAR_SCREEN -> CarLookSettings()
+        SettingsPage.CAR_SCREEN -> Unit
         SettingsPage.PICTURE -> PictureSettings()
         SettingsPage.SOUND -> {
             GuidanceSetting()
             BoolSetting(stringResource(R.string.sound_bluetooth), p.soundOverBluetooth) { p.soundOverBluetooth = it }
             BoolSetting(stringResource(R.string.sound_silence_phone), p.muteWhileProjecting) { p.muteWhileProjecting = it }
+            Text(stringResource(R.string.sound_music_section), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+            BoolSetting(stringResource(R.string.look_song_info), p.carSongInfo) { p.carSongInfo = it }
+            BoolSetting(stringResource(R.string.look_hide_chat_audio), p.hideChatAudio) { p.hideChatAudio = it }
             QuietShareSetting()
         }
         SettingsPage.CAR -> {
@@ -247,20 +259,18 @@ private val GUIDANCE = listOf(
 private fun GuidanceSetting() {
     val p = FTApp.instance.prefs
     var mode by remember { mutableIntStateOf(p.guidanceMode) }
-    val chosen = GUIDANCE.firstOrNull { it.first == mode } ?: GUIDANCE.first()
-    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(stringResource(R.string.guidance_title), style = MaterialTheme.typography.bodyLarge)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            GUIDANCE.forEach { (value, label, _) ->
-                ValueChip(stringResource(label), chosen.first == value, Modifier.weight(1f)) {
-                    mode = value
-                    p.guidanceMode = value
-                    CarAudioBus.guidance = value
-                }
-            }
-        }
-        Text(stringResource(chosen.third), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val chosen = GUIDANCE.indexOfFirst { it.first == mode }.coerceAtLeast(0)
+    PickSetting(
+        stringResource(R.string.guidance_title),
+        GUIDANCE.map { (_, label, body) -> Option(stringResource(label), stringResource(body)) },
+        chosen
+    ) { index ->
+        val value = GUIDANCE[index].first
+        mode = value
+        p.guidanceMode = value
+        CarAudioBus.guidance = value
     }
+    Text(stringResource(GUIDANCE[chosen].third), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
@@ -288,7 +298,7 @@ private fun QuietShareSetting() {
                 color = if (allowed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
                 contentColor = if (allowed) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
             ) {
-                Text(stringResource(if (allowed) R.string.state_on else R.string.state_off), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                InkText(stringResource(if (allowed) R.string.state_on else R.string.state_off), MaterialTheme.typography.labelLarge, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
         }
         Text(
@@ -382,44 +392,32 @@ private fun PictureSettings() {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    Text(stringResource(R.string.picture_size_label), style = MaterialTheme.typography.labelLarge)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        SIZE_CHOICES.forEach { (value, label) ->
-            ValueChip(stringResource(label), size == value, Modifier.weight(1f)) { size = value; p.videoSize = value }
-        }
-    }
+    PickSetting(
+        stringResource(R.string.picture_size_label),
+        SIZE_CHOICES.map { (_, label) -> Option(stringResource(label)) },
+        SIZE_CHOICES.indexOfFirst { it.first == size }.coerceAtLeast(0)
+    ) { index -> size = SIZE_CHOICES[index].first; p.videoSize = size }
     if (size == VideoPlans.SIZE_CUSTOM) {
         IntSetting(stringResource(R.string.picture_width), p.videoWidth, rev) { p.videoWidth = it }
         IntSetting(stringResource(R.string.picture_height), p.videoHeight, rev) { p.videoHeight = it }
     }
-    Text(stringResource(R.string.picture_fps_label), style = MaterialTheme.typography.labelLarge)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FPS_CHOICES.forEach { (value, label) ->
-            ValueChip(label.ifEmpty { stringResource(R.string.choice_auto) }, fps == value, Modifier.weight(1f)) { fps = value; p.videoFps = value }
-        }
-    }
-    Text(stringResource(R.string.picture_rate_label), style = MaterialTheme.typography.labelLarge)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        RATE_CHOICES.forEach { (value, label) ->
-            ValueChip(label, rate == value, Modifier.weight(1f)) { rate = value; p.videoBitrate = value }
-        }
-    }
-    Text(
-        stringResource(R.string.picture_rate_note),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Text(stringResource(R.string.picture_floor_label), style = MaterialTheme.typography.labelLarge)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FLOOR_CHOICES.forEach { (value, label) ->
-            ValueChip(label.ifEmpty { stringResource(R.string.state_off) }, floor == value, Modifier.weight(1f)) { floor = value; p.videoQpFloor = value }
-        }
-    }
-    Text(
-        stringResource(R.string.picture_floor_note),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    PickSetting(
+        stringResource(R.string.picture_fps_label),
+        FPS_CHOICES.map { (_, label) -> Option(label.ifEmpty { stringResource(R.string.choice_auto) }) },
+        FPS_CHOICES.indexOfFirst { it.first == fps }.coerceAtLeast(0)
+    ) { index -> fps = FPS_CHOICES[index].first; p.videoFps = fps }
+    PickSetting(
+        stringResource(R.string.picture_rate_label),
+        RATE_CHOICES.map { (_, label) -> Option(label) },
+        RATE_CHOICES.indexOfFirst { it.first == rate }.coerceAtLeast(0),
+        about = stringResource(R.string.picture_rate_note)
+    ) { index -> rate = RATE_CHOICES[index].first; p.videoBitrate = rate }
+    PickSetting(
+        stringResource(R.string.picture_floor_label),
+        FLOOR_CHOICES.map { (_, label) -> Option(label.ifEmpty { stringResource(R.string.state_off) }) },
+        FLOOR_CHOICES.indexOfFirst { it.first == floor }.coerceAtLeast(0),
+        about = stringResource(R.string.picture_floor_note)
+    ) { index -> floor = FLOOR_CHOICES[index].first; p.videoQpFloor = floor }
     IntSetting(stringResource(R.string.picture_min_fps), p.videoMinFps, rev) { p.videoMinFps = it }
     IntSetting(stringResource(R.string.picture_density), p.carDensity, rev) { p.carDensity = it }
     OutlinedButton(
@@ -443,30 +441,25 @@ private fun PictureSettings() {
 
 private const val DEFAULT_FLOOR = 22
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WheelSetting(label: String, initial: Int, onChange: (Int) -> Unit) {
     var chosen by remember { mutableIntStateOf(initial) }
-    Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 6.dp))
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        WheelAction.ALL.forEach { action ->
-            ValueChip(stringResource(WheelAction.label(action)), chosen == action, Modifier) {
-                chosen = action
-                onChange(action)
-            }
-        }
+    PickSetting(
+        label,
+        WheelAction.ALL.map { Option(stringResource(WheelAction.label(it)), icon = wheelIcon(it)) },
+        WheelAction.ALL.indexOf(chosen).coerceAtLeast(0)
+    ) { index ->
+        chosen = WheelAction.ALL[index]
+        onChange(chosen)
     }
 }
 
-@Composable
-private fun ValueChip(label: String, chosen: Boolean, modifier: Modifier, onPick: () -> Unit) {
-    if (chosen) {
-        FilledTonalButton(onClick = onPick, modifier = modifier, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
-            Text(label, maxLines = 1, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge, overflow = TextOverflow.Ellipsis)
-        }
-    } else {
-        OutlinedButton(onClick = onPick, modifier = modifier, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
-            Text(label, maxLines = 1, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge, overflow = TextOverflow.Ellipsis)
-        }
-    }
+private fun wheelIcon(action: Int): ImageVector = when (action) {
+    WheelAction.ANDROID_AUTO -> CarIcons.AndroidAuto
+    WheelAction.CAR_HOME -> CarIcons.Home
+    WheelAction.MAPS -> CarIcons.Map
+    WheelAction.PHONE_SCREEN -> CarIcons.Phone
+    WheelAction.PLAY_PAUSE -> CarIcons.Play
+    WheelAction.VOICE -> CarIcons.Mic
+    else -> Icons.Filled.Close
 }
