@@ -339,4 +339,7 @@
     <string name="backup_show_code">Show the code</string>
     <string name="backup_paste_code">Paste a code</string>
     <string name="backup_look_applied">Car look brought over</string>
+    <string name="tile_supercast">Phone apps</string>
+    <string name="supercast_pick">Pick an app below to run it here</string>
+    <string name="supercast_swap">Swap sides</string>
 </resources>

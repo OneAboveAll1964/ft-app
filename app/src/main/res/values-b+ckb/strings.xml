@@ -338,4 +338,7 @@
     <string name="backup_show_code">کۆدەکە پیشان بدە</string>
     <string name="backup_paste_code">کۆدێک بلکێنە</string>
     <string name="backup_look_applied">ڕووکاری ئۆتۆمبێل هێنرا</string>
+    <string name="tile_supercast">ئەپەکانی مۆبایل</string>
+    <string name="supercast_pick">لە خوارەوە ئەپێک هەڵبژێرە تا لێرە کار بکات</string>
+    <string name="supercast_swap">گۆڕینی لایەکان</string>
 </resources>

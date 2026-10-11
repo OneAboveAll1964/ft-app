@@ -338,4 +338,7 @@
     <string name="backup_show_code">إظهار الرمز</string>
     <string name="backup_paste_code">لصق رمز</string>
     <string name="backup_look_applied">تم جلب مظهر السيارة</string>
+    <string name="tile_supercast">تطبيقات الهاتف</string>
+    <string name="supercast_pick">اختر تطبيقًا من الأسفل لتشغيله هنا</string>
+    <string name="supercast_swap">تبديل الجهتين</string>
 </resources>

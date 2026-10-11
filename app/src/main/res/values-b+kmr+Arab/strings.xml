@@ -338,4 +338,7 @@
     <string name="backup_show_code">کۆدی نیشان بدە</string>
     <string name="backup_paste_code">کۆدەکێ بلکینە</string>
     <string name="backup_look_applied">شێوەیا ترومبێلێ هاتە ئینان</string>
+    <string name="tile_supercast">ئەپێن مۆبایلی</string>
+    <string name="supercast_pick">ژ ژێرێ ئەپەکێ هەلبژێرە دا ل ڤێرێ کار بکەت</string>
+    <string name="supercast_swap">گوهۆڕینا لایان</string>
 </resources>

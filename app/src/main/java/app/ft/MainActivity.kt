@@ -226,7 +226,7 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("supercast", false)) {
             Thread { SuperCast.start(applicationContext) }.start()
         }
-        intent.getStringExtra("openOnConnect")?.let { app.prefs.openOnConnect = it }
+        intent.getStringExtra("openOnConnect")?.let { app.prefs.openOnConnect = if (it == "none") "" else it }
         if (intent.hasExtra("wheelNext")) app.prefs.wheelLongNext = intent.getIntExtra("wheelNext", 0)
         if (intent.hasExtra("wheelPrev")) app.prefs.wheelLongPrev = intent.getIntExtra("wheelPrev", 0)
         if (intent.hasExtra("carInfoRight")) { app.prefs.carInfoRight = intent.getBooleanExtra("carInfoRight", false); CarStyles.reload() }

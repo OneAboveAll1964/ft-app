@@ -101,7 +101,7 @@ data class CarStyle(
             0xFFFFD54F, 0xFF8FE388, 0xFFFF6B6B, 0xFFE6E6E6
         ).map { it.toInt() }
 
-        val BUILT_IN_TILES = listOf("music", "videos", "youtube", "browser", "maps", "apps", "aa", "phone")
+        val BUILT_IN_TILES = listOf("music", "videos", "youtube", "browser", "maps", "apps", "aa", "phone", "supercast")
 
         fun parseTiles(raw: String): List<String> =
             raw.split(',').map { it.trim() }.filter { it.isNotEmpty() && (it in BUILT_IN_TILES || it.startsWith("app:")) }

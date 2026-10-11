@@ -93,6 +93,9 @@ import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
 import app.ft.core.DiagLog
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import app.ft.supercast.SuperCast
 import app.ft.core.CarInfo
 import app.ft.core.Links
 import app.ft.media.CarPlayer
@@ -112,7 +115,7 @@ import app.ft.ui.theme.Localized
 import app.ft.ui.theme.LeftToRight
 import java.util.Calendar
 
-enum class CarView { LAUNCHER, DRAWER, BROWSER, YOUTUBE, MUSIC, VIDEOS }
+enum class CarView { LAUNCHER, DRAWER, BROWSER, YOUTUBE, MUSIC, VIDEOS, SUPERCAST }
 
 fun Modifier.touchZone(key: String): Modifier = composed {
     DisposableEffect(key) { onDispose { CarTouchZones.remove(key) } }
@@ -145,6 +148,8 @@ private fun CarRoot(style: CarStyle) {
     val aa by AaHeadUnitService.state.collectAsState()
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
+    var panes by remember { mutableStateOf<List<CarPane>>(emptyList()) }
+    var dockApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     val drawerGrid = rememberLazyGridState()
     val browser = remember { WebPage("https://duckduckgo.com") }
     val youtube = remember { WebPage("https://m.youtube.com", "https://m.youtube.com/results?search_query=%s") }
@@ -160,6 +165,13 @@ private fun CarRoot(style: CarStyle) {
     DisposableEffect(style.widgets) {
         CarInfo.start(context, scope, style.widgets)
         onDispose { CarInfo.stop(context) }
+    }
+    val superCastReady by SuperCast.ready.collectAsState()
+    LaunchedEffect(superCastReady, view) {
+        if (superCastReady && view == CarView.SUPERCAST && dockApps.isEmpty()) {
+            dockApps = withContext(Dispatchers.IO) { SuperCast.apps() }
+            DiagLog.i("SuperCast", "the helper listed ${dockApps.size} apps for the dock")
+        }
     }
     LaunchedEffect(view) { DiagLog.i("Car", "car screen: ${view.name}") }
     LaunchedEffect(nowPlaying) { if (view == CarView.MUSIC) DiagLog.i("Car", if (nowPlaying) "music: now playing" else "music: song list") }
@@ -196,6 +208,30 @@ private fun CarRoot(style: CarStyle) {
             view == CarView.YOUTUBE -> CarBrowser(youtube) { view = CarView.LAUNCHER }
             view == CarView.MUSIC -> CarMusic(pad, nowPlaying) { nowPlaying = it }
             view == CarView.VIDEOS -> CarVideos(pad)
+            view == CarView.SUPERCAST -> SuperCastScreen(
+                panes = panes,
+                apps = dockApps,
+                onPick = { index ->
+                    val chosen = dockApps.getOrNull(index) ?: return@SuperCastScreen
+                    val taken = panes.map { it.name }.toSet()
+                    val slot = listOf("pane-0", "pane-1").firstOrNull { it !in taken }
+                    panes = when {
+                        panes.any { it.packageName == chosen.first } -> panes
+                        slot != null -> panes + CarPane(slot, chosen.first, chosen.second)
+                        else -> listOf(panes.first(), CarPane(panes.last().name, chosen.first, chosen.second))
+                    }
+                },
+                onClose = { name ->
+                    SuperCast.closePane(name)
+                    panes = panes.filterNot { it.name == name }
+                },
+                onSwap = {
+                    if (panes.size == 2) {
+                        SuperCast.swap(panes[0].name, panes[1].name)
+                        panes = listOf(panes[1], panes[0])
+                    }
+                }
+            )
             else -> Launcher(state, style) { v, playing ->
                 nowPlaying = playing
                 view = v
@@ -493,6 +529,7 @@ private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit) {
         key == "youtube" -> onOpen(CarView.YOUTUBE, false)
         key == "browser" -> onOpen(CarView.BROWSER, false)
         key == "apps" -> onOpen(CarView.DRAWER, false)
+        key == "supercast" -> onOpen(CarView.SUPERCAST, false)
         key == "maps" -> CarLifeService.launchApp(FTApp.instance.prefs.mapsPackage)
         key == "aa" -> CarLifeService.startAa()
         key == "phone" -> CarLifeService.showPhone()
@@ -509,6 +546,7 @@ fun tileLabel(context: android.content.Context, key: String): String = when {
     key == "maps" -> context.getString(R.string.tile_maps)
     key == "aa" -> context.getString(R.string.tile_aa)
     key == "phone" -> context.getString(R.string.tile_phone)
+    key == "supercast" -> context.getString(R.string.tile_supercast)
     key.startsWith("app:") -> runCatching {
         val pm = context.packageManager
         pm.getApplicationLabel(pm.getApplicationInfo(key.removePrefix("app:"), 0)).toString()
@@ -525,6 +563,7 @@ fun tileIcon(key: String): ImageVector = when (key) {
     "maps" -> CarIcons.Map
     "aa" -> CarIcons.AndroidAuto
     "phone" -> CarIcons.Phone
+    "supercast" -> CarIcons.Apps
     else -> CarIcons.Apps
 }
 
