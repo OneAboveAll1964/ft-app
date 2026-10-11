@@ -5,6 +5,10 @@ import app.ft.ui.components.InkText
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.view.SurfaceView
 import android.view.SurfaceHolder
 import android.graphics.Rect
@@ -129,15 +133,10 @@ fun Modifier.touchZone(key: String): Modifier = composed {
 val CAR_EDGE = 14.dp
 val CAR_ROW = 44.dp
 
-private fun sidePadding(corner: Int): PaddingValues {
-    val left = corner == 0 || corner == 2
-    return PaddingValues.Absolute(
-        left = if (left) 108.dp else 28.dp,
-        right = if (left) 28.dp else 108.dp,
-        top = CAR_EDGE,
-        bottom = 20.dp
-    )
-}
+val PILL_SPACE = 94.dp
+
+private fun sidePadding(corner: Int): PaddingValues =
+    PaddingValues(start = 28.dp, end = 28.dp, top = CAR_EDGE, bottom = 20.dp)
 
 @Composable
 fun CarScreen() {
@@ -177,10 +176,27 @@ private fun CarRoot(style: CarStyle) {
     }
     val superCastReady by SuperCast.ready.collectAsState()
     val darkenPhone = FTApp.instance.prefs.supercastScreenOff
-    DisposableEffect(view == CarView.SUPERCAST && panes.isNotEmpty() && darkenPhone) {
-        val wanted = view == CarView.SUPERCAST && panes.isNotEmpty() && darkenPhone
-        if (wanted) SuperCast.phoneScreen(false)
-        onDispose { if (wanted) SuperCast.phoneScreen(true) }
+    val panesLive = view == CarView.SUPERCAST && panes.isNotEmpty() && superCastReady
+    DisposableEffect(panesLive, darkenPhone) {
+        if (!panesLive) return@DisposableEffect onDispose { }
+        val keepDark = {
+            SuperCast.keepAwake(true, wake = true)
+            if (darkenPhone) SuperCast.phoneScreen(false)
+        }
+        val watch = object : BroadcastReceiver() {
+            override fun onReceive(ignored: Context?, intent: Intent?) {
+                if (intent?.action != Intent.ACTION_SCREEN_OFF) return
+                DiagLog.i("SuperCast", "the phone tried to sleep while apps run, waking it and keeping the screen dark")
+                keepDark()
+            }
+        }
+        context.registerReceiver(watch, IntentFilter(Intent.ACTION_SCREEN_OFF))
+        keepDark()
+        onDispose {
+            runCatching { context.unregisterReceiver(watch) }
+            if (darkenPhone) SuperCast.phoneScreen(true)
+            SuperCast.keepAwake(false)
+        }
     }
     LaunchedEffect(superCastReady, view) {
         if (superCastReady && view == CarView.SUPERCAST && dockApps.isEmpty()) {
@@ -217,7 +233,10 @@ private fun CarRoot(style: CarStyle) {
             }
         }
     }
-    CompositionLocalProvider(LocalCarCard provides style.cardColor) {
+    CompositionLocalProvider(
+        LocalCarCard provides style.cardColor,
+        LocalPillRow provides pillRowInset(style.corner, PILL_SPACE - 28.dp)
+    ) {
         Box(Modifier.fillMaxSize()) {
             CarBackground(style)
             when {
@@ -821,7 +840,7 @@ private fun AppDrawer(gridState: LazyGridState, pad: PaddingValues, onClose: () 
         AppCatalog.apps.value?.let { AppCatalog.warm(context, it.take(30), px) }
     }
     Column(Modifier.fillMaxSize().padding(pad)) {
-        Row(Modifier.fillMaxWidth().height(CAR_ROW), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(CAR_ROW).padding(LocalPillRow.current), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.tile_apps), style = MaterialTheme.typography.headlineMedium)
         }
         Spacer(Modifier.height(12.dp))
@@ -867,7 +886,11 @@ private fun AppCell(app: AppCatalog.App, px: Int, onClose: () -> Unit) {
 fun CarPreview(style: CarStyle, modifier: Modifier = Modifier, pill: Boolean = false) {
     val state by CarLifeService.state.collectAsState()
     CarTheme(style.accentColor) {
-        CompositionLocalProvider(LocalContentColor provides Color.White, LocalCarCard provides style.cardColor) {
+        CompositionLocalProvider(
+            LocalContentColor provides Color.White,
+            LocalCarCard provides style.cardColor,
+            LocalPillRow provides pillRowInset(style.corner, PILL_SPACE - 28.dp)
+        ) {
             Box(modifier.clip(RoundedCornerShape(16.dp))) {
                 CarBackground(style)
                 Launcher(state, style, preview = true)

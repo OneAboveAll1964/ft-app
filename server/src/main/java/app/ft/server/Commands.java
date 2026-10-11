@@ -10,7 +10,7 @@ public final class Commands {
     private final String token;
     private final Bridge bridge;
     private final Displays displays = new Displays();
-    private long downTime;
+    private final java.util.HashMap<String, Long> gestures = new java.util.HashMap<>();
 
     private final IFtServer stub = new IFtServer.Stub() {
         @Override
@@ -40,6 +40,7 @@ public final class Commands {
         }
         try {
             Power.screen(true);
+            Power.keepAwake(false);
         } catch (Throwable ignored) {
         }
     }
@@ -129,13 +130,26 @@ public final class Commands {
                 if (pane == null) {
                     return null;
                 }
+                String name = request.getString("name", "pane");
                 int action = request.getInt("action", MotionEvent.ACTION_DOWN);
                 float x = request.getFloat("x", 0f) / Math.max(1, request.getInt("from", pane.width)) * pane.width;
                 float y = request.getFloat("y", 0f) / Math.max(1, request.getInt("fromHeight", pane.height)) * pane.height;
+                long now = android.os.SystemClock.uptimeMillis();
                 if (action == MotionEvent.ACTION_DOWN) {
-                    downTime = android.os.SystemClock.uptimeMillis();
+                    gestures.put(name, now);
                 }
-                answer.putBoolean("ok", Input.touch(pane.id(), action, x, y, downTime));
+                Long started = gestures.get(name);
+                if (started == null) {
+                    if (action != MotionEvent.ACTION_DOWN) {
+                        return answer;
+                    }
+                    started = now;
+                }
+                boolean sent = Input.touch(pane.id(), action, x, y, started);
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    gestures.remove(name);
+                }
+                answer.putBoolean("ok", sent);
                 return answer;
             }
             case "key": {
@@ -156,9 +170,19 @@ public final class Commands {
                 answer.putBoolean("ok", Power.screen(on));
                 return answer;
             }
+            case "awake": {
+                boolean on = request.getBoolean("on", true);
+                if (on && request.getBoolean("wake", false)) {
+                    Power.wakeUp();
+                }
+                answer.putBoolean("ok", Power.keepAwake(on));
+                return answer;
+            }
             case "stop": {
                 displays.closeAll();
+                gestures.clear();
                 Power.screen(true);
+                Power.keepAwake(false);
                 return answer;
             }
             case "selftest": {
@@ -174,6 +198,10 @@ public final class Commands {
         int width = request.getInt("width", 1280);
         int height = request.getInt("height", 720);
         String packageName = request.getString("package", "com.android.settings");
+        if (request.getBoolean("wake", false)) {
+            Power.wakeUp();
+            Power.keepAwake(true);
+        }
         ImageReader reader = ImageReader.newInstance(width, height, android.graphics.PixelFormat.RGBA_8888, 2);
         Displays.Pane pane = displays.open("selftest", reader.getSurface(), width, height, 200);
         Bundle answer = new Bundle();

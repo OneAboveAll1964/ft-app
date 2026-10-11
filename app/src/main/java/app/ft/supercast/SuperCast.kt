@@ -100,15 +100,32 @@ object SuperCast {
         ask("swap") { putString("first", first); putString("second", second) }
     }
 
+    private val touchThread = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task, "ft-supercast-touch").apply { isDaemon = true }
+    }
+    private val waiting = java.util.concurrent.atomic.AtomicInteger(0)
+
     fun touch(name: String, action: Int, x: Float, y: Float, fromWidth: Int, fromHeight: Int) {
-        ask("touch") {
-            putString("name", name)
-            putInt("action", action)
-            putFloat("x", x)
-            putFloat("y", y)
-            putInt("from", fromWidth)
-            putInt("fromHeight", fromHeight)
-        }
+        if (server == null) return
+        val moving = action == android.view.MotionEvent.ACTION_MOVE
+        if (moving && waiting.get() > 2) return
+        waiting.incrementAndGet()
+        runCatching {
+            touchThread.execute {
+                try {
+                    ask("touch") {
+                        putString("name", name)
+                        putInt("action", action)
+                        putFloat("x", x)
+                        putFloat("y", y)
+                        putInt("from", fromWidth)
+                        putInt("fromHeight", fromHeight)
+                    }
+                } finally {
+                    waiting.decrementAndGet()
+                }
+            }
+        }.onFailure { waiting.decrementAndGet() }
     }
 
     fun key(name: String, keyCode: Int) {
@@ -124,6 +141,10 @@ object SuperCast {
 
     fun phoneScreen(on: Boolean) {
         ask("screen") { putBoolean("on", on) }
+    }
+
+    fun keepAwake(on: Boolean, wake: Boolean = false) {
+        ask("awake") { putBoolean("on", on); putBoolean("wake", wake) }
     }
 
     fun stopAll() {

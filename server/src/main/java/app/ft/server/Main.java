@@ -23,6 +23,7 @@ public final class Main {
                 request.putString("do", "selftest");
                 request.putString("package", options.getOrDefault("package", "com.android.settings"));
                 if (options.containsKey("shot")) request.putString("shot", options.get("shot"));
+                if (options.containsKey("wake")) request.putBoolean("wake", true);
                 Bundle answer = check.binder().call(request);
                 Log.i("selftest display=" + (answer == null ? "none" : answer.getInt("display", -1))
                     + " launched=" + (answer != null && answer.getBoolean("launched"))
