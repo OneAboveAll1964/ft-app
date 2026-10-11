@@ -324,4 +324,6 @@
     <string name="wheel_action_home">الرئيسية في FT</string>
     <string name="wheel_action_play">تشغيل أو إيقاف مؤقت</string>
     <string name="wheel_action_voice">المساعد الصوتي</string>
+    <string name="connect_open">افتح عند اتصال السيارة</string>
+    <string name="connect_open_none">لا شيء</string>
 </resources>

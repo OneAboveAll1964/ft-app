@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import app.ft.FTApp
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.mutableIntStateOf
 import app.ft.core.CarInfo
 import app.ft.ui.car.CarIcons
@@ -96,6 +97,8 @@ fun CarLookSettings() {
     val style by CarStyles.current.collectAsState()
     var picking by remember { mutableStateOf(-1) }
     var pickingMaps by remember { mutableStateOf(false) }
+    var pickingOpen by remember { mutableStateOf(false) }
+    var openTick by remember { mutableIntStateOf(0) }
     var photoFailed by remember { mutableStateOf(false) }
 
     fun save(change: () -> Unit) {
@@ -206,6 +209,12 @@ fun CarLookSettings() {
         Toggle(stringResource(R.string.look_song_info), p.carSongInfo) { on -> p.carSongInfo = on }
         Toggle(stringResource(R.string.look_hide_chat_audio), p.hideChatAudio) { on -> p.hideChatAudio = on }
 
+        Label(stringResource(R.string.connect_open))
+        TextButton(onClick = { pickingOpen = true }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+            val chosen = remember(openTick) { p.openOnConnect }
+            Text(chosen.ifEmpty { null }?.let { tileLabel(context, it) } ?: stringResource(R.string.connect_open_none))
+        }
+
         Label(stringResource(R.string.look_layout))
         Toggle(stringResource(R.string.look_info_side), style.infoRight) { on -> save { p.carInfoRight = on } }
         Text(stringResource(R.string.look_columns), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -290,6 +299,19 @@ fun CarLookSettings() {
                 }
             }
         }
+    }
+
+    if (pickingOpen) {
+        TilePicker(
+            current = p.openOnConnect.ifEmpty { null },
+            canRemove = p.openOnConnect.isNotEmpty(),
+            onDismiss = { pickingOpen = false },
+            onPick = { key ->
+                p.openOnConnect = key.orEmpty()
+                openTick++
+                pickingOpen = false
+            }
+        )
     }
 
     if (picking >= 0) {

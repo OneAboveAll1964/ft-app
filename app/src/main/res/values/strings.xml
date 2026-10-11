@@ -325,4 +325,6 @@
     <string name="wheel_action_home">FT home</string>
     <string name="wheel_action_play">Play or pause</string>
     <string name="wheel_action_voice">Voice assistant</string>
+    <string name="connect_open">Open when the car connects</string>
+    <string name="connect_open_none">Nothing</string>
 </resources>

@@ -324,4 +324,6 @@
     <string name="wheel_action_home">سەرەکیی FT</string>
     <string name="wheel_action_play">لێدان یان وەستاندن</string>
     <string name="wheel_action_voice">یاریدەدەری دەنگی</string>
+    <string name="connect_open">کاتێک ئۆتۆمبێل پەیوەست دەبێت، ئەمە بکەرەوە</string>
+    <string name="connect_open_none">هیچ</string>
 </resources>

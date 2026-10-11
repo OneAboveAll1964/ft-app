@@ -324,4 +324,6 @@
     <string name="wheel_action_home">سەرەکیا FT</string>
     <string name="wheel_action_play">لێدان یان راوەستاندن</string>
     <string name="wheel_action_voice">هاریکارێ دەنگی</string>
+    <string name="connect_open">دەمێ ترومبێل گرێ ددەت، ڤێ ڤەکە</string>
+    <string name="connect_open_none">چ تشت</string>
 </resources>

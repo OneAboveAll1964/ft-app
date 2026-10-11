@@ -112,6 +112,8 @@ class CarLifeService : Service() {
         val state: StateFlow<CarState> = _state
         private val _screenKeys = MutableSharedFlow<Int>(extraBufferCapacity = 8)
         val screenKeys: SharedFlow<Int> = _screenKeys
+        private val _openView = MutableSharedFlow<String>(extraBufferCapacity = 4)
+        val openView: SharedFlow<String> = _openView
         @Volatile private var instance: CarLifeService? = null
 
         fun startWifi(context: Context) = startAuto(context)
@@ -387,6 +389,7 @@ class CarLifeService : Service() {
         }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-voice-out"; start() }
     }
     @Volatile private var aaAutoLaunched = false
+    @Volatile private var autoOpened = false
     @Volatile private var quietShareFailed = false
     @Volatile private var quietShareAt = 0L
     @Volatile private var resumedMedia = false
@@ -1115,6 +1118,10 @@ class CarLifeService : Service() {
                     DiagLog.i(tag, "auto-starting Android Auto after connection")
                     startAndroidAuto()
                 }
+                if (st is CarLifeSession.State.Projecting && !autoOpened) {
+                    autoOpened = true
+                    openOnConnect()
+                }
             }
         }
         s.start()
@@ -1195,6 +1202,7 @@ class CarLifeService : Service() {
         CarPlayer.stopVideo()
         carDisplay.stop()
         aaAutoLaunched = false
+        autoOpened = false
         _state.update { it.copy(aaOverlay = false) }
         updateNotification(waitingNote())
     }
@@ -1533,6 +1541,23 @@ class CarLifeService : Service() {
             wheelPending = null
             wheelKey = -1
             handleHardKey(key, mapped)
+        }
+    }
+
+    private fun openOnConnect() {
+        val wanted = app.prefs.openOnConnect.trim()
+        if (wanted.isEmpty()) return
+        if (app.prefs.aaAutoStart && wanted == "aa") return
+        scope.launch {
+            delay(1500)
+            DiagLog.i(tag, "opening $wanted because the car connected")
+            when {
+                wanted == "aa" -> startAndroidAuto()
+                wanted == "maps" -> launch(app.prefs.mapsPackage)
+                wanted == "phone" -> phoneScreen()
+                wanted.startsWith("app:") -> launch(wanted.removePrefix("app:"))
+                else -> _openView.tryEmit(wanted)
+            }
         }
     }
 
@@ -1902,6 +1927,7 @@ class CarLifeService : Service() {
         blockedSoundNoticed = false
         routePlayer()
         aaAutoLaunched = false
+        autoOpened = false
         carPaused = false
         quietShareFailed = false
         quietShareAt = 0L

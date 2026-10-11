@@ -164,6 +164,17 @@ private fun CarRoot(style: CarStyle) {
     LaunchedEffect(view) { DiagLog.i("Car", "car screen: ${view.name}") }
     LaunchedEffect(nowPlaying) { if (view == CarView.MUSIC) DiagLog.i("Car", if (nowPlaying) "music: now playing" else "music: song list") }
     LaunchedEffect(Unit) {
+        CarLifeService.openView.collect { key ->
+            when (key) {
+                "music" -> { view = CarView.MUSIC; nowPlaying = false }
+                "videos" -> view = CarView.VIDEOS
+                "youtube" -> view = CarView.YOUTUBE
+                "browser" -> view = CarView.BROWSER
+                "apps" -> view = CarView.DRAWER
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
         CarLifeService.screenKeys.collect { key ->
             when {
                 key == 3 -> { view = CarView.LAUNCHER; nowPlaying = false }
