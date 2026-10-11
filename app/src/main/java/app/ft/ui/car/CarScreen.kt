@@ -167,6 +167,12 @@ private fun CarRoot(style: CarStyle) {
         onDispose { CarInfo.stop(context) }
     }
     val superCastReady by SuperCast.ready.collectAsState()
+    val darkenPhone = FTApp.instance.prefs.supercastScreenOff
+    DisposableEffect(view == CarView.SUPERCAST && panes.isNotEmpty() && darkenPhone) {
+        val wanted = view == CarView.SUPERCAST && panes.isNotEmpty() && darkenPhone
+        if (wanted) SuperCast.phoneScreen(false)
+        onDispose { if (wanted) SuperCast.phoneScreen(true) }
+    }
     LaunchedEffect(superCastReady, view) {
         if (superCastReady && view == CarView.SUPERCAST && dockApps.isEmpty()) {
             dockApps = withContext(Dispatchers.IO) { SuperCast.apps() }
@@ -232,7 +238,15 @@ private fun CarRoot(style: CarStyle) {
                     }
                 }
             )
-            else -> Launcher(state, style) { v, playing ->
+            else -> Launcher(state, style, onApp = { packageName ->
+                val label = runCatching {
+                    val manager = context.packageManager
+                    manager.getApplicationLabel(manager.getApplicationInfo(packageName, 0)).toString()
+                }.getOrDefault(packageName)
+                panes = listOf(CarPane("pane-0", packageName, label))
+                view = CarView.SUPERCAST
+                true
+            }) { v, playing ->
                 nowPlaying = playing
                 view = v
             }
@@ -313,7 +327,7 @@ private fun CornerPill(corner: Int, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean) -> Unit) {
+private fun Launcher(state: CarState, style: CarStyle, onApp: (String) -> Boolean, onOpen: (CarView, Boolean) -> Unit) {
     val player by CarPlayer.state.collectAsState()
     val context = LocalContext.current
     val hasInfo = style.showClock || style.showLink || style.showCarHome || style.showMusic || style.showAa || style.widgets.isNotEmpty()
@@ -344,7 +358,7 @@ private fun Launcher(state: CarState, style: CarStyle, onOpen: (CarView, Boolean
             if (hasInfo && !style.infoRight) {
                 Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp), content = info)
             }
-            TileGrid(style.tiles, Modifier.weight(if (hasInfo) 0.58f else 1f).fillMaxHeight(), columns = style.columns, onOpen = onOpen)
+            TileGrid(style.tiles, Modifier.weight(if (hasInfo) 0.58f else 1f).fillMaxHeight(), columns = style.columns, onApp = onApp, onOpen = onOpen)
             if (hasInfo && style.infoRight) {
                 Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp), content = info)
             }
@@ -507,7 +521,7 @@ private fun MiniKey(icon: ImageVector, size: androidx.compose.ui.unit.Dp, filled
 private data class TileSpec(val key: String, val label: String, val icon: ImageVector?, val app: ImageBitmap?)
 
 @Composable
-private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, interactive: Boolean = true, onOpen: (CarView, Boolean) -> Unit) {
+private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, interactive: Boolean = true, onApp: (String) -> Boolean = { false }, onOpen: (CarView, Boolean) -> Unit) {
     val context = LocalContext.current
     val specs = remember(keys, context) { keys.map { tileSpec(context, it) } }
     val columns = if (columns > 0) columns.coerceAtMost(specs.size.coerceAtLeast(1)) else CarStyle.columns(specs.size)
@@ -515,14 +529,24 @@ private fun TileGrid(keys: List<String>, modifier: Modifier, columns: Int = 0, i
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         rows.forEach { row ->
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                row.forEach { spec -> Tile(Modifier.weight(1f), spec) { if (interactive) openTile(spec.key, onOpen) } }
+                row.forEach { spec -> Tile(Modifier.weight(1f), spec) { if (interactive) openTile(spec.key, onOpen, onApp) } }
                 repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
-private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit) {
+private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit, onApp: (String) -> Boolean = { false }) {
+    val prefs = FTApp.instance.prefs
+    if (prefs.supercastTiles && SuperCast.ready.value) {
+        val packageName = when {
+            key == "maps" -> prefs.mapsPackage
+            key == "youtube" -> "com.google.android.youtube"
+            key.startsWith("app:") -> key.removePrefix("app:")
+            else -> null
+        }
+        if (packageName != null && onApp(packageName)) return
+    }
     when {
         key == "music" -> onOpen(CarView.MUSIC, false)
         key == "videos" -> onOpen(CarView.VIDEOS, false)

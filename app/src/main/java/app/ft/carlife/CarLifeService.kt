@@ -30,6 +30,7 @@ import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
+import app.ft.supercast.SuperCast
 import app.ft.core.DiagSnapshot
 import app.ft.core.Root
 import app.ft.core.RootPrep
@@ -1121,6 +1122,12 @@ class CarLifeService : Service() {
                 if (st is CarLifeSession.State.Projecting && !autoOpened) {
                     autoOpened = true
                     openOnConnect()
+                    if (app.prefs.supercastOn && !SuperCast.ready.value) {
+                        scope.launch(Dispatchers.IO) {
+                            DiagLog.i(tag, "starting the apps-on-the-car helper after connection")
+                            SuperCast.start(applicationContext)
+                        }
+                    }
                 }
             }
         }

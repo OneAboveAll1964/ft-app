@@ -118,4 +118,8 @@ class Prefs(context: Context) {
     var weatherAt: Long get() = lng("weatherAt", 0L); set(v) = set("weatherAt", v)
 
     var supercastToken: String get() = str("supercastToken", ""); set(v) = set("supercastToken", v)
+    var supercastOn: Boolean get() = bool("supercastOn", false); set(v) = set("supercastOn", v)
+    var supercastScreenOff: Boolean get() = bool("supercastScreenOff", true); set(v) = set("supercastScreenOff", v)
+    var supercastTiles: Boolean get() = bool("supercastTiles", true); set(v) = set("supercastTiles", v)
+    var supercastWay: Int get() = int("supercastWay", 0); set(v) = set("supercastWay", v)
 }

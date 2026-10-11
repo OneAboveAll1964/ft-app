@@ -341,4 +341,25 @@
     <string name="tile_supercast">ئەپێن مۆبایلی</string>
     <string name="supercast_pick">ژ ژێرێ ئەپەکێ هەلبژێرە دا ل ڤێرێ کار بکەت</string>
     <string name="supercast_swap">گوهۆڕینا لایان</string>
+    <string name="settings_supercast_title">ئەپ ل سەر ترومبێلێ</string>
+    <string name="settings_supercast_about">ئەپێن خۆ یێن راستەقینە ل سەر ترومبێلێ بخەبتینە و شاشەیا مۆبایلی گرتی بیت</string>
+    <string name="supercast_on">ئەپ ل سەر ترومبێلێ بخەبتن</string>
+    <string name="supercast_body">FT بۆ هەر ئەپەکێ شاشەیەکا ڤەشارتی یا تایبەت چێدکەت، لەورا Waze یان YouTube ل سەر ترومبێلێ دخەبتن و مۆبایلێ تە تاری دمینیت. هەتا دوو هەب پێکڤە، ل تەنیشتا ئێک.</string>
+    <string name="supercast_ready">ئامادەیە</string>
+    <string name="supercast_not_ready">هێشتا نەهاتیە رێکخستن</string>
+    <string name="supercast_screen_off">دەمێ ئەپ دخەبتن شاشەیا مۆبایلی بگرە</string>
+    <string name="supercast_tiles">دوگمێن ترومبێلێ وەکی ئەپێن راستەقینە ڤەکە</string>
+    <string name="supercast_tiles_about">دوگمێن نەخشە و YouTube ئەپێ راستەقینە ڤەدکەن. ئەگەر ئامادە نەبیت، FT بێدەنگ شێوازێ کەڤن یێ وێنەگواستنێ نیشان ددەت.</string>
+    <string name="supercast_turn_on">رێک بخە</string>
+    <string name="supercast_ways">چاوا ڤەکەی</string>
+    <string name="supercast_way_root">ب روتێ، ئۆتۆماتیک</string>
+    <string name="supercast_way_root_body">مۆبایلێ تە روت کریە، لەورا FT د هەر گەشتەکێ دا ب خۆ ڤێ رێک دکەت و چ پێدڤی نینە تو بکەی.</string>
+    <string name="supercast_way_wireless">ب Wireless debugging</string>
+    <string name="supercast_way_wireless_body">ل رێکخستنێن پەرەپێدەری یێن مۆبایلی Wireless debugging ڤەکە، پاشان FT ب کۆدێ شەش ژمارەیی ڤە گرێ بدە. پشتی ریستارتێ جارەکا دی بکە.</string>
+    <string name="supercast_way_car">ژ ترومبێلێ</string>
+    <string name="supercast_way_car_body">هندەک شاشێن ترومبێلان دشێن ب خۆ ڤێ ب رێکا کێبلێ USB ڤەکەن. FT دەمێ گرێ ددەت داخوازێ ژ یا تە دکەت، بەلێ زۆرا ترومبێلان نەشێن.</string>
+    <string name="supercast_way_computer">ژ کۆمپیوتەرەکێ، ئێک جار</string>
+    <string name="supercast_way_computer_body">مۆبایلی ب کۆمپیوتەرەکێ ڤە گرێ بدە کو USB debugging تێدا ڤەکری بیت و ئێک فەرمانێ جێبەجێ بکە. FT نیشا تە ددەت و دشێت بۆ تە کۆپی بکەت.</string>
+    <string name="supercast_copy_command">کۆپیکرنا فەرمانێ</string>
+    <string name="supercast_stop">راوەستاندن</string>
 </resources>

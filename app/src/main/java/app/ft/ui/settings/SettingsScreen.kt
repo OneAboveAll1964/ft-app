@@ -78,6 +78,7 @@ enum class SettingsPage(@StringRes val title: Int, @StringRes val about: Int) {
     SOUND(R.string.settings_sound_title, R.string.settings_sound_about),
     CAR(R.string.settings_car_title, R.string.settings_car_about),
     ANDROID_AUTO(R.string.settings_aa_title, R.string.settings_aa_about),
+    SUPERCAST(R.string.settings_supercast_title, R.string.settings_supercast_about),
     ADVANCED(R.string.settings_advanced_title, R.string.settings_advanced_about),
     BACKUP(R.string.settings_backup_title, R.string.settings_backup_about)
 }
@@ -89,6 +90,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.SOUND -> CarIcons.Music
     SettingsPage.CAR -> Icons.Filled.Share
     SettingsPage.ANDROID_AUTO -> CarIcons.AndroidAuto
+    SettingsPage.SUPERCAST -> CarIcons.Apps
     SettingsPage.ADVANCED -> Icons.Filled.Build
     SettingsPage.BACKUP -> Icons.Filled.Share
 }
@@ -230,6 +232,7 @@ private fun PageContent(page: SettingsPage) {
             IntSetting(stringResource(R.string.adv_voice), p.vrPort) { p.vrPort = it }
             IntSetting(stringResource(R.string.adv_touch), p.touchPort) { p.touchPort = it }
         }
+        SettingsPage.SUPERCAST -> SuperCastSettings()
         SettingsPage.BACKUP -> BackupSettings()
     }
 }
@@ -345,7 +348,7 @@ private fun TextSetting(label: String, initial: String, onChange: (String) -> Un
 }
 
 @Composable
-private fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> Unit) {
+internal fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> Unit) {
     var on by remember { mutableStateOf(initial) }
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))

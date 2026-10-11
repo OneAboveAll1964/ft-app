@@ -341,4 +341,25 @@
     <string name="tile_supercast">تطبيقات الهاتف</string>
     <string name="supercast_pick">اختر تطبيقًا من الأسفل لتشغيله هنا</string>
     <string name="supercast_swap">تبديل الجهتين</string>
+    <string name="settings_supercast_title">التطبيقات على السيارة</string>
+    <string name="settings_supercast_about">شغّل تطبيقاتك الحقيقية على السيارة وشاشة الهاتف مطفأة</string>
+    <string name="supercast_on">تشغيل التطبيقات على السيارة</string>
+    <string name="supercast_body">يمنح FT كل تطبيق شاشة مخفية خاصة به، فيعمل Waze أو YouTube على السيارة بينما يبقى هاتفك مطفأ. تطبيقان في وقت واحد جنبًا إلى جنب.</string>
+    <string name="supercast_ready">جاهز</string>
+    <string name="supercast_not_ready">لم يُضبط بعد</string>
+    <string name="supercast_screen_off">أطفئ شاشة الهاتف أثناء تشغيل التطبيقات</string>
+    <string name="supercast_tiles">افتح أزرار السيارة كتطبيقات حقيقية</string>
+    <string name="supercast_tiles_about">يفتح زرا الخرائط وYouTube التطبيق الحقيقي. وإن لم يكن جاهزًا، يعرض FT النسخة المعكوسة القديمة بهدوء.</string>
+    <string name="supercast_turn_on">اضبطه</string>
+    <string name="supercast_ways">كيف تشغّله</string>
+    <string name="supercast_way_root">بصلاحيات الروت، تلقائيًا</string>
+    <string name="supercast_way_root_body">هاتفك فيه صلاحيات روت، لذا يضبط FT هذا في كل مشوار دون أي تدخل منك.</string>
+    <string name="supercast_way_wireless">عبر تصحيح الأخطاء اللاسلكي</string>
+    <string name="supercast_way_wireless_body">فعّل تصحيح الأخطاء اللاسلكي في إعدادات المطوّرين، ثم اربط FT بالرمز المكوّن من ستة أرقام. كرّر هذا بعد إعادة التشغيل.</string>
+    <string name="supercast_way_car">من السيارة</string>
+    <string name="supercast_way_car_body">بعض شاشات السيارات تستطيع تشغيل هذا بنفسها عبر كابل USB. يسأل FT سيارتك عند الاتصال، لكن معظم السيارات لا تدعم ذلك.</string>
+    <string name="supercast_way_computer">من كمبيوتر، مرة واحدة</string>
+    <string name="supercast_way_computer_body">وصّل الهاتف بكمبيوتر مع تفعيل تصحيح أخطاء USB ونفّذ أمرًا واحدًا. يعرضه FT ويمكنه نسخه لك.</string>
+    <string name="supercast_copy_command">نسخ الأمر</string>
+    <string name="supercast_stop">إيقاف</string>
 </resources>

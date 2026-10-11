@@ -342,4 +342,25 @@
     <string name="tile_supercast">Phone apps</string>
     <string name="supercast_pick">Pick an app below to run it here</string>
     <string name="supercast_swap">Swap sides</string>
+    <string name="settings_supercast_title">Apps on the car</string>
+    <string name="settings_supercast_about">Run your real apps on the car with the phone screen off</string>
+    <string name="supercast_on">Run apps on the car</string>
+    <string name="supercast_body">FT gives each app its own hidden screen, so Waze or YouTube run on the car while your phone stays dark. Up to two at once, side by side.</string>
+    <string name="supercast_ready">Ready</string>
+    <string name="supercast_not_ready">Not set up yet</string>
+    <string name="supercast_screen_off">Turn the phone screen off while apps run</string>
+    <string name="supercast_tiles">Open car buttons as real apps</string>
+    <string name="supercast_tiles_about">Maps and YouTube buttons open the real app. If this is not ready, FT quietly shows the old mirror instead.</string>
+    <string name="supercast_turn_on">Set it up</string>
+    <string name="supercast_ways">How to switch it on</string>
+    <string name="supercast_way_root">With root, by itself</string>
+    <string name="supercast_way_root_body">Your phone is rooted, so FT sets this up every drive with nothing for you to do.</string>
+    <string name="supercast_way_wireless">With Wireless debugging</string>
+    <string name="supercast_way_wireless_body">Turn on Wireless debugging in the phone\'s developer settings, then pair FT with the six-digit code it shows. Do this again after a restart.</string>
+    <string name="supercast_way_car">From the car</string>
+    <string name="supercast_way_car_body">Some head units can switch this on over the USB cable by themselves. FT asks yours when it connects; most cars cannot do it.</string>
+    <string name="supercast_way_computer">From a computer, once</string>
+    <string name="supercast_way_computer_body">Plug the phone into a computer with USB debugging on and run one command. FT shows it and can copy it for you.</string>
+    <string name="supercast_copy_command">Copy the command</string>
+    <string name="supercast_stop">Stop</string>
 </resources>
