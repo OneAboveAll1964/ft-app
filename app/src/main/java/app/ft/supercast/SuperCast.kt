@@ -20,6 +20,7 @@ object SuperCast {
             return if (stored.isNotEmpty()) stored else freshToken()
         }
     @Volatile private var server: IFtServer? = null
+    @Volatile var helperUid: Int = -1
 
     private val _ready = MutableStateFlow(false)
     val ready: StateFlow<Boolean> = _ready

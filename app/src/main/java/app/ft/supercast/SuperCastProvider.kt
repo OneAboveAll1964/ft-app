@@ -29,6 +29,7 @@ class SuperCastProvider : ContentProvider() {
             DiagLog.w(TAG, "the SuperCast bridge was asked for with the wrong token")
             return null
         }
+        SuperCast.helperUid = uid
         DiagLog.i(TAG, "handing the SuperCast bridge to the helper at uid $uid")
         return Bundle().apply { putBinder("client", SuperCast.client.asBinder()) }
     }
