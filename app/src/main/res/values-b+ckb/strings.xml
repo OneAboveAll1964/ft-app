@@ -391,4 +391,10 @@
     <string name="aa_switch_on">بیکەرەوە</string>
     <string name="aa_switching_on">دەکرێتەوە</string>
     <string name="aa_switch_failed">FT نەیتوانی بە تەنها بیکاتەوە، بۆیە لە خوارەوە بە دەستی بیکەرەوە.</string>
+    <string name="supercast_not_set_up">ئەپەکان لەسەر ئۆتۆمبێل هێشتا ڕێک نەخراوە. FT لەسەر مۆبایلەکەت بکەرەوە، ڕێکخستن، ئەپەکان لەسەر ئۆتۆمبێل.</string>
+    <string name="supercast_which_apps">ئەو ئەپانەی لەسەر ئۆتۆمبێل دەردەکەون</string>
+    <string name="supercast_all_apps">هەمووی</string>
+    <string name="supercast_some_apps">%1$d هەڵبژێردراو</string>
+    <string name="supercast_which_about">ڕیزەکە لەسەر ئۆتۆمبێل کورت ڕابگرە بە پیشاندانی تەنها ئەو ئەپانەی بەڕاستی لە کاتی لێخوڕیندا بەکاریان دەهێنیت.</string>
+    <string name="action_done">تەواو</string>
 </resources>

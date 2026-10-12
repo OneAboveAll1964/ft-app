@@ -19,6 +19,15 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import app.ft.R
+import app.ft.ui.car.AppCatalog
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -167,6 +176,46 @@ fun ListSheet(title: String, onDismiss: () -> Unit, footer: (@Composable () -> U
                 if (footer != null) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) { footer() }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppChecklist(chosen: Set<String>, onDismiss: () -> Unit, onChange: (Set<String>) -> Unit) {
+    val context = LocalContext.current
+    val apps by AppCatalog.apps.collectAsState()
+    LaunchedEffect(Unit) { AppCatalog.refresh(context) }
+    var picked by remember(chosen) { mutableStateOf(chosen) }
+    val ours = context.packageName
+    val list = remember(apps, ours) { apps.orEmpty().filter { it.pkg != ours } }
+    ListSheet(
+        title = stringResource(R.string.supercast_which_apps),
+        onDismiss = {
+            onChange(picked)
+            onDismiss()
+        },
+        footer = {
+            if (picked.isNotEmpty()) {
+                TextButton(onClick = { picked = emptySet() }) { Text(stringResource(R.string.supercast_all_apps)) }
+            }
+        }
+    ) { _ ->
+        items(list, key = { it.pkg }) { app ->
+            val on = app.pkg in picked
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .selectable(selected = on, role = Role.Checkbox) {
+                        picked = if (on) picked - app.pkg else picked + app.pkg
+                    }
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(checked = on, onCheckedChange = null)
+                Spacer(Modifier.width(16.dp))
+                Text(app.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

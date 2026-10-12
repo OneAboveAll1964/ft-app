@@ -44,7 +44,9 @@ import app.ft.FTApp
 import app.ft.R
 import app.ft.supercast.Helper
 import app.ft.supercast.SuperCast
+import app.ft.ui.components.AppChecklist
 import app.ft.ui.components.Option
+import app.ft.ui.components.OptionRow
 import app.ft.ui.components.PickSetting
 import app.ft.ui.components.rememberRootGranted
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +106,19 @@ fun SuperCastSettings() {
         Text(stringResource(R.string.apps_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
     BoolSetting(stringResource(R.string.supercast_screen_off), prefs.supercastScreenOff) { prefs.supercastScreenOff = it }
+    var chosen by remember { mutableStateOf(prefs.supercastApps.split(',').filter { it.isNotBlank() }.toSet()) }
+    var picking by remember { mutableStateOf(false) }
+    OptionRow(
+        stringResource(R.string.supercast_which_apps),
+        if (chosen.isEmpty()) stringResource(R.string.supercast_all_apps) else stringResource(R.string.supercast_some_apps, chosen.size),
+        detail = stringResource(R.string.supercast_which_about)
+    ) { picking = true }
+    if (picking) {
+        AppChecklist(chosen, onDismiss = { picking = false }) { now ->
+            chosen = now
+            prefs.supercastApps = now.joinToString(",")
+        }
+    }
 
     Text(stringResource(R.string.supercast_ways), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
     Way(

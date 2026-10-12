@@ -93,6 +93,10 @@ object SuperCast {
         ask("close") { putString("name", name) }
     }
 
+    fun detachPane(name: String) {
+        ask("detach") { putString("name", name) }
+    }
+
     fun launch(name: String, packageName: String): Boolean =
         ask("launch") { putString("name", name); putString("package", packageName) }?.getBoolean("ok") == true
 

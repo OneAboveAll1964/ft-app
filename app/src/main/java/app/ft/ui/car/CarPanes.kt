@@ -63,6 +63,7 @@ fun SuperCastScreen(
     panes: List<CarPane>,
     apps: List<Pair<String, String>>,
     pad: PaddingValues,
+    ready: Boolean,
     onPick: (Int) -> Unit,
     onClose: (String) -> Unit,
     onSwap: () -> Unit
@@ -74,11 +75,12 @@ fun SuperCastScreen(
                     Pane(pane, Modifier.weight(1f).fillMaxHeight()) { onClose(pane.name) }
                 }
                 if (panes.isEmpty()) {
-                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 40.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            stringResource(R.string.supercast_pick),
+                            stringResource(if (ready) R.string.supercast_pick else R.string.supercast_not_set_up),
                             style = MaterialTheme.typography.titleMedium,
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                 }
@@ -110,7 +112,7 @@ private fun Pane(pane: CarPane, modifier: Modifier, onClose: () -> Unit) {
                         }
 
                         override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
-                            SuperCast.closePane(pane.name)
+                            SuperCast.detachPane(pane.name)
                             return true
                         }
 

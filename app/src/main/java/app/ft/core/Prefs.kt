@@ -120,5 +120,6 @@ class Prefs(context: Context) {
     var supercastToken: String get() = str("supercastToken", ""); set(v) = set("supercastToken", v)
     var supercastOn: Boolean get() = bool("supercastOn", false); set(v) = set("supercastOn", v)
     var supercastScreenOff: Boolean get() = bool("supercastScreenOff", true); set(v) = set("supercastScreenOff", v)
+    var supercastApps: String get() = str("supercastApps", ""); set(v) = set("supercastApps", v)
     var supercastWay: Int get() = int("supercastWay", 0); set(v) = set("supercastWay", v)
 }

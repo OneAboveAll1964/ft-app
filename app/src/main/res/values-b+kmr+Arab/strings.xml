@@ -391,4 +391,10 @@
     <string name="aa_switch_on">ڤەکە</string>
     <string name="aa_switching_on">تێت ڤەکرن</string>
     <string name="aa_switch_failed">FT بی تنێ نەشیا ڤەکەت، ڤێجا ل خوارێ ب دەستان ڤەکە.</string>
+    <string name="supercast_not_set_up">ئەپ ل سەر ترومبێلێ هێژ نەهاتیە ڕێکخستن. FT ل سەر موبایلا خۆ ڤەکە، ڕێکخستن، ئەپ ل سەر ترومبێلێ.</string>
+    <string name="supercast_which_apps">ئەوێن ئەپان ل سەر ترومبێلێ دیار دبن</string>
+    <string name="supercast_all_apps">هەمی</string>
+    <string name="supercast_some_apps">%1$d هەلبژارتی</string>
+    <string name="supercast_which_about">رێزێ ل سەر ترومبێلێ کورت بهێلە ب نیشاندانا تنێ وان ئەپان یێن تو ب ڕاستی دەمێ ئاژوتنێ بکار دئینی.</string>
+    <string name="action_done">تەمام</string>
 </resources>

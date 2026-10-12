@@ -25,6 +25,7 @@ public final class Displays {
         public int width;
         public int height;
         public String packageName;
+        public boolean fresh;
 
         Pane(String name, VirtualDisplay display, int width, int height) {
             this.name = name;
@@ -47,11 +48,16 @@ public final class Displays {
     public synchronized Pane open(String name, Surface surface, int width, int height, int dpi) {
         Pane existing = panes.get(name);
         if (existing != null) {
+            existing.fresh = false;
             existing.display.setSurface(surface);
-            existing.display.resize(width, height, dpi);
-            existing.width = width;
-            existing.height = height;
-            Log.i("pane " + name + " now " + width + "x" + height + " on display " + existing.id());
+            if (existing.width != width || existing.height != height) {
+                existing.display.resize(width, height, dpi);
+                existing.width = width;
+                existing.height = height;
+                Log.i("pane " + name + " now " + width + "x" + height + " on display " + existing.id());
+            } else {
+                Log.i("pane " + name + " is back on screen, still showing " + existing.packageName);
+            }
             return existing;
         }
         VirtualDisplay display = create(name, surface, width, height, dpi);
@@ -59,6 +65,7 @@ public final class Displays {
             return null;
         }
         Pane pane = new Pane(name, display, width, height);
+        pane.fresh = true;
         panes.put(name, pane);
         Log.i("pane " + name + " opened as display " + pane.id() + " at " + width + "x" + height);
         return pane;
@@ -110,6 +117,19 @@ public final class Displays {
             made = (DisplayManager) Sys.context().getSystemService(Context.DISPLAY_SERVICE);
             return made;
         }
+    }
+
+    public synchronized boolean detach(String name) {
+        Pane pane = panes.get(name);
+        if (pane == null) {
+            return false;
+        }
+        try {
+            pane.display.setSurface(null);
+        } catch (Throwable ignored) {
+        }
+        Log.i("pane " + name + " is off screen, " + pane.packageName + " keeps running");
+        return true;
     }
 
     public synchronized void close(String name) {

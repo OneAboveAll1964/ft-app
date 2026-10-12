@@ -101,14 +101,23 @@ public final class Commands {
                 }
                 String packageName = request.getString("package");
                 if (packageName != null && !packageName.isEmpty()) {
+                    boolean already = !pane.fresh && packageName.equals(pane.packageName);
                     pane.packageName = packageName;
-                    Apps.launch(packageName, pane.id());
+                    if (!already) {
+                        Apps.launch(packageName, pane.id());
+                    }
                 }
                 answer.putInt("display", pane.id());
                 return answer;
             }
             case "close": {
-                displays.close(request.getString("name", "pane"));
+                String name = request.getString("name", "pane");
+                displays.close(name);
+                gestures.remove(name);
+                return answer;
+            }
+            case "detach": {
+                answer.putBoolean("ok", displays.detach(request.getString("name", "pane")));
                 return answer;
             }
             case "swap": {

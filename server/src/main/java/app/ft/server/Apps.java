@@ -58,6 +58,8 @@ public final class Apps {
         }
     }
 
+    private static final String OURSELVES = "app.ft";
+
     public static Bundle list() {
         Bundle answer = new Bundle();
         ArrayList<String> packages = new ArrayList<>();
@@ -65,13 +67,28 @@ public final class Apps {
         try {
             PackageManager manager = Sys.context().getPackageManager();
             Intent intent = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+            List<String[]> rows = new ArrayList<>();
             for (ResolveInfo info : manager.queryIntentActivities(intent, 0)) {
                 ApplicationInfo application = info.activityInfo.applicationInfo;
-                if (packages.contains(application.packageName)) {
+                if (OURSELVES.equals(application.packageName)) {
                     continue;
                 }
-                packages.add(application.packageName);
-                labels.add(String.valueOf(manager.getApplicationLabel(application)));
+                boolean seen = false;
+                for (String[] row : rows) {
+                    if (row[0].equals(application.packageName)) {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (seen) {
+                    continue;
+                }
+                rows.add(new String[]{application.packageName, String.valueOf(manager.getApplicationLabel(application))});
+            }
+            java.util.Collections.sort(rows, (a, b) -> a[1].compareToIgnoreCase(b[1]));
+            for (String[] row : rows) {
+                packages.add(row[0]);
+                labels.add(row[1]);
             }
         } catch (Throwable t) {
             Log.w("could not list apps: " + t);

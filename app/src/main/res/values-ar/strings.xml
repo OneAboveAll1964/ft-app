@@ -391,4 +391,10 @@
     <string name="aa_switch_on">شغّله</string>
     <string name="aa_switching_on">جارٍ تشغيله</string>
     <string name="aa_switch_failed">لم يتمكن FT من تشغيله وحده، فافعل ذلك يدوياً أدناه.</string>
+    <string name="supercast_not_set_up">لم يتم تجهيز التطبيقات على السيارة بعد. افتح FT على هاتفك، الإعدادات، التطبيقات على السيارة.</string>
+    <string name="supercast_which_apps">التطبيقات التي تظهر على السيارة</string>
+    <string name="supercast_all_apps">كلها</string>
+    <string name="supercast_some_apps">%1$d مختار</string>
+    <string name="supercast_which_about">اجعل الصف على السيارة قصيراً بإظهار التطبيقات التي تستخدمها فعلاً أثناء القيادة فقط.</string>
+    <string name="action_done">تم</string>
 </resources>

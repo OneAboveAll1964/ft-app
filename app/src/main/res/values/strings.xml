@@ -392,4 +392,10 @@
     <string name="aa_switch_on">Switch it on</string>
     <string name="aa_switching_on">Switching it on</string>
     <string name="aa_switch_failed">FT could not switch it on by itself, so do it by hand below.</string>
+    <string name="supercast_not_set_up">Apps on the car is not set up yet. Open FT on your phone, Settings, Apps on the car.</string>
+    <string name="supercast_which_apps">Apps to show on the car</string>
+    <string name="supercast_all_apps">All of them</string>
+    <string name="supercast_some_apps">%1$d chosen</string>
+    <string name="supercast_which_about">Keep the row on the car short by showing only the apps you really use while driving.</string>
+    <string name="action_done">Done</string>
 </resources>

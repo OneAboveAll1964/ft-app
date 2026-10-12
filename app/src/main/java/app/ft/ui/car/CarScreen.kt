@@ -200,8 +200,10 @@ private fun CarRoot(style: CarStyle) {
     }
     LaunchedEffect(superCastReady, view) {
         if (superCastReady && view == CarView.SUPERCAST && dockApps.isEmpty()) {
-            dockApps = withContext(Dispatchers.IO) { SuperCast.apps() }
-            DiagLog.i("SuperCast", "the helper listed ${dockApps.size} apps for the dock")
+            val all = withContext(Dispatchers.IO) { SuperCast.apps() }
+            val wanted = FTApp.instance.prefs.supercastApps.split(',').filter { it.isNotBlank() }.toSet()
+            dockApps = if (wanted.isEmpty()) all else all.filter { it.first in wanted }.ifEmpty { all }
+            DiagLog.i("SuperCast", "the helper listed ${all.size} apps, ${dockApps.size} shown on the car")
         }
     }
     LaunchedEffect(view) {
@@ -219,6 +221,7 @@ private fun CarRoot(style: CarStyle) {
                 "youtube" -> view = CarView.YOUTUBE
                 "browser" -> view = CarView.BROWSER
                 "apps" -> view = CarView.DRAWER
+                "supercast" -> view = CarView.SUPERCAST
             }
         }
     }
@@ -252,6 +255,7 @@ private fun CarRoot(style: CarStyle) {
                     panes = panes,
                     apps = dockApps,
                     pad = pad,
+                    ready = superCastReady,
                     onPick = { index ->
                         val chosen = dockApps.getOrNull(index) ?: return@SuperCastScreen
                         val taken = panes.map { it.name }.toSet()
