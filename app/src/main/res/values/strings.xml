@@ -318,7 +318,7 @@
     <string name="look_night_colour">Night colour</string>
     <string name="look_same_as_day">Same as day</string>
     <string name="wheel_title">Steering wheel buttons</string>
-    <string name="wheel_about">Press the same button again quickly to do something else</string>
+    <string name="wheel_about">Press the same button twice quickly to do something else. A button with a second action waits a moment before its usual action.</string>
     <string name="wheel_next_again">Next button, pressed twice</string>
     <string name="wheel_prev_again">Previous button, pressed twice</string>
     <string name="wheel_action_none">Nothing</string>

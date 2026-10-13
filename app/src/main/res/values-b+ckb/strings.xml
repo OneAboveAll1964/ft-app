@@ -317,7 +317,7 @@
     <string name="look_night_colour">ڕەنگی شەو</string>
     <string name="look_same_as_day">وەک ڕۆژ</string>
     <string name="wheel_title">دوگمەکانی سوکان</string>
-    <string name="wheel_about">هەمان دوگمە بە خێرایی دووبارە دابگرە بۆ کارێکی تر</string>
+    <string name="wheel_about">هەمان دوگمە بە خێرایی دووبارە دابگرە بۆ کارێکی تر. ئەو دوگمەیەی کاری دووەمی هەیە، کەمێک چاوەڕێ دەکات پێش کارە ئاساییەکەی.</string>
     <string name="wheel_next_again">دوگمەی دواتر، دوو جار</string>
     <string name="wheel_prev_again">دوگمەی پێشوو، دوو جار</string>
     <string name="wheel_action_none">هیچ</string>

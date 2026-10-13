@@ -233,7 +233,8 @@ class CarLifeService : Service() {
     private var wheelPending: Job? = null
     private var wheelKey = -1
 
-    private val WHEEL_AGAIN_MS = 450L
+    private val WHEEL_AGAIN_MS = 300L
+    private var wheelAt = 0L
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var projection: MediaProjection? = null
     private val audio = AudioCapture { pcm -> CarAudioBus.write(CarAudioBus.LANE_PHONE, pcm) }
@@ -1547,12 +1548,13 @@ class CarLifeService : Service() {
             pending.cancel()
             wheelPending = null
             wheelKey = -1
-            DiagLog.i(tag, "steering wheel ${keyName(mapped)} pressed again, doing the second action instead")
+            DiagLog.i(tag, "steering wheel ${keyName(mapped)} pressed again after ${android.os.SystemClock.uptimeMillis() - wheelAt} ms, doing the second action instead")
             runWheelAction(extra)
             return
         }
         wheelPending?.cancel()
         wheelKey = mapped
+        wheelAt = android.os.SystemClock.uptimeMillis()
         wheelPending = scope.launch {
             delay(WHEEL_AGAIN_MS)
             wheelPending = null

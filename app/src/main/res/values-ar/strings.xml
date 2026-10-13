@@ -317,7 +317,7 @@
     <string name="look_night_colour">لون الليل</string>
     <string name="look_same_as_day">كما في النهار</string>
     <string name="wheel_title">أزرار المقود</string>
-    <string name="wheel_about">اضغط الزر نفسه مرة ثانية بسرعة لتنفيذ أمر آخر</string>
+    <string name="wheel_about">اضغط الزر نفسه مرتين بسرعة لتنفيذ أمر آخر. الزر الذي له أمر ثانٍ ينتظر لحظة قصيرة قبل أمره المعتاد.</string>
     <string name="wheel_next_again">زر التالي، بضغطتين</string>
     <string name="wheel_prev_again">زر السابق، بضغطتين</string>
     <string name="wheel_action_none">لا شيء</string>
