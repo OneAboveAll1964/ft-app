@@ -53,8 +53,14 @@ class GearSound {
         val resume = sound != GearAction.SOUND_PAUSE && paused
         if (pause) paused = true
         if (resume) paused = false
-        level = want
-        return Move(want, pause, resume)
+        level = if (paused) minOf(level, want) else want
+        return Move(level, pause, resume)
+    }
+
+    fun settle(): Boolean {
+        if (!paused || level >= 1f) return false
+        level = 1f
+        return true
     }
 
     fun forget() {

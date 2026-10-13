@@ -13,6 +13,8 @@ class CarAudioBusTest {
     @After
     fun tearDown() {
         CarAudioBus.sink = null
+        CarAudioBus.voice = null
+        CarAudioBus.soundLevel = 1f
         got.clear()
     }
 
@@ -175,11 +177,48 @@ class CarAudioBusTest {
         assertTrue(last >= (frames - 2) * 50)
     }
 
-    private fun loud(bytes: Int) = ByteArray(bytes).also { b ->
+    @Test
+    fun soundAfterAQuietSpellStartsAtTheGearLevelNotAnOldOne() {
+        listen()
+        val music = loud(3840)
+        CarAudioBus.soundLevel = 0.2f
+        repeat(50) { CarAudioBus.write(CarAudioBus.LANE_MEDIA, music) }
+        val last = got.last()
+        assertEquals("music was not turned down in the turned-down gear", 2000, ((last[1].toInt() shl 8) or (last[0].toInt() and 0xFF)).toShort().toInt())
+        CarAudioBus.soundLevel = 1f
+        Thread.sleep(500)
+        got.clear()
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, music)
+        assertArrayEquals("music after a quiet spell started at the old turned-down level", music, got[0])
+    }
+
+    @Test
+    fun aTurnedDownVoiceIsBackToFullWithinAThirdOfASecondAtItsOwnRate() {
+        listen()
+        val heard = Collections.synchronizedList(ArrayList<ByteArray>())
+        CarAudioBus.voice = object : CarAudioBus.Voice {
+            override fun begin(rate: Int, channels: Int) {}
+            override fun data(pcm: ByteArray) {
+                heard.add(pcm)
+            }
+            override fun end() {}
+        }
+        val prompt = loud(16000 * 2 / 10, 30000)
+        CarAudioBus.soundLevel = 0.2f
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, prompt, 16000, 1)
+        assertEquals(1, heard.size)
+        assertEquals("the voice was not turned down in the turned-down gear", 6000, ((heard[0][1].toInt() shl 8) or (heard[0][0].toInt() and 0xFF)).toShort().toInt())
+        CarAudioBus.soundLevel = 1f
+        repeat(4) { CarAudioBus.play(CarAudioBus.LANE_SPEECH, prompt, 16000, 1) }
+        assertEquals(5, heard.size)
+        assertArrayEquals("the voice was still turned down 0.3 s after the gear let go", prompt, heard.last())
+    }
+
+    private fun loud(bytes: Int, value: Int = 0x2710) = ByteArray(bytes).also { b ->
         var i = 0
         while (i + 1 < b.size) {
-            b[i] = 0x10
-            b[i + 1] = 0x27
+            b[i] = (value and 0xFF).toByte()
+            b[i + 1] = ((value shr 8) and 0xFF).toByte()
             i += 2
         }
     }

@@ -63,4 +63,38 @@ class GearSoundTest {
         assertFalse(g.shift(GearAction.SOUND_KEEP, 0, playing = false).resume)
         assertEquals(1f, g.level, 0.0001f)
     }
+
+    @Test
+    fun parkThatPausesKeepsReverseTurnedDownUntilItPlaysAgain() {
+        val g = GearSound()
+        g.shift(GearAction.SOUND_LOWER, 20, playing = true)
+        val park = g.shift(GearAction.SOUND_PAUSE, 0, playing = true)
+        assertTrue(park.pause)
+        assertEquals(0.2f, park.level, 0.0001f)
+        val drive = g.shift(GearAction.SOUND_KEEP, 0, playing = false)
+        assertTrue(drive.resume)
+        assertEquals(1f, drive.level, 0.0001f)
+    }
+
+    @Test
+    fun aReconnectInParkWithMusicPlayingPausesAgain() {
+        val g = GearSound()
+        assertTrue(g.shift(GearAction.SOUND_PAUSE, 0, playing = true).pause)
+        g.forget()
+        assertTrue(g.shift(GearAction.SOUND_PAUSE, 0, playing = true).pause)
+    }
+
+    @Test
+    fun pausedParkGoesBackToFullOnceThePauseHasTakenHold() {
+        val g = GearSound()
+        g.shift(GearAction.SOUND_LOWER, 0, playing = true)
+        assertTrue(g.shift(GearAction.SOUND_PAUSE, 0, playing = true).pause)
+        assertEquals(0f, g.level, 0.0001f)
+        assertTrue(g.settle())
+        assertEquals(1f, g.level, 0.0001f)
+        assertFalse(g.settle())
+        val drive = g.shift(GearAction.SOUND_KEEP, 0, playing = false)
+        assertTrue(drive.resume)
+        assertEquals(1f, drive.level, 0.0001f)
+    }
 }

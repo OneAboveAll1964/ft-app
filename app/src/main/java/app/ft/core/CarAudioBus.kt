@@ -34,7 +34,6 @@ object CarAudioBus {
     private const val DUCK_LEVEL = 0.35f
     private const val DUCK_DOWN_FRAMES = RATE * 8 / 100
     private const val DUCK_UP_FRAMES = RATE * 40 / 100
-    private const val TURN_STEP = 1f / (RATE * 2 * 35 / 100)
 
     private val lock = Any()
     private var sent = 0L
@@ -66,6 +65,8 @@ object CarAudioBus {
     private var duckGain = 1f
     private var mainTurn = 1f
     private var voiceTurn = 1f
+    private var mainTurnAt = 0L
+    private var voiceTurnAt = 0L
     private var mixedIn = 0L
     private val recentLevels = ArrayDeque<DoubleArray>()
     private var recentBytes = 0
@@ -123,6 +124,8 @@ object CarAudioBus {
                 primed = true
                 voiceInMusic = false
                 duckGain = 1f
+                mainTurnAt = 0
+                voiceTurnAt = 0
                 recentLevels.clear()
                 recentBytes = 0
                 measuring = false
@@ -313,7 +316,7 @@ object CarAudioBus {
             }
             voiceLane = lane
             voiceSent += pcm.size
-            runCatching { v.data(turned(if (voiceGain > 1.01f) louder(pcm, voiceGain) else pcm, true)) }
+            runCatching { v.data(turned(if (voiceGain > 1.01f) louder(pcm, voiceGain) else pcm, true, rate, channels)) }
         }
         report(now)
     }
@@ -331,14 +334,21 @@ object CarAudioBus {
         return out
     }
 
-    private fun turned(pcm: ByteArray, voice: Boolean): ByteArray {
+    private fun turned(pcm: ByteArray, voice: Boolean, rate: Int, channels: Int): ByteArray {
         val target = soundLevel.coerceIn(0f, 1f)
-        var g = if (voice) voiceTurn else mainTurn
-        if (g == 1f && target == 1f) return pcm
+        val now = System.nanoTime()
+        val fresh = now - (if (voice) voiceTurnAt else mainTurnAt) > MAIN_ALIVE_NS
+        if (voice) voiceTurnAt = now else mainTurnAt = now
+        var g = if (fresh) target else if (voice) voiceTurn else mainTurn
+        if (g == 1f && target == 1f) {
+            if (voice) voiceTurn = g else mainTurn = g
+            return pcm
+        }
+        val step = 1f / maxOf(1, rate * channels.coerceAtLeast(1) * 35 / 100)
         val out = pcm.copyOf()
         var i = 0
         while (i + 1 < out.size) {
-            if (g != target) g = if (g > target) maxOf(target, g - TURN_STEP) else minOf(target, g + TURN_STEP)
+            if (g != target) g = if (g > target) maxOf(target, g - step) else minOf(target, g + step)
             val v = ((out[i + 1].toInt() shl 8) or (out[i].toInt() and 0xFF)).toShort().toInt()
             val t = (v * g).toInt()
             out[i] = (t and 0xFF).toByte()
@@ -425,7 +435,7 @@ object CarAudioBus {
             } else {
                 send.add(pcm)
             }
-            for (k in send.indices) send[k] = turned(send[k], false)
+            for (k in send.indices) send[k] = turned(send[k], false, RATE, 2)
             send.forEach { sent += it.size }
         }
         send.forEach { runCatching { target(it) } }

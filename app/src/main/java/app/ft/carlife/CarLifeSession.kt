@@ -105,11 +105,13 @@ class CarLifeSession(
 
     private fun reset() {
         projecting = false
+        gear = -1
         videoTimer?.cancel()
         videoTimer = null
         encryptProbe?.cancel()
         crypto.reset()
         matched = false
+        carMicOn = false
         initSeen = false
         videoReady = false
         carAskedRate = false

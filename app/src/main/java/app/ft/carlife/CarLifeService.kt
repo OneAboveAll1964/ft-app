@@ -1114,6 +1114,7 @@ class CarLifeService : Service() {
             }
             songInfoAt = 0
             carPaused = false
+            gearForget()
             stopAndroidAuto("the car disconnected")
             mediaReady = false
             routePlayer()
@@ -1603,6 +1604,7 @@ class CarLifeService : Service() {
 
     @Volatile private var gearHidProjection = false
     private val gearSound = GearSound()
+    private var gearSettle: Job? = null
     private var gearPausedFt = false
     private var gearVolumeBefore = -1
     private var gearVolumeSet = -1
@@ -1632,7 +1634,9 @@ class CarLifeService : Service() {
         runGearAction(action)
     }
 
-    private fun gearSoundFor(gear: Int, sound: Int, lowerTo: Int) {
+    private fun gearSoundFor(gear: Int, sound: Int, lowerTo: Int) = synchronized(gearSound) {
+        gearSettle?.cancel()
+        gearSettle = null
         val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         val ftPlaying = CarPlayer.playing
         val phonePlaying = !ftPlaying && am.isMusicActive
@@ -1648,6 +1652,18 @@ class CarLifeService : Service() {
             gearPausedFt = ftPlaying
             if (ftPlaying) CarPlayer.pause() else phoneMediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
             DiagLog.i(tag, "car in ${gearName(gear)}, paused ${if (ftPlaying) "FT's player" else "the app playing on the phone"}")
+            if (move.level < 1f) {
+                gearSettle = scope.launch {
+                    delay(GEAR_SETTLE_MS)
+                    synchronized(gearSound) {
+                        if (gearSound.settle()) {
+                            CarAudioBus.soundLevel = 1f
+                            gearPhoneVolume(am, 1f)
+                            DiagLog.i(tag, "car in ${gearName(gear)}, paused, sound to the car back to normal")
+                        }
+                    }
+                }
+            }
         }
         if (move.resume) {
             if (gearPausedFt) {
@@ -1688,7 +1704,9 @@ class CarLifeService : Service() {
         }.onFailure { DiagLog.w(tag, "could not pass ${keyName(key)} to the phone: ${it.message}") }
     }
 
-    private fun gearForget() {
+    private fun gearForget() = synchronized(gearSound) {
+        gearSettle?.cancel()
+        gearSettle = null
         val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         if (gearSound.level < 1f) {
             CarAudioBus.soundLevel = 1f
