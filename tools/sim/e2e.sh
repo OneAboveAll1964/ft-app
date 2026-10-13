@@ -138,7 +138,7 @@ sleep 3
 
 echo "== run the head unit simulator =="
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
-  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;fps:5@19.5;fps:15@23.5;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;417,651@42;156,651@47;40,40@54" \
+  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;fps:5@19.5;fps:15@23.5;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;417,651@42;156,651@47;40,40@54;gear:5@56;gear:3@58;reset@60" \
   --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
@@ -164,6 +164,9 @@ check "a request to come forward is left alone, like Baidu" "sim_check carlife g
 check "encoder honours the rate the head unit asked for (15)" "grep -q 'encoder started 1280x720@15' '$OUT/logcat.txt'"
 check "redraw clock follows the negotiated rate" "grep -qE 'redraw every 66ms|at most 15 frames a second' '$OUT/logcat.txt'"
 check "projected stream paced to the negotiated rate, not flooded" "python3 -c \"import json;d=json.load(open('$OUT/carlife/result.json'));f=d['video_launcher']['frames'];assert 20<=f<=110, f\" 2>/dev/null"
+check "shifting to reverse shows the car's own screen (gear-aware projection)" "grep -q 'car shifted to reverse' '$OUT/logcat.txt'"
+check "shifting out of reverse brings FT back to the car" "grep -q 'car left the gear, bringing FT back' '$OUT/logcat.txt'"
+check "the car asking for a video reset makes FT send a fresh key frame" "grep -q 'head unit asked for a fresh picture' '$OUT/logcat.txt'"
 check "Android Auto bridge starts after connection" "grep -q 'auto-starting Android Auto after connection' '$OUT/logcat.txt' && grep -q 'bridging this phone' '$OUT/logcat.txt'"
 check "Android Auto is pointed at FT's own head unit port" "grep -qE 'asked Android Auto to project onto FT at 127.0.0.1:[0-9]+' '$OUT/logcat.txt'"
 check "Android Auto is told to draw at the car's size" "grep -q \"Android Auto will draw at the car's own 1280x720\" '$OUT/logcat.txt'"

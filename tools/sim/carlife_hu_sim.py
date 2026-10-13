@@ -24,6 +24,8 @@ VIDEO_ENCODER_INIT = 0x00018007
 VIDEO_ENCODER_INIT_DONE = 0x00010008
 VIDEO_ENCODER_START = 0x00018009
 VIDEO_ENCODER_PAUSE = 0x0001800A
+VIDEO_ENCODER_RESET = 0x0001800B
+HU_GEAR_INFO = 0x00018029
 SCREEN_ON = 0x00010018
 SCREEN_USERPRESENT = 0x0001001A
 FOREGROUND = 0x0001001B
@@ -773,6 +775,16 @@ def main():
                 if xy.startswith("music:"):
                     sim.send_cmd(MODULE_CONTROL, f_varint(1, 3) + f_varint(2, int(xy[6:])))
                     continue
+                if xy.startswith("gear:"):
+                    g = int(xy[5:])
+                    sim.log("HU -> gear %d" % g)
+                    sim.send_cmd(HU_GEAR_INFO, f_varint(1, g))
+                    continue
+                if xy == "reset":
+                    sim.log("HU -> VIDEO_ENCODER_RESET")
+                    result["resets_sent"] = result.get("resets_sent", 0) + 1
+                    sim.send_cmd(VIDEO_ENCODER_RESET)
+                    continue
                 if xy.startswith("points:") or xy.startswith("click:"):
                     px, py = [int(v) for v in xy.split(":")[1].split(",")]
                     result.setdefault("tap_clock", []).append([px, py, round(time.time(), 3)])
@@ -811,7 +823,7 @@ def main():
         result["pauses"] = pauses(sim.marks, events)
         sps = video_stats(sim.video)["sps"]
         result["sps_total"] = sps
-        result["checks"]["header_sent_once"] = sps == 1
+        result["checks"]["header_sent_once"] = sps == 1 + result.get("resets_sent", 0)
         clocks = [ts for t, ts, sid in link.video_clock]
         now_s = int(time.time())
         result["checks"]["video_clock_in_seconds"] = bool(clocks) and all(abs(ts - now_s) < 600 for ts in clocks)
