@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.carlife.QuietShare
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import app.ft.carlife.GearAction
 import app.ft.carlife.WheelAction
 import app.ft.ui.components.AaMissing
 import app.ft.ui.components.AaStart
@@ -225,6 +226,14 @@ private fun PageContent(page: SettingsPage) {
             )
             WheelSetting(stringResource(R.string.wheel_next_again), p.wheelLongNext) { p.wheelLongNext = it }
             WheelSetting(stringResource(R.string.wheel_prev_again), p.wheelLongPrev) { p.wheelLongPrev = it }
+            Text(stringResource(R.string.gear_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                stringResource(R.string.gear_about),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            GearSetting(stringResource(R.string.gear_reverse), p.gearReverse) { p.gearReverse = it }
+            GearSetting(stringResource(R.string.gear_park), p.gearPark) { p.gearPark = it }
         }
         SettingsPage.ANDROID_AUTO -> {
             BoolSetting(stringResource(R.string.aa_match_car), p.aaMatchCar) { p.aaMatchCar = it }
@@ -452,6 +461,27 @@ private fun WheelSetting(label: String, initial: Int, onChange: (Int) -> Unit) {
         chosen = WheelAction.ALL[index]
         onChange(chosen)
     }
+}
+
+@Composable
+private fun GearSetting(label: String, initial: Int, onChange: (Int) -> Unit) {
+    var chosen by remember { mutableIntStateOf(initial) }
+    PickSetting(
+        label,
+        GearAction.ALL.map { Option(stringResource(GearAction.label(it)), icon = gearIcon(it)) },
+        GearAction.ALL.indexOf(chosen).coerceAtLeast(0)
+    ) { index ->
+        chosen = GearAction.ALL[index]
+        onChange(chosen)
+    }
+}
+
+private fun gearIcon(action: Int): ImageVector = when (action) {
+    GearAction.CAR_SCREEN -> CarIcons.Apps
+    GearAction.FT_HOME -> CarIcons.Home
+    GearAction.MAPS -> CarIcons.Map
+    GearAction.ANDROID_AUTO -> CarIcons.AndroidAuto
+    else -> Icons.Filled.Close
 }
 
 private fun wheelIcon(action: Int): ImageVector = when (action) {

@@ -398,4 +398,9 @@
     <string name="supercast_some_apps">%1$d chosen</string>
     <string name="supercast_which_about">Keep the row on the car short by showing only the apps you really use while driving.</string>
     <string name="action_done">Done</string>
+    <string name="gear_title">Gear actions</string>
+    <string name="gear_about">When the car shifts into reverse or park, FT can do something. It comes back on its own when you shift out.</string>
+    <string name="gear_reverse">In reverse</string>
+    <string name="gear_park">In park</string>
+    <string name="gear_action_car_screen">Show the car\'s own screen</string>
 </resources>

@@ -397,4 +397,9 @@
     <string name="supercast_some_apps">%1$d مختار</string>
     <string name="supercast_which_about">اجعل الصف على السيارة قصيراً بإظهار التطبيقات التي تستخدمها فعلاً أثناء القيادة فقط.</string>
     <string name="action_done">تم</string>
+    <string name="gear_title">إجراءات ناقل الحركة</string>
+    <string name="gear_about">عند تحويل السيارة إلى الرجوع أو الركن، يمكن لـ FT تنفيذ إجراء. ويعود تلقائياً عند الخروج من الوضع.</string>
+    <string name="gear_reverse">عند الرجوع</string>
+    <string name="gear_park">عند الركن</string>
+    <string name="gear_action_car_screen">عرض شاشة السيارة نفسها</string>
 </resources>

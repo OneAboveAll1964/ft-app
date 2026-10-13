@@ -925,6 +925,7 @@ class CarLifeService : Service() {
         leaveCarNetwork()
         session?.stop()
         session = null
+        AaHeadUnitService.onCarMicWanted = null
         stateJob?.cancel()
         stateJob = null
         wifiLink?.stop()
@@ -1077,10 +1078,13 @@ class CarLifeService : Service() {
         session = s
         s.onVideoConfig = { plan -> onVideoConfig(plan) }
         s.onFrameRate = { fps -> carDisplay.setFrameRate(VideoPlans.withinCap(fps, thermalCap)) }
+        s.onNeedKeyframe = { carDisplay.requestKeyframe() }
+        s.onGear = { g -> onGear(g) }
         s.onStopVideo = { onStopVideo() }
         s.onTouch = { t -> routeTouch(t) }
         s.onHardKey = { k -> onHardKey(k) }
         s.onVoiceAudio = { pcm -> AaHeadUnitService.current?.feedCarMicrophone(pcm) }
+        AaHeadUnitService.onCarMicWanted = { on -> runCatching { s.carMicrophone(on) } }
         s.onPauseMedia = { carMusic(false) }
         s.onMusicControl = { play -> carMusic(play) }
         s.onClosed = { reason ->
@@ -1570,6 +1574,40 @@ class CarLifeService : Service() {
                 wanted.startsWith("app:") -> launch(wanted.removePrefix("app:"))
                 else -> _openView.tryEmit(wanted)
             }
+        }
+    }
+
+    @Volatile private var gearHidProjection = false
+
+    private fun onGear(gear: Int) {
+        val action = when (gear) {
+            GearAction.GEAR_REVERSE -> app.prefs.gearReverse
+            GearAction.GEAR_PARK -> app.prefs.gearPark
+            else -> GearAction.NONE
+        }
+        if (action == GearAction.NONE) {
+            if (gearHidProjection) {
+                gearHidProjection = false
+                DiagLog.i(tag, "car left the gear, bringing FT back to the car")
+                session?.requestForeground()
+            }
+            return
+        }
+        DiagLog.i(tag, "car shifted to ${gearName(gear)}, running the chosen action")
+        if (GearAction.restores(action)) gearHidProjection = true
+        runGearAction(action)
+    }
+
+    private fun gearName(gear: Int): String = when (gear) {
+        1 -> "neutral"; 2 -> "park"; 3 -> "drive"; 4 -> "low"; 5 -> "reverse"; else -> "gear $gear"
+    }
+
+    private fun runGearAction(action: Int) {
+        when (action) {
+            GearAction.CAR_SCREEN -> carHome()
+            GearAction.FT_HOME -> _screenKeys.tryEmit(3)
+            GearAction.MAPS -> launch(app.prefs.mapsPackage)
+            GearAction.ANDROID_AUTO -> startAndroidAuto()
         }
     }
 

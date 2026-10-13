@@ -109,6 +109,8 @@ class Prefs(context: Context) {
 
     var wheelLongNext: Int get() = int("wheelLongNext", 0); set(v) = set("wheelLongNext", v)
     var wheelLongPrev: Int get() = int("wheelLongPrev", 0); set(v) = set("wheelLongPrev", v)
+    var gearReverse: Int get() = int("gearReverse", 0); set(v) = set("gearReverse", v)
+    var gearPark: Int get() = int("gearPark", 0); set(v) = set("gearPark", v)
 
     var openOnConnect: String get() = str("openOnConnect", ""); set(v) = set("openOnConnect", v)
     var openOnConnectSecond: String get() = str("openOnConnectSecond", ""); set(v) = set("openOnConnectSecond", v)

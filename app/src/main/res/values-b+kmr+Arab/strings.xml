@@ -397,4 +397,9 @@
     <string name="supercast_some_apps">%1$d هەلبژارتی</string>
     <string name="supercast_which_about">رێزێ ل سەر ترومبێلێ کورت بهێلە ب نیشاندانا تنێ وان ئەپان یێن تو ب ڕاستی دەمێ ئاژوتنێ بکار دئینی.</string>
     <string name="action_done">تەمام</string>
+    <string name="gear_title">کریارێن گیەری</string>
+    <string name="gear_about">دەمێ ترومبێل دچیتە پاشڤە یان پارک، FT دشێت تشتەکی بکەت. ب خۆ ڤەدگەڕیت دەمێ تو دەرکەڤی.</string>
+    <string name="gear_reverse">د پاشڤەدا</string>
+    <string name="gear_park">د پارکێدا</string>
+    <string name="gear_action_car_screen">شاشا ترومبێلێ یا خۆ نیشا بدە</string>
 </resources>

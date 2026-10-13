@@ -397,4 +397,9 @@
     <string name="supercast_some_apps">%1$d هەڵبژێردراو</string>
     <string name="supercast_which_about">ڕیزەکە لەسەر ئۆتۆمبێل کورت ڕابگرە بە پیشاندانی تەنها ئەو ئەپانەی بەڕاستی لە کاتی لێخوڕیندا بەکاریان دەهێنیت.</string>
     <string name="action_done">تەواو</string>
+    <string name="gear_title">کرداری گیەر</string>
+    <string name="gear_about">کاتێک ئۆتۆمبێلەکە دەچێتە دواوە یان پارک، FT دەتوانێت شتێک بکات. خۆی دەگەڕێتەوە کاتێک دەرچیت.</string>
+    <string name="gear_reverse">لە دواوەدا</string>
+    <string name="gear_park">لە پارکدا</string>
+    <string name="gear_action_car_screen">شاشەی خودی ئۆتۆمبێل پیشان بدە</string>
 </resources>
