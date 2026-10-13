@@ -18,12 +18,14 @@ class CarWirelessSetup(
     @Volatile private var ipWanted = false
     @Volatile private var ipSent = false
     @Volatile private var phoneIp: String? = null
+    @Volatile private var announcedReady = false
 
     fun reset() {
         synchronized(buffer) { buffer.clear() }
         carWifiName = null
         ipWanted = false
         ipSent = false
+        announcedReady = false
     }
 
     fun begin(): Boolean {
@@ -71,7 +73,11 @@ class CarWirelessSetup(
                 val type = r.int(1, -1)
                 DiagLog.i(tag, "car wireless info: type $type, band ${r.int(2, 0)}")
                 if (carWifiName != null) {
-                    if (type in 2..4) onCarReady()
+                    // The car resends this every ~6s as a keep-alive; act on the first ready only.
+                    if (type in 2..4 && !announcedReady) {
+                        announcedReady = true
+                        onCarReady()
+                    }
                     return
                 }
                 progress("Asking the car for its WiFi Direct name")

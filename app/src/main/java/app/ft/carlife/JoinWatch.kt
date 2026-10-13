@@ -7,7 +7,6 @@ object JoinWatch {
     const val RENEW_EVERY = 3
     const val DECLINE_SETTLE_MS = 1_000L
     const val QUICK_RETRY_MS = 1_000L
-    const val FRESH_MS = 2_000L
     const val DISCOVER_EVERY_MS = 5_000L
     const val ASK_AGAIN_MS = 30_000L
 
@@ -29,7 +28,7 @@ object JoinWatch {
         else -> STALL_MS
     }
 
-    fun interruptForReady(attemptAgeMs: Long, attempting: Boolean): Boolean = !attempting || attemptAgeMs >= FRESH_MS
+    fun actOnCarReady(attempting: Boolean): Boolean = !attempting
 
     fun askCarAgain(unseenMs: Long, carInSight: Boolean): Boolean = !carInSight && unseenMs >= ASK_AGAIN_MS
 }

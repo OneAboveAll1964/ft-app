@@ -48,9 +48,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var servicesChannel: WifiP2pManager.Channel? = null
     private val servicesSeen = HashSet<String>()
     private val peerDetails = HashMap<String, String>()
-    private val SERVICES_AFTER_MS = 15_000L
-    private val NARROW_AFTER_MS = 8_000L
-    private val NARROW = listOf(5745, 5180, 5765, 5785, 5805, 5825, 5200, 5220, 5240, 2437, 2412, 2462)
+    private val SERVICES_AFTER_MS = 8_000L
+    private val NARROW_AFTER_MS = 2_000L
+    // The car hosts a 5 GHz-only group owner (Desay forbids 2.4 GHz for the GO: p2p_no_go_freq=2412-2484),
+    // so searching 2.4 GHz is wasted. Lead with the channels this Corolla has been seen on (5745/5785).
+    private val NARROW = listOf(5745, 5785, 5765, 5180, 5200, 5220, 5240, 5805, 5825)
     @Volatile private var namedAt = 0L
     private var notedMatch = ""
     private var narrowNoted = false
@@ -374,16 +376,17 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (_link.value != null) return
         val name = prefs.carP2pName.trim()
         if (name.isEmpty()) return
-        val attempting = connecting != null
-        if (!JoinWatch.interruptForReady(android.os.SystemClock.elapsedRealtime() - attemptAt, attempting)) return
+        // The car repeats its "wireless info" message every 6s as a keep-alive. A join in
+        // flight must own its own stall/retry (watch()); a repeat must never tear it down.
+        if (!JoinWatch.actOnCarReady(connecting != null)) return
         val p = theCar(_peers.value, name)
         if (p == null) {
             discover()
             return
         }
         if (p.status == WifiP2pDevice.CONNECTED) return
-        DiagLog.i(tag, "the car says its WiFi Direct is ready, inviting it now")
-        if (attempting) restart(p, "the car said it is ready", declined = true) else connect(p)
+        DiagLog.i(tag, "the car raised its WiFi Direct group, joining it now")
+        connect(p)
     }
 
     fun connect(p: Peer) {

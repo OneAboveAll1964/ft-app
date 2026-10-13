@@ -37,10 +37,11 @@ class JoinWatchTest {
     }
 
     @Test
-    fun theCarSayingItIsReadyOnlyInterruptsAnAttemptOlderThanTwoSeconds() {
-        assertTrue(JoinWatch.interruptForReady(0, attempting = false))
-        assertFalse(JoinWatch.interruptForReady(1_500, attempting = true))
-        assertTrue(JoinWatch.interruptForReady(2_000, attempting = true))
+    fun theCarSayingItIsReadyNeverInterruptsAJoinAlreadyInFlight() {
+        // The car repeats its wireless-info keep-alive every ~6s; it must only kick off a
+        // join when none is attempting, never tear down one that is already running.
+        assertTrue(JoinWatch.actOnCarReady(attempting = false))
+        assertFalse(JoinWatch.actOnCarReady(attempting = true))
     }
 
     @Test
