@@ -13,6 +13,25 @@ pass=0; fail=0
 ok(){ echo "PASS  $1"; pass=$((pass+1)); }
 ko(){ echo "FAIL  $1"; fail=$((fail+1)); }
 check(){ if eval "$2"; then ok "$1"; else ko "$1"; fi; }
+listening(){
+  local i n
+  for i in $(seq 1 80); do
+    n=$(grep -cE 'WIFI [A-Z]+ listening on [0-9]+' "$1" 2>/dev/null)
+    [ "${n:-0}" -ge 6 ] && return 0
+    sleep 0.25
+  done
+  echo "   FT was not listening on all six CarLife ports after 20s ($(basename "$1"))"
+  return 1
+}
+logged(){
+  local i
+  for i in $(seq 1 $((${3:-15} * 4))); do
+    grep -qE "$2" "$1" 2>/dev/null && return 0
+    sleep 0.25
+  done
+  echo "   no '$2' in $(basename "$1") after ${3:-15}s"
+  return 1
+}
 
 echo "== device =="
 $ADB devices | sed -n '2p'
@@ -103,6 +122,8 @@ echo "== start services (auto-connect, Android Auto auto-start on) =="
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei pictureSize 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings --ez carSongInfo true --ei guidance 2 \
   --es carTiles music,videos,youtube,maps,browser,apps --es carBackground deep --ei carAccent -10492992 --ez carClock24 true >/dev/null 2>&1
 sleep 7
+listening "$OUT/logcat.txt"
+logged "$OUT/logcat.txt" 'discovery beacon #4 ' 15
 check "listening on the CarLife command port" "grep -q 'WIFI CMD listening on 7240' '$OUT/logcat.txt' || $ADB shell 'netstat -ltn 2>/dev/null' | grep -q ':7240 '"
 check "no WiFi Direct nagging while the car is reachable on this network" "! grep -q 'discoverPeers failed' '$OUT/logcat.txt'"
 check "hotspot route leaves bluetooth alone" "! grep -q 'FT/CarBT' '$OUT/logcat.txt'"
@@ -137,8 +158,8 @@ $ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true >/dev/nu
 sleep 3
 
 echo "== run the head unit simulator =="
-python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 \
-  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;fps:5@19.5;fps:15@23.5;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;417,651@42;156,651@47;40,40@54;gear:5@56;gear:3@58;reset@60" \
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --height 720 --fps 15 --seconds 4 --log "$OUT/logcat.txt" --settle 3 \
+  --touches "282,621@0;40,40@2;670,192@4;450,171@6;765,138@8;key:87@11;40,40@14;140,219@15;904,192@16;334,224@18;fps:5@19.5;fps:15@23.5;40,40@24;904,528@26;40,40@34;670,528@36;69,651@40;log:phone keys shown@40;417,651@41.5;now:156,651@46.5;40,40@54;gear:5@56;gear:3@58;reset@60" \
   --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
@@ -147,6 +168,8 @@ kill $LOGPID 2>/dev/null
 echo "== carlife (per-channel TCP, content encryption on) =="
 check "carlife sim passed" "[ $CL = 0 ]"
 python3 -c "import json;d=json.load(open('$OUT/carlife/result.json'));print('   checks:',all(d['checks'].values()),'| frames:',d.get('total_frames'),'| launcher:',d.get('video_launcher'),'| heartbeats:',d.get('heartbeats'),'| before init:',d.get('heartbeats_before_init'),'| plaintext leaks after key:',d.get('plain_after_key'))" 2>/dev/null
+python3 -c "import json;d=json.load(open('$OUT/carlife/result.json'));print('   waited for FT:',d.get('log_waits'),'| waited for the picture:',d.get('settle_waits'))" 2>/dev/null
+check "the car picture kept moving after every tap (no wait for the picture was needed)" "python3 -c \"import json;w=json.load(open('$OUT/carlife/result.json')).get('settle_waits',[]);assert not w, w\" 2>/dev/null"
 check "head unit connected to the cmd channel" "grep -q 'WIFI CMD connected from' '$OUT/logcat.txt'"
 check "Linked only when a head unit really connected (once per simulated unit)" "[ \$(grep -c 'head unit connected over WiFi' '$OUT/logcat.txt') = 2 ]"
 check "feature config requested after the version match" "grep -q 'TX MD_FEATURE_CONFIG_REQUEST' '$OUT/logcat.txt'"
@@ -238,23 +261,25 @@ elif want == "landscape":
     from PIL import Image
     taps = d.get("tap_clock", [])
     turn = [t for x, y, t in taps if (x, y) == (417, 651)]
-    after = [t for x, y, t in taps if turn and t > turn[0]]
+    after = [t for x, y, t in taps if turn and t > turn[0] and (x, y) == (40, 40)]
     clock = d.get("frame_clock", [])
     tmp = tempfile.mkdtemp()
     subprocess.run(["ffmpeg", "-y", "-loglevel", "quiet", "-i", sys.argv[1].replace("result.json", "all.h264"), "-fps_mode", "passthrough", tmp + "/f%05d.png"])
     frames = sorted(glob.glob(tmp + "/*.png"))
     off = len(clock) - len(frames)
     wide = 0
+    seen = []
     for i, f in enumerate(frames):
         t = clock[i + off] if 0 <= i + off < len(clock) else 0
         if not turn or t < turn[0] or (after and t > after[0]):
             continue
+        seen.append(t)
         im = Image.open(f).convert("L")
         row = [im.getpixel((x, 360)) for x in range(0, im.size[0], 8)]
         bright = [i * 8 for i, v in enumerate(row) if v > 200]
         if bright and min(bright) < 120 and max(bright) > 1160:
             wide += 1
-    print("   frames showing the turned phone across the car screen:", wide)
+    print("   frames showing the turned phone across the car screen:", wide, "of the", len(seen), "that came between the rotate tap and the FT button")
     assert wide >= 1
 elif want == "rate":
     asks = d.get("rate_clock", [])
@@ -296,6 +321,7 @@ check "leaving Videos stops the video" "grep -qE 'FT/Player.*: stopped' '$OUT/lo
 check "a request below 15 fps is answered but FT keeps its pace, like Baidu" "song rate && grep -q 'head unit asked for 5 fps, FT keeps' '$OUT/logcat.txt'"
 check "frames to the car pass through the frame gate" "grep -q 'frames to the car follow the rate the head unit asks for' '$OUT/logcat.txt'"
 check "the phone keys open from their handle on the car" "grep -q 'phone keys shown' '$OUT/logcat.txt'"
+check "the rotate tap waited until FT showed the phone keys" "python3 -c \"import json;w=json.load(open('$OUT/carlife/result.json')).get('log_waits',[]);assert w and all(s for _,s,_ in w), w\" 2>/dev/null"
 check "the phone's back key works from the car" "grep -q 'phone back' '$OUT/logcat.txt'"
 check "rotate turns the phone to landscape" "grep -q 'phone turned to landscape' '$OUT/logcat.txt'"
 check "the car shows the turned phone across its whole width" "song landscape"
@@ -310,10 +336,11 @@ COROLLALOG=$!
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei pictureSize 1 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
 sleep 3
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1920 --height 720 --fps 0 --seconds 3 --stream own \
-  --touches "640,360@1;pause@3;start@7;points:320,180@10;click:960,540@11;pause@12;start@12.5" --tail-seconds 4 --out "$OUT/corolla" > "$OUT/corolla_sim.log" 2>&1
+  --touches "640,360@1;pause@3;start@7;points:320,180@10;click:960,540@11;pause@12;start@12.5;pause@17;start@17.5" --tail-seconds 4 --first-frame-wait 5 --out "$OUT/corolla" > "$OUT/corolla_sim.log" 2>&1
 COR=$?
 sleep 1
 kill $COROLLALOG 2>/dev/null
+python3 -c "import json;d=json.load(open('$OUT/corolla/result.json'));print('   first picture after start:',d.get('first_frame_after_start'),'s')" 2>/dev/null
 corolla(){ python3 - "$OUT/corolla/result.json" "$1" <<'PY7'
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -329,6 +356,10 @@ elif want == "pause":
 elif want == "quick":
     p = d.get("pauses", [])
     assert len(p) >= 2 and p[1]["first_frame_after"] is not None and p[1]["first_frame_after"] <= 5.0, p
+elif want == "still":
+    p = d.get("pauses", [])
+    print("   quick trip on a still screen:", p[2] if len(p) > 2 else None)
+    assert len(p) >= 3 and p[2]["first_frame_after"] is not None and p[2]["first_frame_after"] <= 5.0, p
 PY7
 }
 check "Corolla-shaped car session passed" "[ $COR = 0 ]"
@@ -339,7 +370,8 @@ check "a touch on the car's own size lands on the same spot on FT's screen (640,
 check "touch down and up messages and single clicks reach FT too" "grep -q 'car touched 320,180 of its picture, 320,180 on FT' '$OUT/corolla_logcat.txt' && grep -q 'car touched 960,540 of its picture, 960,540 on FT' '$OUT/corolla_logcat.txt'"
 check "while the car shows its own screen only heartbeats go out, then the next full picture brings it back" "corolla pause"
 check "a quick trip to the car's own screen comes back too" "corolla quick"
-check "coming back needs no forced picture and no second header" "sim_check corolla header_sent_once && ! grep -q 'key picture of' '$OUT/corolla_logcat.txt'"
+check "a quick trip while nothing on FT's screen moves comes back too" "corolla still"
+check "coming back sends no second header and no oversized picture" "sim_check corolla header_sent_once && ! grep -q 'key picture of' '$OUT/corolla_logcat.txt'"
 
 echo "== FT button in another corner, over a mirrored app =="
 $ADB logcat -c
@@ -429,10 +461,12 @@ $ADB logcat -c
 $ADB logcat -v time > "$OUT/sound_logcat.txt" 2>&1 &
 SNDLOG=$!
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
-sleep 5
+listening "$OUT/sound_logcat.txt"
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 16 --out "$OUT/sound_car" > "$OUT/sound_car.log" 2>&1 &
 SNDCAR=$!
 sleep 6
+logged "$OUT/sound_logcat.txt" 'projection started' 30
+logged "$OUT/sound_logcat.txt" 'head unit waiting for Android Auto on tcp:5288' 15
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 8 --speech-at 2 --speech-seconds 2.5 --out "$OUT/sound_phone" > "$OUT/sound_phone.log" 2>&1
 wait $SNDCAR
 kill $SNDLOG 2>/dev/null
@@ -578,7 +612,7 @@ $ADB logcat -c
 $ADB logcat -v time > "$OUT/quiet_logcat.txt" 2>&1 &
 QUIETLOG=$!
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false --es pkgMaps com.android.settings >/dev/null 2>&1
-sleep 5
+listening "$OUT/quiet_logcat.txt"
 $ADB shell input keyevent KEYCODE_HOME >/dev/null 2>&1
 sleep 1
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --touches "670,528@1" --tail-seconds 6 --out "$OUT/quiet" > "$OUT/quiet_sim.log" 2>&1
@@ -594,10 +628,13 @@ $ADB logcat -v time > "$OUT/tile_logcat.txt" 2>&1 &
 TILELOG=$!
 $ADB shell cmd statusbar add-tile $PKG/$PKG.FtTile >/dev/null 2>&1
 sleep 2
+listening "$OUT/tile_logcat.txt"
 $ADB shell cmd statusbar click-tile $PKG/$PKG.FtTile >/dev/null 2>&1
 sleep 3
+logged "$OUT/tile_logcat.txt" 'switched off from the quick settings' 15
 $ADB shell cmd statusbar click-tile $PKG/$PKG.FtTile >/dev/null 2>&1
 sleep 3
+logged "$OUT/tile_logcat.txt" 'switched on from the quick settings' 15
 $ADB shell cmd statusbar remove-tile $PKG/$PKG.FtTile >/dev/null 2>&1
 sleep 1
 kill $TILELOG 2>/dev/null
@@ -672,12 +709,14 @@ $ADB logcat -c
 $ADB logcat -v time > "$OUT/aabg_logcat.txt" 2>&1 &
 AABGLOG=$!
 $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto true >/dev/null 2>&1
-sleep 5
+listening "$OUT/aabg_logcat.txt"
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 24 --out "$OUT/aabg_car" > "$OUT/aabg_car.log" 2>&1 &
 AABGCAR=$!
 sleep 2
 $ADB shell input keyevent KEYCODE_HOME >/dev/null 2>&1
 sleep 6
+logged "$OUT/aabg_logcat.txt" 'projection started' 30
+logged "$OUT/aabg_logcat.txt" 'head unit waiting for Android Auto on tcp:5288' 15
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 6 --wait-touch 0 --audio-seconds 6 --out "$OUT/aabg_phone" > "$OUT/aabg_phone.log" 2>&1
 wait $AABGCAR
 kill $AABGLOG 2>/dev/null
@@ -699,7 +738,8 @@ check "a real phone app runs on a hidden screen, draws, and takes touch" "grep -
 check "those apps keep drawing after the phone screen goes off" "grep -q 'drawn=true' '$OUT/supercast_off.txt' && grep -q 'holding the phone awake' '$OUT/supercast_off.txt'"
 
 echo "== crashes =="
-check "no FT crash in logcat" "! grep -A3 'FATAL EXCEPTION' '$OUT/logcat.txt' | grep -q 'app.ft'"
+check "no FT crash in any session's logcat" "! cat '$OUT'/*logcat.txt | grep -A3 'FATAL EXCEPTION' | grep -q 'app.ft'"
+check "Android never had to restart FT during the run" "! grep -q 'Android restarted FT after it was stopped' '$OUT'/*logcat.txt"
 grep -E 'FT/' "$OUT/logcat.txt" | sed -E 's/^.*FT\//FT\//' > "$OUT/ft_log.txt"
 
 echo

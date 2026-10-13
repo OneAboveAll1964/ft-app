@@ -132,7 +132,11 @@ class WifiLink:
         self.audio = []
         self.video_clock = []
         for ch, port in ports.items():
-            s = socket.create_connection((host, port), timeout=10)
+            try:
+                s = socket.create_connection((host, port), timeout=10)
+            except OSError:
+                self.drop()
+                raise
             s.settimeout(None)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.socks[ch] = s
@@ -179,6 +183,14 @@ class WifiLink:
                 s.close()
             except Exception:
                 pass
+
+    def drop(self):
+        for s in self.socks.values():
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        self.close()
 
 
 class TcpPipe:
@@ -611,6 +623,29 @@ def feature_list(encrypt):
     return out
 
 
+def dial_wifi(host, ports, seconds, log):
+    end = time.time() + seconds
+    while True:
+        try:
+            link = WifiLink(host, ports)
+        except OSError as e:
+            if time.time() >= end:
+                raise
+            why = str(e)
+        else:
+            try:
+                item = link.q.get(timeout=0.5)
+            except queue.Empty:
+                return link
+            if item[1] != -1 or time.time() >= end:
+                link.q.put(item)
+                return link
+            link.drop()
+            why = item[2].decode(errors="replace")
+        log("FT is not taking the call yet (%s), dialling again in 1s" % why)
+        time.sleep(1.0)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
@@ -621,6 +656,10 @@ def main():
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--seconds", type=float, default=4.0)
     ap.add_argument("--touches", default="")
+    ap.add_argument("--log", default="", help="FT's logcat file as the harness records it, read by log: steps in --touches")
+    ap.add_argument("--settle", type=float, default=0.0)
+    ap.add_argument("--first-frame-wait", type=float, default=0.0)
+    ap.add_argument("--dial-seconds", type=float, default=15.0)
     ap.add_argument("--tail-seconds", type=float, default=4.0)
     ap.add_argument("--hardkey", type=int, default=-1)
     ap.add_argument("--encrypt", type=int, default=1)
@@ -645,7 +684,7 @@ def main():
         link = AoaLink(TcpPipe(h, int(port)))
     else:
         p = [int(x) for x in a.ports.split(",")]
-        link = WifiLink(a.host, {CH_CMD: p[0], CH_VIDEO: p[1], CH_MEDIA: p[2], CH_TTS: p[3], CH_VR: p[4], CH_CTRL: p[5]})
+        link = dial_wifi(a.host, {CH_CMD: p[0], CH_VIDEO: p[1], CH_MEDIA: p[2], CH_TTS: p[3], CH_VR: p[4], CH_CTRL: p[5]}, a.dial_seconds, log)
     sim = Sim(link, log)
     sim.crash_on_song = a.crash_on_song
     result = {"encrypt": bool(a.encrypt), "ok": False, "checks": {}, "segments": []}
@@ -731,7 +770,11 @@ def main():
         _, _, pl = sim.wait_for(MD_AUTHEN_RESPONSE)
         result["checks"]["authen_response"] = len(first(decode(pl), 1, b"")) > 0
 
+        until = time.time() + a.first_frame_wait
+        while not sim.video and time.time() < until:
+            sim.drain(0.1)
         sim.drain(a.seconds)
+        result["first_frame_after_start"] = round(sim.video_times[0] - events[0][1], 3) if sim.video_times else None
         st = video_stats(sim.video)
         result["video_launcher"] = st
         result["checks"]["video_flowing"] = st["frames"] >= int(a.seconds * 5) and st["sps"] > 0 and st["pps"] > 0 and st["idr"] > 0
@@ -743,11 +786,29 @@ def main():
         if a.touches:
             t0 = time.time()
             marks = []
+            log_from = 0
             for spec in a.touches.split(";"):
                 xy, at = spec.split("@")
                 at = float(at)
                 while time.time() - t0 < at:
                     sim.drain(min(0.25, at - (time.time() - t0)))
+                if xy.startswith("log:"):
+                    began = time.time()
+                    seen = False
+                    while a.log and not seen and time.time() - began < 15.0:
+                        try:
+                            with open(a.log, "rb") as f:
+                                f.seek(log_from)
+                                seen = xy[4:].encode() in f.read()
+                        except OSError:
+                            pass
+                        if not seen:
+                            sim.drain(0.1)
+                    waited = time.time() - began
+                    sim.log("FT %s '%s' after %.1fs" % ("logged" if seen else "never logged", xy[4:], waited))
+                    result.setdefault("log_waits", []).append([xy[4:], seen, round(waited, 3)])
+                    t0 += waited
+                    continue
                 if xy.startswith("key:"):
                     k = int(xy[4:])
                     sim.log("HU -> steering wheel key %d" % k)
@@ -793,9 +854,21 @@ def main():
                     else:
                         sim.click(px, py)
                     continue
+                blind = xy.startswith("now:")
+                if blind:
+                    xy = xy[4:]
                 x, y = [int(v) for v in xy.split(",")]
+                if marks and a.settle > 0 and not blind:
+                    began = time.time()
+                    while len(sim.video) - marks[-1][2] < 5 and time.time() - began < a.settle:
+                        sim.drain(0.1)
+                    waited = time.time() - began
+                    if waited > 0.05:
+                        result.setdefault("settle_waits", []).append([marks[-1][0], marks[-1][1], round(waited, 2)])
+                    t0 += waited
                 marks.append((x, y, len(sim.video)))
                 result.setdefault("tap_clock", []).append([x, y, round(time.time(), 3)])
+                log_from = os.path.getsize(a.log) if a.log and os.path.exists(a.log) else 0
                 sim.tap(x, y)
             sim.drain(a.tail_seconds)
             for i, (x, y, n0) in enumerate(marks):
