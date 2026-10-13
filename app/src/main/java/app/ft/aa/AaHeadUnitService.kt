@@ -58,8 +58,6 @@ class AaHeadUnitService : Service() {
         @Volatile var running = false
             private set
 
-        // Set by CarLifeService while it is bridging Android Auto, so AA's mic requests can ask
-        // the car to record from its own microphone. Null when AA is used without a CarLife car.
         @Volatile var onCarMicWanted: ((Boolean) -> Unit)? = null
 
         fun start(context: Context, bluetooth: Boolean) {

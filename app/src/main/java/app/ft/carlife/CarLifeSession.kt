@@ -597,8 +597,6 @@ class CarLifeSession(
         videoTimer = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(VIDEO_POLL_MS)
-                // The car disconnects after ~3s with no data on the video socket. Keep the gap
-                // at most ~1s even at low fps so its heartbeat watchdog never trips.
                 feed.idle((QUIET_FRAMES * 1000L / fps.coerceIn(1, 60)).coerceAtMost(HEARTBEAT_CAP_MS))
                 unaskedRate()
             }

@@ -144,7 +144,6 @@ object Root {
         val wanted = if (start) "Start head unit server" else "Stop head unit server"
         val item = xml?.let { nodeBounds(it, "text", wanted) }
         if (item == null) {
-            // the opposite label means we are already in the desired state
             val opposite = xml?.contains(if (start) "Stop head unit server" else "Start head unit server") == true
             back()
             return if (opposite) start else aaServerUp()

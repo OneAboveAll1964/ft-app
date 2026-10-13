@@ -50,8 +50,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private val peerDetails = HashMap<String, String>()
     private val SERVICES_AFTER_MS = 8_000L
     private val NARROW_AFTER_MS = 2_000L
-    // The car hosts a 5 GHz-only group owner (Desay forbids 2.4 GHz for the GO: p2p_no_go_freq=2412-2484),
-    // so searching 2.4 GHz is wasted. Lead with the channels this Corolla has been seen on (5745/5785).
     private val NARROW = listOf(5745, 5785, 5765, 5180, 5200, 5220, 5240, 5805, 5825)
     @Volatile private var namedAt = 0L
     private var notedMatch = ""
@@ -376,8 +374,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (_link.value != null) return
         val name = prefs.carP2pName.trim()
         if (name.isEmpty()) return
-        // The car repeats its "wireless info" message every 6s as a keep-alive. A join in
-        // flight must own its own stall/retry (watch()); a repeat must never tear it down.
         if (!JoinWatch.actOnCarReady(connecting != null)) return
         val p = theCar(_peers.value, name)
         if (p == null) {

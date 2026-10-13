@@ -73,7 +73,6 @@ class CarWirelessSetup(
                 val type = r.int(1, -1)
                 DiagLog.i(tag, "car wireless info: type $type, band ${r.int(2, 0)}")
                 if (carWifiName != null) {
-                    // The car resends this every ~6s as a keep-alive; act on the first ready only.
                     if (type in 2..4 && !announcedReady) {
                         announcedReady = true
                         onCarReady()
