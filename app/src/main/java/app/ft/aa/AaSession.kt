@@ -314,6 +314,7 @@ class AaSession(
                 val wanted = AaMessages.avInputOpenWanted(body)
                 sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_INPUT_OPEN_RESPONSE, AaMessages.avInputOpenResponse(if (wanted) 0 else AaMessages.avInputOpenSession(body)))
                 micWanted = wanted
+                runCatching { AaHeadUnitService.onCarMicWanted?.invoke(wanted) }
                 if (wanted) startMicrophone() else mic.stop()
             }
             AaProtocol.AV_MEDIA_ACK -> Unit
