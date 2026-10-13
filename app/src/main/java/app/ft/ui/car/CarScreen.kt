@@ -16,10 +16,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -302,10 +301,7 @@ private fun CarRoot(style: CarStyle) {
                     }
                 )
                 else -> Launcher(state, style, onApp = { packageName ->
-                    val label = runCatching {
-                        val manager = context.packageManager
-                        manager.getApplicationLabel(manager.getApplicationInfo(packageName, 0)).toString()
-                    }.getOrDefault(packageName)
+                    val label = dockApps.firstOrNull { it.first == packageName }?.second ?: packageName
                     panes = listOf(CarPane("pane-0", packageName, label))
                     view = CarView.SUPERCAST
                     true
@@ -811,8 +807,8 @@ private fun PhoneKeys(left: Boolean, rotate: Boolean, modifier: Modifier) {
             val keys: @Composable () -> Unit = {
                 AnimatedVisibility(
                     visible = open,
-                    enter = expandHorizontally(spring(stiffness = Spring.StiffnessMediumLow), expandFrom = if (left) Alignment.Start else Alignment.End) + fadeIn(),
-                    exit = shrinkHorizontally(spring(stiffness = Spring.StiffnessMedium), shrinkTowards = if (left) Alignment.Start else Alignment.End) + fadeOut()
+                    enter = fadeIn(tween(120)),
+                    exit = fadeOut(tween(250))
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 6.dp)) {
                         PhoneKey(CarIcons.Back, stringResource(R.string.key_back)) { CarLifeService.navBack(); poke++ }

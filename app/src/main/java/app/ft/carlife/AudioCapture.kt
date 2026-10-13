@@ -18,6 +18,7 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
     @Volatile var startedAt = 0L; private set
     @Volatile var lastLoudAt = 0L; private set
 
+    @Synchronized
     fun start(projection: MediaProjection): Boolean {
         stop()
         return try {
@@ -77,6 +78,7 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
         }
     }
 
+    @Synchronized
     fun stop() {
         if (!running.getAndSet(false)) return
         runCatching { record?.stop() }

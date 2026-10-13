@@ -29,13 +29,13 @@ object MirrorSink {
 class PhoneMirror {
     private val tag = "Mirror"
     private var projection: MediaProjection? = null
-    private var display: VirtualDisplay? = null
-    private var pending: Surface? = null
-    private var shown = false
+    @Volatile private var display: VirtualDisplay? = null
+    @Volatile private var pending: Surface? = null
+    @Volatile private var shown = false
     var width = 0; private set
     var height = 0; private set
     var dpi = 160; private set
-    var ownDisplay = false; private set
+    @Volatile var ownDisplay = false; private set
     private var fitWidth = 0
     private var fitHeight = 0
 
