@@ -17,7 +17,7 @@ public final class Apps {
 
     public static boolean launch(String packageName, int displayId) {
         String component = component(packageName);
-        String target = component != null ? "-n " + component : "-p " + packageName;
+        String target = component != null ? "-n '" + component + "'" : "-p " + packageName;
         String command = "am start --display " + displayId
             + " -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "
             + target + " -f 0x10000000";

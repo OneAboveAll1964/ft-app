@@ -13,7 +13,6 @@ public final class Displays {
     private static final int PRESENTATION = 1 << 1;
     private static final int OWN_CONTENT_ONLY = 1 << 3;
     private static final int SUPPORTS_TOUCH = 1 << 6;
-    private static final int ROTATES_WITH_CONTENT = 1 << 7;
     private static final int TRUSTED = 1 << 10;
     private static final int OWN_DISPLAY_GROUP = 1 << 11;
     private static final int ALWAYS_UNLOCKED = 1 << 12;
@@ -66,9 +65,18 @@ public final class Displays {
         }
         Pane pane = new Pane(name, display, width, height);
         pane.fresh = true;
+        holdStill(pane.id());
         panes.put(name, pane);
         Log.i("pane " + name + " opened as display " + pane.id() + " at " + width + "x" + height);
         return pane;
+    }
+
+    private static void holdStill(int id) {
+        String d = " -d " + id;
+        String out = Apps.shell("cmd window fixed-to-user-rotation" + d + " enabled; "
+            + "cmd window user-rotation" + d + " lock 0; "
+            + "cmd window set-ignore-orientation-request" + d + " true");
+        Log.i("display " + id + " stays the way it was made, apps cannot turn it" + (out == null || out.isEmpty() ? "" : " (" + out.replace('\n', ' ') + ")"));
     }
 
     private VirtualDisplay create(String name, Surface surface, int width, int height, int dpi) {
@@ -78,9 +86,9 @@ public final class Displays {
             return null;
         }
         int[] attempts = {
-            PUBLIC | OWN_CONTENT_ONLY | PRESENTATION | SUPPORTS_TOUCH | ROTATES_WITH_CONTENT | TRUSTED | OWN_DISPLAY_GROUP | ALWAYS_UNLOCKED | OWN_FOCUS,
-            PUBLIC | OWN_CONTENT_ONLY | PRESENTATION | SUPPORTS_TOUCH | ROTATES_WITH_CONTENT | TRUSTED | OWN_DISPLAY_GROUP,
-            PUBLIC | OWN_CONTENT_ONLY | PRESENTATION | SUPPORTS_TOUCH | ROTATES_WITH_CONTENT | TRUSTED,
+            PUBLIC | OWN_CONTENT_ONLY | PRESENTATION | SUPPORTS_TOUCH | TRUSTED | OWN_DISPLAY_GROUP | ALWAYS_UNLOCKED | OWN_FOCUS,
+            PUBLIC | OWN_CONTENT_ONLY | PRESENTATION | SUPPORTS_TOUCH | TRUSTED | OWN_DISPLAY_GROUP,
+            PUBLIC | OWN_CONTENT_ONLY | PRESENTATION | SUPPORTS_TOUCH | TRUSTED,
             PUBLIC | OWN_CONTENT_ONLY | PRESENTATION | SUPPORTS_TOUCH,
             PUBLIC | OWN_CONTENT_ONLY | PRESENTATION
         };
