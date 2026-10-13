@@ -288,9 +288,8 @@ private fun CarRoot(style: CarStyle) {
                     },
                     onSwap = {
                         if (panes.size == 2) {
-                            val (first, second) = panes[0].name to panes[1].name
-                            SuperCast.later { SuperCast.swap(first, second) }
                             panes = listOf(panes[1], panes[0])
+                            DiagLog.i("SuperCast", "the two apps on the car traded places")
                         }
                     },
                     onFull = { castFull = it },

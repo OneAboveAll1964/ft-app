@@ -7,41 +7,68 @@ import java.io.FileInputStream;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 public final class Touches {
     private static volatile long last = SystemClock.uptimeMillis();
+    private static final AtomicLongArray injectedTimes = new AtomicLongArray(256);
+    private static final AtomicInteger injectedNext = new AtomicInteger();
     private static volatile int watching;
     private static boolean started;
     private static long askedAt;
-    private static long systemIdle = -1;
+    private static long usedAt = -1;
     private static boolean systemWorks = true;
+
+    static {
+        for (int i = 0; i < injectedTimes.length(); i++) {
+            injectedTimes.set(i, -1);
+        }
+    }
 
     private Touches() {
     }
 
-    public static synchronized long idleMs() {
-        long ours = SystemClock.uptimeMillis() - last;
+    public static synchronized long idleMs(long limit) {
+        long now = SystemClock.uptimeMillis();
+        long ours = now - last;
         if (watching > 0) {
             return ours;
         }
         if (!systemWorks) {
             return -1;
         }
-        long now = SystemClock.uptimeMillis();
-        if (now - askedAt >= 5000) {
+        long guess = usedAt < 0 ? ours : Math.min(ours, now - usedAt);
+        if (now - askedAt >= 5000 || guess > limit) {
             askedAt = now;
-            long seen = systemIdle();
+            long seen = systemUsedAt();
             if (seen < 0) {
                 systemWorks = false;
                 Log.w("cannot tell when the phone was last used, it stays lit until the power button");
                 return -1;
             }
-            systemIdle = seen - (SystemClock.uptimeMillis() - now);
+            if (!ours(seen)) {
+                usedAt = Math.max(usedAt, seen);
+            }
         }
-        return Math.min(ours, systemIdle + (now - askedAt));
+        long at = SystemClock.uptimeMillis();
+        return usedAt < 0 ? at - last : Math.min(at - last, at - usedAt);
     }
 
-    private static long systemIdle() {
+    public static void injected(long at) {
+        injectedTimes.set(injectedNext.getAndIncrement() & 255, at);
+    }
+
+    private static boolean ours(long seen) {
+        for (int i = 0; i < injectedTimes.length(); i++) {
+            if (injectedTimes.get(i) == seen) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static long systemUsedAt() {
         String out = Apps.shell("dumpsys power");
         if (out == null) {
             return -1;
@@ -52,13 +79,12 @@ public final class Touches {
             return -1;
         }
         int open = out.indexOf('(', at);
-        int end = out.indexOf(" ms ago)", at);
         int line = out.indexOf('\n', at);
-        if (open < 0 || end < 0 || (line >= 0 && end > line)) {
+        if (open < 0 || (line >= 0 && open > line)) {
             return -1;
         }
         try {
-            return Long.parseLong(out.substring(open + 1, end).trim());
+            return Long.parseLong(out.substring(at + "lastUserActivityTime=".length(), open).trim());
         } catch (NumberFormatException e) {
             return -1;
         }

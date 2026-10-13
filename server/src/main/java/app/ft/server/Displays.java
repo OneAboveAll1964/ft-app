@@ -161,22 +161,4 @@ public final class Displays {
         }
         panes.clear();
     }
-
-    public synchronized void swap(String first, String second) {
-        Pane a = panes.get(first);
-        Pane b = panes.get(second);
-        if (a == null || b == null) {
-            return;
-        }
-        String app = a.packageName;
-        a.packageName = b.packageName;
-        b.packageName = app;
-        if (a.packageName != null) {
-            Apps.launch(a.packageName, a.id());
-        }
-        if (b.packageName != null) {
-            Apps.launch(b.packageName, b.id());
-        }
-        Log.i("swapped " + first + " and " + second);
-    }
 }

@@ -92,6 +92,7 @@ public final class Input {
             if (setDisplay != null && displayId >= 0) {
                 setDisplay.invoke(event, displayId);
             }
+            Touches.injected(event.getEventTime());
             Object result = inject.invoke(manager, event, ASYNC);
             return !(result instanceof Boolean) || (Boolean) result;
         } catch (Throwable t) {

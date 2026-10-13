@@ -120,10 +120,6 @@ public final class Commands {
                 answer.putBoolean("ok", displays.detach(request.getString("name", "pane")));
                 return answer;
             }
-            case "swap": {
-                displays.swap(request.getString("first", ""), request.getString("second", ""));
-                return answer;
-            }
             case "launch": {
                 Displays.Pane pane = displays.pane(request.getString("name", "pane"));
                 String packageName = request.getString("package");

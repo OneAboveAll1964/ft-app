@@ -100,10 +100,6 @@ object SuperCast {
     fun launch(name: String, packageName: String): Boolean =
         ask("launch") { putString("name", name); putString("package", packageName) }?.getBoolean("ok") == true
 
-    fun swap(first: String, second: String) {
-        ask("swap") { putString("first", first); putString("second", second) }
-    }
-
     private val queue = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
         Thread(task, "ft-supercast").apply { isDaemon = true }
     }

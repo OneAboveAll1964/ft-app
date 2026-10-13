@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,7 +96,9 @@ fun SuperCastScreen(
             Column(Modifier.fillMaxSize().padding(padding)) {
                 Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (full) 2.dp else 10.dp)) {
                     panes.forEach { pane ->
-                        Pane(pane, full, Modifier.weight(1f).fillMaxHeight()) { onClose(pane.name) }
+                        key(pane.name, pane.packageName) {
+                            Pane(pane, full, Modifier.weight(1f).fillMaxHeight()) { onClose(pane.name) }
+                        }
                     }
                     if (panes.isEmpty()) {
                         Box(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 40.dp), contentAlignment = Alignment.Center) {
@@ -221,7 +224,11 @@ private fun open(pane: CarPane, texture: SurfaceTexture, width: Int, height: Int
     val surface = Surface(texture)
     val dpi = (160f * density).toInt().coerceIn(120, 640)
     SuperCast.later {
-        val display = SuperCast.openPane(pane.name, surface, width, height, dpi, pane.packageName)
+        val display = try {
+            SuperCast.openPane(pane.name, surface, width, height, dpi, pane.packageName)
+        } finally {
+            surface.release()
+        }
         DiagLog.i("SuperCast", "pane ${pane.name} for ${pane.packageName} is display $display at ${width}x$height")
     }
 }
