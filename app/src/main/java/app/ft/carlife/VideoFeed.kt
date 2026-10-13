@@ -21,6 +21,8 @@ class VideoFeed(
         private set
     @Volatile var resumedAfter = 0
         private set
+    private var resumedAt = 0L
+    private var keyAskedAt = 0L
 
     fun open() = synchronized(lock) {
         mode = Mode.HELD
@@ -55,6 +57,8 @@ class VideoFeed(
             Mode.PAUSED -> {
                 mode = Mode.RESUMING
                 dropped = 0
+                resumedAt = clock()
+                keyAskedAt = resumedAt
             }
             else -> Unit
         }
@@ -64,6 +68,13 @@ class VideoFeed(
     fun pause(): Mode = synchronized(lock) {
         if (mode == Mode.STARTING || mode == Mode.LIVE || mode == Mode.RESUMING) mode = Mode.PAUSED
         mode
+    }
+
+    fun needsKey(): Boolean = synchronized(lock) {
+        val now = clock()
+        val due = mode == Mode.RESUMING && now - keyAskedAt >= FORCE_KEY_MS
+        if (due) keyAskedAt = now
+        due
     }
 
     fun frame(frame: ByteArray, key: Boolean) {
@@ -100,7 +111,7 @@ class VideoFeed(
         Mode.LIVE -> listOf(Out(payload(frame, key), false))
         Mode.PAUSED -> listOf(Out(null, heartbeat = true))
         Mode.RESUMING -> {
-            if (key && dropped > RESUME_DROPS) {
+            if (key && (dropped > RESUME_DROPS || clock() - resumedAt >= RESUME_WAIT_MS)) {
                 resumedAfter = dropped
                 mode = Mode.LIVE
                 listOf(Out(payload(frame, true), false))
@@ -137,6 +148,8 @@ class VideoFeed(
 
     companion object {
         const val RESUME_DROPS = 10
+        const val RESUME_WAIT_MS = 1_000L
+        const val FORCE_KEY_MS = 2_500L
         private const val MAX_HELD = 90
         private const val MAX_HELD_BYTES = 6L * 1024 * 1024
     }

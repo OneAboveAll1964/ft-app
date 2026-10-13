@@ -6,6 +6,7 @@ import android.media.MediaFormat
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.SystemClock
 import android.view.Surface
 import app.ft.core.DiagLog
 import java.io.ByteArrayOutputStream
@@ -29,6 +30,7 @@ class SurfaceEncoder(
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private var codec: MediaCodec? = null
+    private var lateNoted = 0L
     var surface: Surface? = null
         private set
 
@@ -144,6 +146,12 @@ class SurfaceEncoder(
                     }
                     val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
                     if (key && frame.size >= BIG_FRAME) DiagLog.w(tag, "key picture of ${frame.size / 1024} KB")
+                    val drawnUs = info.presentationTimeUs
+                    val late = (System.nanoTime() / 1000 - drawnUs) / 1000
+                    if (drawnUs > 0 && late > 500 && late <= 60_000 && SystemClock.elapsedRealtime() - lateNoted > 5000) {
+                        lateNoted = SystemClock.elapsedRealtime()
+                        DiagLog.w(tag, "a picture came out of the encoder $late ms after it was drawn")
+                    }
                     if (running.get()) onFrame(frame, key)
                 } catch (t: Throwable) {
                     DiagLog.e(tag, "output error", t)

@@ -50,7 +50,9 @@ class FrameGate(
     private var repeats = 0
     private var skipped = 0
     private var reportedNs = 0L
+    private var lateNs = 0L
     @Volatile private var intervalNs = 33_333_333L
+    @Volatile private var awakeUntilNs = 0L
     var input: Surface? = null
         private set
 
@@ -77,6 +79,18 @@ class FrameGate(
 
     fun setRate(fps: Int) {
         intervalNs = 1_000_000_000L / fps.coerceIn(1, 60)
+    }
+
+    fun redraw() {
+        handler?.post { draw() }
+    }
+
+    fun wake(ms: Long) {
+        awakeUntilNs = System.nanoTime() + ms * 1_000_000L
+        handler?.post {
+            empty = 0
+            draw()
+        }
     }
 
     private fun setUp(h: Handler) {
@@ -126,6 +140,13 @@ class FrameGate(
     private fun onFrame() {
         val st = texture ?: return
         if (runCatching { st.updateTexImage() }.isFailure) return
+        val drawnNs = st.timestamp
+        val arrivedNs = System.nanoTime()
+        val late = (arrivedNs - drawnNs) / 1_000_000
+        if (drawnNs > 0 && late > 500 && late <= 60_000 && arrivedNs - lateNs > 5_000_000_000L) {
+            lateNs = arrivedNs
+            DiagLog.w(tag, "a picture reached the frame gate $late ms after the screen drew it")
+        }
         if (fresh) skipped++
         fresh = true
         empty = 0
@@ -145,7 +166,7 @@ class FrameGate(
         if (!ready) return
         if (!fresh) {
             empty++
-            if (empty > IDLE_TICKS && empty % IDLE_EVERY != 0) {
+            if (empty > IDLE_TICKS && empty % IDLE_EVERY != 0 && System.nanoTime() >= awakeUntilNs) {
                 h.removeCallbacks(tick)
                 h.postDelayed(tick, intervalNs / 1_000_000)
                 return

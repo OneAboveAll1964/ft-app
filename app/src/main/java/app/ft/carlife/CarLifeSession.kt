@@ -54,6 +54,7 @@ class CarLifeSession(
     var onStopVideo: (() -> Unit)? = null
     var onFrameRate: ((fps: Int) -> Unit)? = null
     var onNeedKeyframe: (() -> Unit)? = null
+    var onVideoBack: (() -> Unit)? = null
     var onGear: ((gear: Int) -> Unit)? = null
     var onTouch: ((CarTouch) -> Unit)? = null
     var onHardKey: ((keyCode: Int) -> Unit)? = null
@@ -352,6 +353,7 @@ class CarLifeSession(
                 frames = 0
                 _state.value = State.Projecting(link.name, width, height, fps, streamWidth, streamHeight)
                 startVideoTimer()
+                if (mode == VideoFeed.Mode.RESUMING) onVideoBack?.invoke()
                 DiagLog.i(tag, when (mode) {
                     VideoFeed.Mode.STARTING -> "projection started"
                     VideoFeed.Mode.RESUMING -> "projection back, the car gets the next full picture"
@@ -598,6 +600,10 @@ class CarLifeSession(
             while (isActive) {
                 delay(VIDEO_POLL_MS)
                 feed.idle((QUIET_FRAMES * 1000L / fps.coerceIn(1, 60)).coerceAtMost(HEARTBEAT_CAP_MS))
+                if (feed.needsKey()) {
+                    DiagLog.i(tag, "no full picture came by itself since the car came back, asking the encoder for one")
+                    onNeedKeyframe?.invoke()
+                }
                 unaskedRate()
             }
         }

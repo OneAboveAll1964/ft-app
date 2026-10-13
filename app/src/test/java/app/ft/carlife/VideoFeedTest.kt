@@ -85,6 +85,63 @@ class VideoFeedTest {
     }
 
     @Test
+    fun aStillScreenTakesTheNextNaturalFullPictureASecondAfterComingBack() {
+        live()
+        feed.pause()
+        sent.clear()
+        feed.start()
+        feed.frame(f("P"), false)
+        feed.frame(f("Ifirst"), true)
+        assertEquals(VideoFeed.Mode.RESUMING, feed.mode)
+        now += VideoFeed.RESUME_WAIT_MS
+        feed.frame(f("Inatural"), true)
+        assertEquals(VideoFeed.Mode.LIVE, feed.mode)
+        assertEquals("frame:Inatural", sent.last())
+    }
+
+    @Test
+    fun aFullPictureIsForcedOnlyWhenNoneCameByItself() {
+        live()
+        feed.pause()
+        sent.clear()
+        feed.start()
+        now += VideoFeed.FORCE_KEY_MS - 1
+        assertFalse(feed.needsKey())
+        now += 1
+        assertTrue(feed.needsKey())
+        assertFalse(feed.needsKey())
+        feed.frame(f("Iasked"), true)
+        assertEquals(VideoFeed.Mode.LIVE, feed.mode)
+        assertEquals("frame:Iasked", sent.last())
+        now += VideoFeed.FORCE_KEY_MS
+        assertFalse(feed.needsKey())
+    }
+
+    @Test
+    fun aStillResumeKeepsAskingUntilAPictureComes() {
+        live()
+        feed.pause()
+        feed.start()
+        now += VideoFeed.FORCE_KEY_MS
+        assertTrue(feed.needsKey())
+        now += VideoFeed.FORCE_KEY_MS - 1
+        assertFalse(feed.needsKey())
+        now += 1
+        assertTrue(feed.needsKey())
+        assertEquals(VideoFeed.Mode.RESUMING, feed.mode)
+    }
+
+    @Test
+    fun noFullPictureIsAskedForWhileLiveOrPaused() {
+        live()
+        now += VideoFeed.FORCE_KEY_MS
+        assertFalse(feed.needsKey())
+        feed.pause()
+        now += VideoFeed.FORCE_KEY_MS
+        assertFalse(feed.needsKey())
+    }
+
+    @Test
     fun headerRidesWithTheFirstFullPictureOnly() {
         feed.open()
         feed.config(f("C"))

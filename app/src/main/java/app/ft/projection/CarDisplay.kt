@@ -102,7 +102,15 @@ class CarDisplay(private val context: Context) {
         }
     }
 
-    fun requestKeyframe(): Boolean = encoder?.requestKeyframe() ?: false
+    fun requestKeyframe(): Boolean {
+        val asked = encoder?.requestKeyframe() ?: false
+        gate?.redraw()
+        return asked
+    }
+
+    fun wake() {
+        gate?.wake(WAKE_MS)
+    }
 
     fun setFrameRate(fps: Int) {
         val f = fps.coerceIn(1, 120)
@@ -230,5 +238,9 @@ class CarDisplay(private val context: Context) {
         gate = null
         runCatching { encoder?.stop() }
         encoder = null
+    }
+
+    companion object {
+        private const val WAKE_MS = 2_500L
     }
 }

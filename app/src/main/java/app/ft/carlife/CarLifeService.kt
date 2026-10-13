@@ -1096,6 +1096,7 @@ class CarLifeService : Service() {
         s.onVideoConfig = { plan -> onVideoConfig(plan) }
         s.onFrameRate = { fps -> carDisplay.setFrameRate(VideoPlans.withinCap(fps, thermalCap)) }
         s.onNeedKeyframe = { carDisplay.requestKeyframe() }
+        s.onVideoBack = { carDisplay.wake() }
         s.onGear = { g -> onGear(g) }
         s.onStopVideo = { onStopVideo() }
         s.onTouch = { t -> routeTouch(t) }
