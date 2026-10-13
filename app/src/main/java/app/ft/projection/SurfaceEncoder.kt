@@ -171,6 +171,20 @@ class SurfaceEncoder(
             }
         }
 
+    fun requestKeyframe(): Boolean {
+        val c = codec ?: return false
+        if (!running.get()) return false
+        return runCatching {
+            c.setParameters(android.os.Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+            })
+            true
+        }.getOrElse {
+            DiagLog.w(tag, "could not ask the encoder for a fresh key picture: ${it.message}")
+            false
+        }
+    }
+
     fun stop() {
         if (!running.getAndSet(false)) return
         runCatching { codec?.stop() }

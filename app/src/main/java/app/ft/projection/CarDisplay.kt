@@ -102,6 +102,8 @@ class CarDisplay(private val context: Context) {
         }
     }
 
+    fun requestKeyframe(): Boolean = encoder?.requestKeyframe() ?: false
+
     fun setFrameRate(fps: Int) {
         val f = fps.coerceIn(1, 120)
         val interval = (1000L / f).coerceAtLeast(8L)

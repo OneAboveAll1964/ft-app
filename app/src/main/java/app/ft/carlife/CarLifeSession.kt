@@ -53,6 +53,8 @@ class CarLifeSession(
     var onVideoConfig: ((VideoPlan) -> Unit)? = null
     var onStopVideo: (() -> Unit)? = null
     var onFrameRate: ((fps: Int) -> Unit)? = null
+    var onNeedKeyframe: (() -> Unit)? = null
+    var onGear: ((gear: Int) -> Unit)? = null
     var onTouch: ((CarTouch) -> Unit)? = null
     var onHardKey: ((keyCode: Int) -> Unit)? = null
     var onVoiceAudio: ((ByteArray) -> Unit)? = null
@@ -164,6 +166,26 @@ class CarLifeSession(
         moduleUpdate(CarLifeProtocol.MODULE_NAVI, 0)
     }
 
+    @Volatile private var carMicOn = false
+
+    fun carMicrophone(on: Boolean) {
+        if (!matched || on == carMicOn) return
+        carMicOn = on
+        if (on) {
+            moduleUpdate(CarLifeProtocol.MODULE_MIC, 1)
+            cmd(CarLifeProtocol.CMD_MIC_RECORD_RECOG_START)
+            DiagLog.i(tag, "asked the car to record from its own microphone")
+        } else {
+            cmd(CarLifeProtocol.CMD_MIC_RECORD_END)
+            moduleUpdate(CarLifeProtocol.MODULE_MIC, 0)
+            DiagLog.i(tag, "told the car to stop recording from its microphone")
+        }
+    }
+
+    fun requestForeground() {
+        if (matched) cmd(CarLifeProtocol.CMD_REQUEST_GO_TO_FOREGROUND)
+    }
+
     fun goodbye() {
         if (matched) cmd(CarLifeProtocol.CMD_MD_MANUAL_DISCONNECT)
     }
@@ -224,6 +246,7 @@ class CarLifeSession(
         private const val LONG_PRESS_MS = 800L
         private const val VIDEO_POLL_MS = 50L
         private const val QUIET_FRAMES = 6
+        private const val HEARTBEAT_CAP_MS = 900L
     }
 
     private fun linked() {
@@ -340,7 +363,11 @@ class CarLifeSession(
                 _state.value = State.Negotiated(link.name, width, height, fps, streamWidth, streamHeight)
                 DiagLog.i(tag, "projection paused by HU, keeping the picture warm")
             }
-            CarLifeProtocol.CMD_VIDEO_ENCODER_RESET -> DiagLog.i(tag, "head unit asked for a video reset, nothing to redo")
+            CarLifeProtocol.CMD_VIDEO_ENCODER_RESET -> {
+                DiagLog.i(tag, "head unit asked for a fresh picture, sending a new key frame with the codec info")
+                feed.resendConfig()
+                onNeedKeyframe?.invoke()
+            }
             CarLifeProtocol.CMD_VIDEO_ENCODER_FRAME_RATE_CHANGE -> {
                 val asked = ProtoReader(c.payload).int(1, -1)
                 val f = VideoPlans.rateChange(asked, prefs.videoFps, prefs.videoMinFps, fps)
@@ -392,6 +419,7 @@ class CarLifeSession(
                 if (g != gear) {
                     gear = g
                     DiagLog.d(tag, "car gear $g")
+                    onGear?.invoke(g)
                 }
             }
             CarLifeProtocol.CMD_VEHICLE_FOREGROUND -> DiagLog.i(tag, "the car shows CarLife")
@@ -568,7 +596,9 @@ class CarLifeSession(
         videoTimer = scope.launch(Dispatchers.IO) {
             while (isActive) {
                 delay(VIDEO_POLL_MS)
-                feed.idle(QUIET_FRAMES * 1000L / fps.coerceIn(1, 60))
+                // The car disconnects after ~3s with no data on the video socket. Keep the gap
+                // at most ~1s even at low fps so its heartbeat watchdog never trips.
+                feed.idle((QUIET_FRAMES * 1000L / fps.coerceIn(1, 60)).coerceAtMost(HEARTBEAT_CAP_MS))
                 unaskedRate()
             }
         }

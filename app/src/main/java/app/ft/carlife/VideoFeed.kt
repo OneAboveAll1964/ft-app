@@ -37,6 +37,8 @@ class VideoFeed(
         clearHeld()
     }
 
+    fun resendConfig() = synchronized(lock) { configSent = false }
+
     fun config(bytes: ByteArray) = synchronized(lock) {
         if (!bytes.contentEquals(config)) {
             config = bytes
