@@ -173,6 +173,13 @@ class AaSession(
         }
     }
 
+    fun askForAFreshPicture() {
+        if (_phase.value != Phase.STREAMING) return
+        runCatching {
+            sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, true))
+        }.onFailure { DiagLog.w(tag, "could not ask Android Auto for a fresh picture: ${it.message}") }
+    }
+
     private fun handleVideo(id: Int, body: ByteArray) {
         when (id) {
             AaProtocol.AV_SETUP_REQUEST -> {
@@ -183,6 +190,7 @@ class AaSession(
             AaProtocol.AV_START_INDICATION -> {
                 videoSession = AaMessages.startSession(body)
                 mediaFrames = 0
+                decoder.askForAFreshPicture = { askForAFreshPicture() }
                 _phase.value = Phase.STREAMING
                 DiagLog.i(tag, "video start session=$videoSession")
                 sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, false))

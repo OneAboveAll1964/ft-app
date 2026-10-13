@@ -662,6 +662,25 @@ check "the cable takes over from the hotspot and the session runs over USB" "gre
 check "the picture flows over the cable after a tap" "python3 -c \"import json;d=json.load(open('$OUT/usb/result.json'));assert d['checks']['video_flowing'] and d['checks']['video_after_tap1']\" 2>/dev/null"
 check "when the cable link ends FT goes back to the hotspot" "awk '/USB: the cable link ended/{e=1} e && /Waiting for the car to join the hotspot/{f=1} END{exit !f}' '$OUT/usb_logcat.txt'"
 
+echo "== Android Auto started while FT is not on screen =="
+for p in 5288 7240 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
+$ADB shell am force-stop $PKG
+$ADB logcat -c
+$ADB logcat -v time > "$OUT/aabg_logcat.txt" 2>&1 &
+AABGLOG=$!
+$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto true >/dev/null 2>&1
+sleep 5
+python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 24 --out "$OUT/aabg_car" > "$OUT/aabg_car.log" 2>&1 &
+AABGCAR=$!
+sleep 2
+$ADB shell input keyevent KEYCODE_HOME >/dev/null 2>&1
+sleep 6
+python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 6 --wait-touch 0 --audio-seconds 6 --out "$OUT/aabg_phone" > "$OUT/aabg_phone.log" 2>&1
+wait $AABGCAR
+kill $AABGLOG 2>/dev/null
+check "Android Auto still reaches the car screen when FT was not on screen" "grep -q 'android auto overlay on' '$OUT/aabg_logcat.txt' && grep -q \"Android Auto's picture is drawn on the car screen\" '$OUT/aabg_logcat.txt' && grep -q 'decoder started' '$OUT/aabg_logcat.txt'"
+check "FT asks Android Auto for a fresh picture when the car screen was not ready in time" "! grep -q 'the car screen was not ready for' '$OUT/aabg_logcat.txt' || grep -q 'asking it for a fresh one' '$OUT/aabg_logcat.txt'"
+
 echo "== apps on the car =="
 $ADB shell "su -c 'pkill -f app.ft.server.Main'" >/dev/null 2>&1
 SCAPK=$($ADB shell pm path $PKG | tr -d '\r' | cut -d: -f2)

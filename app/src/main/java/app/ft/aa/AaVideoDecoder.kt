@@ -45,6 +45,8 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
     @Volatile private var drain: Thread? = null
     @Volatile private var surface: Surface? = null
     @Volatile private var generation = 0L
+    @Volatile private var missed = 0
+    @Volatile var askForAFreshPicture: (() -> Unit)? = null
 
     init {
         if (mediaTek) {
@@ -80,6 +82,7 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
                     DiagLog.w(tag, "the decoder would not move to the new car screen (${moved.exceptionOrNull()?.javaClass?.simpleName}), making a fresh one")
                 }
                 stopLocked()
+                missed++
             }
             if (!running.get() && config != null) startLocked()
         }
@@ -101,7 +104,10 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         synchronized(lock) {
             if (!running.get()) {
                 if (surface != null && config != null) startLocked()
-                if (!running.get()) return
+                if (!running.get()) {
+                    missed++
+                    return
+                }
             }
             if (mediaTek && surface?.isValid != true) {
                 DiagLog.w(tag, "the car screen went away under the decoder, making a fresh one next frame")
@@ -136,6 +142,11 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
             AaVideoSink.frameSize(width, height)
             drain = Thread({ drainLoop(c, mine) }, "FT-AaDrain-$mine").also { it.start() }
             DiagLog.i(tag, "decoder started ${width}x$height on ${runCatching { c.name }.getOrNull()}")
+            if (missed > 0) {
+                DiagLog.i(tag, "the car screen was not ready for $missed of Android Auto's pictures, asking it for a fresh one")
+                missed = 0
+                runCatching { askForAFreshPicture?.invoke() }
+            }
         } catch (t: Throwable) {
             running.set(false)
             codec = null
