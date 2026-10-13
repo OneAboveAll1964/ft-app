@@ -15,7 +15,10 @@ public final class Power {
     private static final int ACQUIRE_CAUSES_WAKEUP = 0x10000000;
 
     private static PowerManager.WakeLock awake;
-    private static boolean wantDark;
+    private static boolean managing;
+    private static boolean autoDark;
+    private static boolean dark;
+    private static long timeoutMs = 30_000L;
     private static Thread guard;
 
     private Power() {
@@ -82,25 +85,82 @@ public final class Power {
     }
 
     public static synchronized boolean screen(boolean on) {
-        wantDark = !on;
         if (on) {
-            Boolean back = setPowerMode(true);
-            Log.i("phone screen turned on" + (back == null ? " (not through the display, asking the system)" : ""));
-            if (back == null) {
-                Apps.shell("input keyevent 224");
-            }
+            release();
             return true;
         }
+        return manage(true);
+    }
+
+    public static synchronized boolean manage(boolean darkenByItself) {
+        managing = true;
+        autoDark = darkenByItself;
         keepAwake(true);
-        Boolean dark = setPowerMode(false);
-        if (dark == null || !dark) {
-            Log.w("this phone will not let FT darken the screen, leaving it on");
-            wantDark = false;
+        startGuard();
+        if (autoDark) {
+            return darken("apps run on the car");
+        }
+        dark = false;
+        Touches.poke();
+        Log.i("phone screen stays on while apps run, the power button darkens it");
+        return true;
+    }
+
+    public static synchronized boolean powerKey() {
+        if (!managing) {
             return false;
         }
-        Log.i("phone screen turned off while apps run on the car");
-        startGuard();
+        if (dark) {
+            light("the power button");
+        } else {
+            darken("the power button");
+        }
+        return dark;
+    }
+
+    private static void release() {
+        boolean was = managing;
+        managing = false;
+        dark = false;
+        Boolean back = setPowerMode(true);
+        if (back == null) {
+            Apps.shell("input keyevent 224");
+        }
+        if (was) {
+            Log.i("phone screen given back" + (back == null ? " (not through the display, asking the system)" : ""));
+        }
+    }
+
+    private static void light(String why) {
+        dark = false;
+        Touches.poke();
+        Boolean back = setPowerMode(true);
+        if (back == null) {
+            Apps.shell("input keyevent 224");
+        }
+        Log.i("phone screen on for " + why + (autoDark ? ", dark again after " + timeoutMs / 1000 + "s untouched" : ""));
+    }
+
+    private static boolean darken(String why) {
+        Boolean off = setPowerMode(false);
+        if (off == null || !off) {
+            Log.w("this phone will not let FT darken the screen, leaving it on");
+            dark = false;
+            return false;
+        }
+        dark = true;
+        Log.i("phone screen dark for " + why + ", the power button brings it back");
         return true;
+    }
+
+    private static long screenTimeout() {
+        String out = Apps.shell("settings get system screen_off_timeout");
+        try {
+            long ms = Long.parseLong(out == null ? "" : out.trim());
+            return Math.max(15_000L, Math.min(ms, 600_000L));
+        } catch (NumberFormatException ignored) {
+            return 30_000L;
+        }
     }
 
     private static void startGuard() {
@@ -108,17 +168,34 @@ public final class Power {
             return;
         }
         guard = new Thread(() -> {
+            Touches.start();
+            long timeout = screenTimeout();
+            synchronized (Power.class) {
+                timeoutMs = timeout;
+            }
             while (true) {
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException stop) {
                     return;
                 }
+                boolean check;
                 synchronized (Power.class) {
-                    if (!wantDark) {
+                    if (!managing) {
                         return;
                     }
-                    setPowerMode(false);
+                    check = autoDark && !dark;
+                }
+                long idle = check ? Touches.idleMs() : -1;
+                synchronized (Power.class) {
+                    if (!managing) {
+                        return;
+                    }
+                    if (dark) {
+                        setPowerMode(false);
+                    } else if (autoDark && idle >= 0 && Math.min(idle, Touches.sincePoke()) > timeoutMs) {
+                        darken("the phone going " + timeoutMs / 1000 + "s untouched");
+                    }
                 }
             }
         });

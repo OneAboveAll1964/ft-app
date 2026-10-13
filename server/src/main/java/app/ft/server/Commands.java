@@ -176,7 +176,11 @@ public final class Commands {
                 return Apps.list();
             case "screen": {
                 boolean on = request.getBoolean("on", true);
-                answer.putBoolean("ok", Power.screen(on));
+                answer.putBoolean("ok", on ? Power.screen(true) : Power.manage(request.getBoolean("auto", true)));
+                return answer;
+            }
+            case "power": {
+                answer.putBoolean("dark", Power.powerKey());
                 return answer;
             }
             case "awake": {

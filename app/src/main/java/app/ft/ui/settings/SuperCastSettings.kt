@@ -105,7 +105,7 @@ fun SuperCastSettings() {
     if (failed && !ready) {
         Text(stringResource(R.string.apps_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
-    BoolSetting(stringResource(R.string.supercast_screen_off), prefs.supercastScreenOff) { prefs.supercastScreenOff = it }
+    BoolSetting(stringResource(R.string.supercast_screen_off), prefs.supercastScreenOff, stringResource(R.string.supercast_screen_off_about)) { prefs.supercastScreenOff = it }
     var chosen by remember { mutableStateOf(prefs.supercastApps.split(',').filter { it.isNotBlank() }.toSet()) }
     var picking by remember { mutableStateOf(false) }
     OptionRow(

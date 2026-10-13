@@ -104,6 +104,14 @@ object SuperCast {
         ask("swap") { putString("first", first); putString("second", second) }
     }
 
+    private val queue = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task, "ft-supercast").apply { isDaemon = true }
+    }
+
+    fun later(block: () -> Unit) {
+        runCatching { queue.execute { runCatching(block).onFailure { DiagLog.w(TAG, "helper call failed: ${it.message}") } } }
+    }
+
     private val touchThread = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
         Thread(task, "ft-supercast-touch").apply { isDaemon = true }
     }
@@ -145,6 +153,14 @@ object SuperCast {
 
     fun phoneScreen(on: Boolean) {
         ask("screen") { putBoolean("on", on) }
+    }
+
+    fun manageScreen(darkenByItself: Boolean) {
+        ask("screen") { putBoolean("on", false); putBoolean("auto", darkenByItself) }
+    }
+
+    fun powerPressed() {
+        ask("power")
     }
 
     fun keepAwake(on: Boolean, wake: Boolean = false) {
