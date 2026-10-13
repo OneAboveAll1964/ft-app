@@ -399,8 +399,23 @@
     <string name="supercast_which_about">Keep the row on the car short by showing only the apps you really use while driving.</string>
     <string name="action_done">Done</string>
     <string name="gear_title">Gear actions</string>
-    <string name="gear_about">When the car shifts into reverse or park, FT can do something. It comes back on its own when you shift out.</string>
+    <string name="gear_about">When the car shifts into reverse or park, FT can change the screen and the sound. Everything comes back on its own when you shift out.</string>
     <string name="gear_reverse">In reverse</string>
     <string name="gear_park">In park</string>
     <string name="gear_action_car_screen">Show the car\'s own screen</string>
+    <string name="gear_reverse_sound">Sound in reverse</string>
+    <string name="gear_park_sound">Sound in park</string>
+    <string name="gear_sound_keep">Leave it as it is</string>
+    <string name="gear_sound_pause">Pause, play again when you shift out</string>
+    <string name="gear_sound_lower">Turn it down, back up when you shift out</string>
+    <string name="gear_sound_about">Only what the gear paused or turned down comes back. If nothing was playing, nothing starts.</string>
+    <string name="gear_level">Turn down to</string>
+    <string name="gear_level_about">FT turns down the sound it sends to the car. The car\'s own volume stays where it is.</string>
+    <string name="gear_level_silent">Silent</string>
+    <string name="gear_level_percent">%1$d%%</string>
+    <string name="supercast_full">Full screen</string>
+    <string name="supercast_full_exit">Exit full screen</string>
+    <string name="supercast_hide_dock">Hide apps</string>
+    <string name="supercast_show_dock">Show apps</string>
+    <string name="supercast_screen_off_about">Press the power button to use the phone. It goes dark again after the phone\'s screen timeout.</string>
 </resources>

@@ -398,8 +398,23 @@
     <string name="supercast_which_about">ڕیزەکە لەسەر ئۆتۆمبێل کورت ڕابگرە بە پیشاندانی تەنها ئەو ئەپانەی بەڕاستی لە کاتی لێخوڕیندا بەکاریان دەهێنیت.</string>
     <string name="action_done">تەواو</string>
     <string name="gear_title">کرداری گیەر</string>
-    <string name="gear_about">کاتێک ئۆتۆمبێلەکە دەچێتە دواوە یان پارک، FT دەتوانێت شتێک بکات. خۆی دەگەڕێتەوە کاتێک دەرچیت.</string>
+    <string name="gear_about">کاتێک ئۆتۆمبێلەکە دەچێتە دواوە یان پارک، FT دەتوانێت شاشە و دەنگ بگۆڕێت. هەموو شتێک خۆی دەگەڕێتەوە کاتێک دەرچیت.</string>
     <string name="gear_reverse">لە دواوەدا</string>
     <string name="gear_park">لە پارکدا</string>
     <string name="gear_action_car_screen">شاشەی خودی ئۆتۆمبێل پیشان بدە</string>
+    <string name="gear_reverse_sound">دەنگ لە دواوەدا</string>
+    <string name="gear_park_sound">دەنگ لە پارکدا</string>
+    <string name="gear_sound_keep">وەک خۆی بهێڵە</string>
+    <string name="gear_sound_pause">ڕاگرتن، کاتێک دەرچیت دەست پێدەکاتەوە</string>
+    <string name="gear_sound_lower">نزمکردنەوە، کاتێک دەرچیت بەرز دەبێتەوە</string>
+    <string name="gear_sound_about">تەنها ئەوەی گیەرەکە ڕایگرت یان نزمی کردەوە دەگەڕێتەوە. ئەگەر هیچ شتێک لێنەدرابێت، هیچ شتێک دەست پێناکات.</string>
+    <string name="gear_level">نزمکردنەوە بۆ</string>
+    <string name="gear_level_about">FT ئەو دەنگە نزم دەکاتەوە کە بۆ ئۆتۆمبێلی دەنێرێت. دەنگی خودی ئۆتۆمبێل وەک خۆی دەمێنێت.</string>
+    <string name="gear_level_silent">بێدەنگ</string>
+    <string name="gear_level_percent">%1$d٪</string>
+    <string name="supercast_full">پڕبەشاشە</string>
+    <string name="supercast_full_exit">دەرچوون لە پڕبەشاشە</string>
+    <string name="supercast_hide_dock">شاردنەوەی ئەپەکان</string>
+    <string name="supercast_show_dock">پیشاندانی ئەپەکان</string>
+    <string name="supercast_screen_off_about">دوگمەی پاوەر دابگرە بۆ بەکارهێنانی مۆبایل. دوای کاتی کوژانەوەی شاشەی مۆبایل دیسان تاریک دەبێتەوە.</string>
 </resources>

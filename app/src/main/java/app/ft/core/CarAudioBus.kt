@@ -34,6 +34,7 @@ object CarAudioBus {
     private const val DUCK_LEVEL = 0.35f
     private const val DUCK_DOWN_FRAMES = RATE * 8 / 100
     private const val DUCK_UP_FRAMES = RATE * 40 / 100
+    private const val TURN_STEP = 1f / (RATE * 2 * 35 / 100)
 
     private val lock = Any()
     private var sent = 0L
@@ -63,6 +64,8 @@ object CarAudioBus {
     private var primed = true
     private var voiceInMusic = false
     private var duckGain = 1f
+    private var mainTurn = 1f
+    private var voiceTurn = 1f
     private var mixedIn = 0L
     private val recentLevels = ArrayDeque<DoubleArray>()
     private var recentBytes = 0
@@ -78,6 +81,9 @@ object CarAudioBus {
 
     @Volatile
     var guidance = GUIDANCE_UNTOUCHED
+
+    @Volatile
+    var soundLevel = 1f
 
     @Volatile
     var voice: Voice? = null
@@ -307,7 +313,7 @@ object CarAudioBus {
             }
             voiceLane = lane
             voiceSent += pcm.size
-            runCatching { v.data(if (voiceGain > 1.01f) louder(pcm, voiceGain) else pcm) }
+            runCatching { v.data(turned(if (voiceGain > 1.01f) louder(pcm, voiceGain) else pcm, true)) }
         }
         report(now)
     }
@@ -322,6 +328,24 @@ object CarAudioBus {
             out[i + 1] = ((s shr 8) and 0xFF).toByte()
             i += 2
         }
+        return out
+    }
+
+    private fun turned(pcm: ByteArray, voice: Boolean): ByteArray {
+        val target = soundLevel.coerceIn(0f, 1f)
+        var g = if (voice) voiceTurn else mainTurn
+        if (g == 1f && target == 1f) return pcm
+        val out = pcm.copyOf()
+        var i = 0
+        while (i + 1 < out.size) {
+            if (g != target) g = if (g > target) maxOf(target, g - TURN_STEP) else minOf(target, g + TURN_STEP)
+            val v = ((out[i + 1].toInt() shl 8) or (out[i].toInt() and 0xFF)).toShort().toInt()
+            val t = (v * g).toInt()
+            out[i] = (t and 0xFF).toByte()
+            out[i + 1] = ((t shr 8) and 0xFF).toByte()
+            i += 2
+        }
+        if (voice) voiceTurn = g else mainTurn = g
         return out
     }
 
@@ -401,6 +425,7 @@ object CarAudioBus {
             } else {
                 send.add(pcm)
             }
+            for (k in send.indices) send[k] = turned(send[k], false)
             send.forEach { sent += it.size }
         }
         send.forEach { runCatching { target(it) } }

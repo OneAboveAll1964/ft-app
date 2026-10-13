@@ -398,8 +398,23 @@
     <string name="supercast_which_about">رێزێ ل سەر ترومبێلێ کورت بهێلە ب نیشاندانا تنێ وان ئەپان یێن تو ب ڕاستی دەمێ ئاژوتنێ بکار دئینی.</string>
     <string name="action_done">تەمام</string>
     <string name="gear_title">کریارێن گیەری</string>
-    <string name="gear_about">دەمێ ترومبێل دچیتە پاشڤە یان پارک، FT دشێت تشتەکی بکەت. ب خۆ ڤەدگەڕیت دەمێ تو دەرکەڤی.</string>
+    <string name="gear_about">دەمێ ترومبێل دچیتە پاشڤە یان پارک، FT دشێت شاشێ و دەنگی بگوهۆڕیت. هەمی تشت ب خۆ ڤەدگەڕیت دەمێ تو دەرکەڤی.</string>
     <string name="gear_reverse">د پاشڤەدا</string>
     <string name="gear_park">د پارکێدا</string>
     <string name="gear_action_car_screen">شاشا ترومبێلێ یا خۆ نیشا بدە</string>
+    <string name="gear_reverse_sound">دەنگ د پاشڤەدا</string>
+    <string name="gear_park_sound">دەنگ د پارکێدا</string>
+    <string name="gear_sound_keep">وەکی خۆ بهێلە</string>
+    <string name="gear_sound_pause">راوەستاندن، دەمێ تو دەرکەڤی دێ دەست پێکەتەڤە</string>
+    <string name="gear_sound_lower">نزمکرن، دەمێ تو دەرکەڤی دێ بلند بیتەڤە</string>
+    <string name="gear_sound_about">تنێ ئەوا گیەری راوەستاندی یان نزمکری ڤەدگەڕیت. ئەگەر چ تشت لێنەدهات، چ تشت دەست پێناکەت.</string>
+    <string name="gear_level">نزمکرن بۆ</string>
+    <string name="gear_level_about">FT وی دەنگی نزم دکەت یێ بۆ ترومبێلێ دهنێریت. دەنگێ ترومبێلێ ب خۆ وەکی خۆ دمینیت.</string>
+    <string name="gear_level_silent">بێدەنگ</string>
+    <string name="gear_level_percent">%1$d٪</string>
+    <string name="supercast_full">شاشا تژی</string>
+    <string name="supercast_full_exit">دەرکەڤتن ژ شاشا تژی</string>
+    <string name="supercast_hide_dock">ڤەشارتنا ئەپان</string>
+    <string name="supercast_show_dock">نیشادانا ئەپان</string>
+    <string name="supercast_screen_off_about">دوگمەیا پاوەری بگرە دا مۆبایلێ ب کار بینی. پشتی دەمێ ڤەمراندنا شاشا مۆبایلی دێ دیسا تاری بیت.</string>
 </resources>

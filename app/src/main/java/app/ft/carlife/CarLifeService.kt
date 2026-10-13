@@ -926,6 +926,7 @@ class CarLifeService : Service() {
         session?.stop()
         session = null
         AaHeadUnitService.onCarMicWanted = null
+        gearForget()
         stateJob?.cancel()
         stateJob = null
         wifiLink?.stop()
@@ -1578,12 +1579,22 @@ class CarLifeService : Service() {
     }
 
     @Volatile private var gearHidProjection = false
+    private val gearSound = GearSound()
+    private var gearPausedFt = false
+    private var gearVolumeBefore = -1
+    private var gearVolumeSet = -1
 
     private fun onGear(gear: Int) {
+        val p = app.prefs
         val action = when (gear) {
-            GearAction.GEAR_REVERSE -> app.prefs.gearReverse
-            GearAction.GEAR_PARK -> app.prefs.gearPark
+            GearAction.GEAR_REVERSE -> p.gearReverse
+            GearAction.GEAR_PARK -> p.gearPark
             else -> GearAction.NONE
+        }
+        when (gear) {
+            GearAction.GEAR_REVERSE -> gearSoundFor(gear, p.gearReverseSound, p.gearReverseLevel)
+            GearAction.GEAR_PARK -> gearSoundFor(gear, p.gearParkSound, p.gearParkLevel)
+            else -> gearSoundFor(gear, GearAction.SOUND_KEEP, 100)
         }
         if (action == GearAction.NONE) {
             if (gearHidProjection) {
@@ -1596,6 +1607,72 @@ class CarLifeService : Service() {
         DiagLog.i(tag, "car shifted to ${gearName(gear)}, running the chosen action")
         if (GearAction.restores(action)) gearHidProjection = true
         runGearAction(action)
+    }
+
+    private fun gearSoundFor(gear: Int, sound: Int, lowerTo: Int) {
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val ftPlaying = CarPlayer.playing
+        val phonePlaying = !ftPlaying && am.isMusicActive
+        val before = gearSound.level
+        val move = gearSound.shift(sound, lowerTo, ftPlaying || phonePlaying)
+        if (move.level != before) {
+            CarAudioBus.soundLevel = move.level
+            gearPhoneVolume(am, move.level)
+            if (move.level < 1f) DiagLog.i(tag, "car in ${gearName(gear)}, sound to the car down to ${(move.level * 100).toInt()}%")
+            else DiagLog.i(tag, "car in ${gearName(gear)}, sound to the car back to normal")
+        }
+        if (move.pause) {
+            gearPausedFt = ftPlaying
+            if (ftPlaying) CarPlayer.pause() else phoneMediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
+            DiagLog.i(tag, "car in ${gearName(gear)}, paused ${if (ftPlaying) "FT's player" else "the app playing on the phone"}")
+        }
+        if (move.resume) {
+            if (gearPausedFt) {
+                if (CarPlayer.hasTrack && !CarPlayer.playing) CarPlayer.resume()
+            } else {
+                phoneMediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
+            }
+            DiagLog.i(tag, "car in ${gearName(gear)}, playing again what the gear paused")
+        }
+    }
+
+    private fun gearPhoneVolume(am: android.media.AudioManager, level: Float) {
+        val stream = android.media.AudioManager.STREAM_MUSIC
+        val now = runCatching { am.getStreamVolume(stream) }.getOrDefault(-1)
+        if (now < 0) return
+        if (gearVolumeSet >= 0 && now != gearVolumeSet) {
+            gearVolumeBefore = -1
+            gearVolumeSet = -1
+        }
+        val hearsPhone = savedVolume < 0 && app.prefs.soundOverBluetooth
+        val target = if (level < 1f && hearsPhone) (am.getStreamMaxVolume(stream) * level).toInt() else Int.MAX_VALUE
+        val base = if (gearVolumeSet >= 0) gearVolumeBefore else now
+        if (target < base) {
+            if (gearVolumeSet < 0) gearVolumeBefore = now
+            runCatching { am.setStreamVolume(stream, target, 0) }
+            gearVolumeSet = target
+        } else if (gearVolumeSet >= 0) {
+            runCatching { am.setStreamVolume(stream, gearVolumeBefore, 0) }
+            gearVolumeBefore = -1
+            gearVolumeSet = -1
+        }
+    }
+
+    private fun phoneMediaKey(am: android.media.AudioManager, key: Int) {
+        runCatching {
+            am.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, key))
+            am.dispatchMediaKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, key))
+        }.onFailure { DiagLog.w(tag, "could not pass ${keyName(key)} to the phone: ${it.message}") }
+    }
+
+    private fun gearForget() {
+        val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        if (gearSound.level < 1f) {
+            CarAudioBus.soundLevel = 1f
+            gearPhoneVolume(am, 1f)
+        }
+        gearSound.forget()
+        gearHidProjection = false
     }
 
     private fun gearName(gear: Int): String = when (gear) {

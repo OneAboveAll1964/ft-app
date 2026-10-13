@@ -11,12 +11,17 @@ object GearAction {
 
     val ALL = listOf(NONE, CAR_SCREEN, FT_HOME, MAPS, ANDROID_AUTO)
 
-    // Firmware gear values (CarlifeGearInfo): 1=N 2=P 3=D 4=L 5=R
+    const val SOUND_KEEP = 0
+    const val SOUND_PAUSE = 1
+    const val SOUND_LOWER = 2
+
+    val SOUNDS = listOf(SOUND_KEEP, SOUND_PAUSE, SOUND_LOWER)
+
+    val LEVELS = listOf(0, 10, 20, 30, 40, 50, 60, 70, 80)
+
     const val GEAR_PARK = 2
     const val GEAR_REVERSE = 5
 
-    // CAR_SCREEN hands the car back to its own screen (so the reverse camera shows) and FT
-    // brings projection back when the car leaves that gear.
     fun restores(action: Int): Boolean = action == CAR_SCREEN
 
     fun label(action: Int): Int = when (action) {
@@ -25,5 +30,35 @@ object GearAction {
         MAPS -> R.string.tile_maps
         ANDROID_AUTO -> R.string.tile_aa
         else -> R.string.wheel_action_none
+    }
+
+    fun soundLabel(sound: Int): Int = when (sound) {
+        SOUND_PAUSE -> R.string.gear_sound_pause
+        SOUND_LOWER -> R.string.gear_sound_lower
+        else -> R.string.gear_sound_keep
+    }
+}
+
+class GearSound {
+    data class Move(val level: Float, val pause: Boolean, val resume: Boolean)
+
+    var level = 1f
+        private set
+    var paused = false
+        private set
+
+    fun shift(sound: Int, lowerTo: Int, playing: Boolean): Move {
+        val want = if (sound == GearAction.SOUND_LOWER) lowerTo.coerceIn(0, 100) / 100f else 1f
+        val pause = sound == GearAction.SOUND_PAUSE && playing && !paused
+        val resume = sound != GearAction.SOUND_PAUSE && paused
+        if (pause) paused = true
+        if (resume) paused = false
+        level = want
+        return Move(want, pause, resume)
+    }
+
+    fun forget() {
+        level = 1f
+        paused = false
     }
 }

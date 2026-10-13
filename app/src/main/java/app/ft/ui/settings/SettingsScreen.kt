@@ -3,6 +3,8 @@ package app.ft.ui.settings
 import androidx.compose.foundation.layout.Arrangement
 import app.ft.ui.components.InkText
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -233,7 +235,9 @@ private fun PageContent(page: SettingsPage) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             GearSetting(stringResource(R.string.gear_reverse), p.gearReverse) { p.gearReverse = it }
+            GearSoundSetting(stringResource(R.string.gear_reverse_sound), p.gearReverseSound, p.gearReverseLevel, { p.gearReverseSound = it }) { p.gearReverseLevel = it }
             GearSetting(stringResource(R.string.gear_park), p.gearPark) { p.gearPark = it }
+            GearSoundSetting(stringResource(R.string.gear_park_sound), p.gearParkSound, p.gearParkLevel, { p.gearParkSound = it }) { p.gearParkLevel = it }
         }
         SettingsPage.ANDROID_AUTO -> {
             BoolSetting(stringResource(R.string.aa_match_car), p.aaMatchCar) { p.aaMatchCar = it }
@@ -367,10 +371,14 @@ private fun TextSetting(label: String, initial: String, onChange: (String) -> Un
 }
 
 @Composable
-internal fun BoolSetting(label: String, initial: Boolean, onChange: (Boolean) -> Unit) {
+internal fun BoolSetting(label: String, initial: Boolean, detail: String? = null, onChange: (Boolean) -> Unit) {
     var on by remember { mutableStateOf(initial) }
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
         Switch(checked = on, onCheckedChange = { on = it; onChange(it) })
     }
 }
@@ -474,6 +482,44 @@ private fun GearSetting(label: String, initial: Int, onChange: (Int) -> Unit) {
         chosen = GearAction.ALL[index]
         onChange(chosen)
     }
+}
+
+@Composable
+private fun GearSoundSetting(label: String, initialSound: Int, initialLevel: Int, onSound: (Int) -> Unit, onLevel: (Int) -> Unit) {
+    var sound by remember { mutableIntStateOf(initialSound) }
+    var level by remember { mutableIntStateOf(initialLevel) }
+    PickSetting(
+        label,
+        GearAction.SOUNDS.map { Option(stringResource(GearAction.soundLabel(it)), icon = soundIcon(it)) },
+        GearAction.SOUNDS.indexOf(sound).coerceAtLeast(0),
+        about = stringResource(R.string.gear_sound_about)
+    ) { index ->
+        sound = GearAction.SOUNDS[index]
+        onSound(sound)
+    }
+    if (sound == GearAction.SOUND_LOWER) {
+        val levels = GearAction.LEVELS.map { Option(levelLabel(it)) }
+        PickSetting(
+            stringResource(R.string.gear_level),
+            levels,
+            GearAction.LEVELS.indexOf(level).coerceAtLeast(0),
+            modifier = Modifier.padding(start = 16.dp),
+            about = stringResource(R.string.gear_level_about)
+        ) { index ->
+            level = GearAction.LEVELS[index]
+            onLevel(level)
+        }
+    }
+}
+
+@Composable
+private fun levelLabel(level: Int): String =
+    if (level == 0) stringResource(R.string.gear_level_silent) else stringResource(R.string.gear_level_percent, level)
+
+private fun soundIcon(sound: Int): ImageVector = when (sound) {
+    GearAction.SOUND_PAUSE -> CarIcons.Pause
+    GearAction.SOUND_LOWER -> CarIcons.VolumeDown
+    else -> CarIcons.VolumeUp
 }
 
 private fun gearIcon(action: Int): ImageVector = when (action) {

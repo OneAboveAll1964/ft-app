@@ -398,8 +398,23 @@
     <string name="supercast_which_about">اجعل الصف على السيارة قصيراً بإظهار التطبيقات التي تستخدمها فعلاً أثناء القيادة فقط.</string>
     <string name="action_done">تم</string>
     <string name="gear_title">إجراءات ناقل الحركة</string>
-    <string name="gear_about">عند تحويل السيارة إلى الرجوع أو الركن، يمكن لـ FT تنفيذ إجراء. ويعود تلقائياً عند الخروج من الوضع.</string>
+    <string name="gear_about">عند تحويل السيارة إلى الرجوع أو الركن، يمكن لـ FT تغيير الشاشة والصوت. ويعود كل شيء تلقائياً عند الخروج من الوضع.</string>
     <string name="gear_reverse">عند الرجوع</string>
     <string name="gear_park">عند الركن</string>
     <string name="gear_action_car_screen">عرض شاشة السيارة نفسها</string>
+    <string name="gear_reverse_sound">الصوت عند الرجوع</string>
+    <string name="gear_park_sound">الصوت عند الركن</string>
+    <string name="gear_sound_keep">اتركه كما هو</string>
+    <string name="gear_sound_pause">إيقاف مؤقت، ويعود التشغيل عند الخروج</string>
+    <string name="gear_sound_lower">خفضه، ويرتفع عند الخروج</string>
+    <string name="gear_sound_about">لا يعود إلا ما أوقفه أو خفضه ناقل الحركة. إذا لم يكن شيء يعمل، فلن يبدأ شيء.</string>
+    <string name="gear_level">خفض الصوت إلى</string>
+    <string name="gear_level_about">يخفض FT الصوت الذي يرسله إلى السيارة، ويبقى مستوى صوت السيارة نفسه كما هو.</string>
+    <string name="gear_level_silent">صامت</string>
+    <string name="gear_level_percent">%1$d٪</string>
+    <string name="supercast_full">ملء الشاشة</string>
+    <string name="supercast_full_exit">الخروج من ملء الشاشة</string>
+    <string name="supercast_hide_dock">إخفاء التطبيقات</string>
+    <string name="supercast_show_dock">إظهار التطبيقات</string>
+    <string name="supercast_screen_off_about">اضغط زر التشغيل لاستخدام الهاتف، وتعود الشاشة مظلمة بعد مهلة إطفاء شاشة الهاتف.</string>
 </resources>
