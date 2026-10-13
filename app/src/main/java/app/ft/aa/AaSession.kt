@@ -70,6 +70,10 @@ class AaSession(
     fun close(reason: String) {
         if (!running.getAndSet(false)) return
         mic.stop()
+        if (micWanted) {
+            micWanted = false
+            runCatching { AaHeadUnitService.onCarMicWanted?.invoke(false) }
+        }
         CarAudioBus.end(AaProtocol.CH_SPEECH_AUDIO)
         CarAudioBus.end(AaProtocol.CH_SYSTEM_AUDIO)
         runCatching { input.close() }
@@ -313,6 +317,7 @@ class AaSession(
             AaProtocol.AV_INPUT_OPEN_REQUEST -> {
                 val wanted = AaMessages.avInputOpenWanted(body)
                 sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_INPUT_OPEN_RESPONSE, AaMessages.avInputOpenResponse(if (wanted) 0 else AaMessages.avInputOpenSession(body)))
+                if (wanted != micWanted) DiagLog.i(tag, if (wanted) "Android Auto opened the microphone" else "Android Auto closed the microphone")
                 micWanted = wanted
                 runCatching { AaHeadUnitService.onCarMicWanted?.invoke(wanted) }
                 if (wanted) startMicrophone() else mic.stop()

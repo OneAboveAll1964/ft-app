@@ -177,8 +177,9 @@ class CarLifeSession(
             DiagLog.i(tag, "asked the car to record from its own microphone")
         } else {
             cmd(CarLifeProtocol.CMD_MIC_RECORD_END)
+            moduleUpdate(CarLifeProtocol.MODULE_VR, 0)
             moduleUpdate(CarLifeProtocol.MODULE_MIC, 0)
-            DiagLog.i(tag, "told the car to stop recording from its microphone")
+            DiagLog.i(tag, "told the car to stop recording from its microphone and put its voice light out")
         }
     }
 
