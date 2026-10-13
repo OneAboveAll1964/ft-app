@@ -158,6 +158,9 @@ private fun CarRoot(style: CarStyle) {
     var nowPlaying by remember { mutableStateOf(false) }
     var panes by remember { mutableStateOf<List<CarPane>>(emptyList()) }
     var dockApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var castFull by remember { mutableStateOf(false) }
+    var dockHidden by remember { mutableStateOf(FTApp.instance.prefs.supercastDockHidden) }
+    val castFullNow = castFull && view == CarView.SUPERCAST && panes.isNotEmpty() && !state.aaOverlay && !state.mirroring && !state.waitingForShare
     val drawerGrid = rememberLazyGridState()
     val browser = remember { WebPage("https://duckduckgo.com") }
     val youtube = remember { WebPage("https://m.youtube.com", "https://m.youtube.com/results?search_query=%s") }
@@ -179,23 +182,27 @@ private fun CarRoot(style: CarStyle) {
     val panesLive = view == CarView.SUPERCAST && panes.isNotEmpty() && superCastReady
     DisposableEffect(panesLive, darkenPhone) {
         if (!panesLive) return@DisposableEffect onDispose { }
-        val keepDark = {
-            SuperCast.keepAwake(true, wake = true)
-            if (darkenPhone) SuperCast.phoneScreen(false)
-        }
         val watch = object : BroadcastReceiver() {
             override fun onReceive(ignored: Context?, intent: Intent?) {
                 if (intent?.action != Intent.ACTION_SCREEN_OFF) return
-                DiagLog.i("SuperCast", "the phone tried to sleep while apps run, waking it and keeping the screen dark")
-                keepDark()
+                DiagLog.i("SuperCast", "power button pressed while apps run, keeping the phone awake and switching its screen")
+                SuperCast.later {
+                    SuperCast.keepAwake(true, wake = true)
+                    SuperCast.powerPressed()
+                }
             }
         }
         context.registerReceiver(watch, IntentFilter(Intent.ACTION_SCREEN_OFF))
-        keepDark()
+        SuperCast.later {
+            SuperCast.keepAwake(true, wake = true)
+            SuperCast.manageScreen(darkenPhone)
+        }
         onDispose {
             runCatching { context.unregisterReceiver(watch) }
-            if (darkenPhone) SuperCast.phoneScreen(true)
-            SuperCast.keepAwake(false)
+            SuperCast.later {
+                SuperCast.phoneScreen(true)
+                SuperCast.keepAwake(false)
+            }
         }
     }
     LaunchedEffect(superCastReady, view) {
@@ -205,6 +212,12 @@ private fun CarRoot(style: CarStyle) {
             dockApps = if (wanted.isEmpty()) all else all.filter { it.first in wanted }.ifEmpty { all }
             DiagLog.i("SuperCast", "the helper listed ${all.size} apps, ${dockApps.size} shown on the car")
         }
+    }
+    LaunchedEffect(view, panes.isEmpty()) {
+        if (view != CarView.SUPERCAST || panes.isEmpty()) castFull = false
+    }
+    LaunchedEffect(castFullNow) {
+        if (view == CarView.SUPERCAST && panes.isNotEmpty()) DiagLog.i("SuperCast", if (castFullNow) "apps full screen on the car" else "apps back in their frames")
     }
     LaunchedEffect(view) {
         DiagLog.i("Car", "car screen: ${view.name}")
@@ -229,6 +242,7 @@ private fun CarRoot(style: CarStyle) {
         CarLifeService.screenKeys.collect { key ->
             when {
                 key == 3 -> { view = CarView.LAUNCHER; nowPlaying = false }
+                castFull && view == CarView.SUPERCAST -> castFull = false
                 view == CarView.MUSIC && nowPlaying -> nowPlaying = false
                 view == CarView.BROWSER && browser.back() -> Unit
                 view == CarView.YOUTUBE && youtube.back() -> Unit
@@ -256,6 +270,9 @@ private fun CarRoot(style: CarStyle) {
                     apps = dockApps,
                     pad = pad,
                     ready = superCastReady,
+                    full = castFullNow,
+                    dockHidden = dockHidden,
+                    corner = style.corner,
                     onPick = { index ->
                         val chosen = dockApps.getOrNull(index) ?: return@SuperCastScreen
                         val taken = panes.map { it.name }.toSet()
@@ -267,14 +284,21 @@ private fun CarRoot(style: CarStyle) {
                         }
                     },
                     onClose = { name ->
-                        SuperCast.closePane(name)
+                        SuperCast.later { SuperCast.closePane(name) }
                         panes = panes.filterNot { it.name == name }
                     },
                     onSwap = {
                         if (panes.size == 2) {
-                            SuperCast.swap(panes[0].name, panes[1].name)
+                            val (first, second) = panes[0].name to panes[1].name
+                            SuperCast.later { SuperCast.swap(first, second) }
                             panes = listOf(panes[1], panes[0])
                         }
+                    },
+                    onFull = { castFull = it },
+                    onDock = { hidden ->
+                        dockHidden = hidden
+                        FTApp.instance.prefs.supercastDockHidden = hidden
+                        DiagLog.i("SuperCast", if (hidden) "app row on the car hidden" else "app row on the car shown")
                     }
                 )
                 else -> Launcher(state, style, onApp = { packageName ->
@@ -300,7 +324,7 @@ private fun CarRoot(style: CarStyle) {
                     if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                 }
             }
-            if (state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) {
+            if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow) {
                 CornerPill(style.corner) {
                     view = CarView.LAUNCHER
                     nowPlaying = false

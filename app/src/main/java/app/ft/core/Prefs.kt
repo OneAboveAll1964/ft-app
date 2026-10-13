@@ -128,4 +128,5 @@ class Prefs(context: Context) {
     var supercastScreenOff: Boolean get() = bool("supercastScreenOff", true); set(v) = set("supercastScreenOff", v)
     var supercastApps: String get() = str("supercastApps", ""); set(v) = set("supercastApps", v)
     var supercastWay: Int get() = int("supercastWay", 0); set(v) = set("supercastWay", v)
+    var supercastDockHidden: Boolean get() = bool("supercastDockHidden", false); set(v) = set("supercastDockHidden", v)
 }
