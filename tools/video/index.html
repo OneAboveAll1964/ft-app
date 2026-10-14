@@ -93,6 +93,7 @@
 </div>
 <script>
 const W = 1920, H = 1080
+const RESIZED_X = 640
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
 const E = {
   lin: x => x,
@@ -284,7 +285,7 @@ const HOLDS = [
   [7.25, 1.2], [10.25, 2.8],
   [14.47, 0.8], [15.47, 0.8], [16.47, 0.8], [17.5, 2.0], [18.85, 2.3], [20.02, 2.4],
   [23.15, 1.2], [24.55, 1.6], [26.55, 1.0], [27.9, 1.2],
-  [31.2, 2.2], [33.5, 1.6], [36.4, 1.2], [38.8, 2.4], [41.0, 1.8], [43.15, 1.8], [44.0, 2.2],
+  [31.2, 2.2], [33.5, 1.6], [35.9, 1.2], [37.2, 2.4], [38.8, 2.4], [41.0, 1.8], [43.15, 1.8], [44.0, 2.2],
   [47.3, 3.2],
   [50.7, 1.1], [52.55, 3.6], [54.65, 2.0], [57.75, 2.4],
   [61.2, 1.1], [62.6, 1.1], [64.0, 1.1], [65.4, 1.1],
@@ -489,11 +490,21 @@ const S = []
   const s = scene(29, 45)
   const k = kicker(s.root, '04', 'Apps on the car')
   const h = headline(s.root, ['Real phone apps.', '*Right on the car.'], 76)
-  const cr = car(s.root, ['car-cast-one', 'car-cast-two', 'car-cast-swapped', 'car-cast-full', 'car-cast-hidden'])
+  const cr = car(s.root, ['car-cast-one', 'car-cast-two', 'car-cast-swapped', 'car-cast-resized', 'car-cast-full', 'car-cast-hidden'])
   const svgR = lines.cloneNode()
   s.root.appendChild(svgR)
   const c1 = callout(s.root, svgR)
-  const chips = ['Two apps side by side', 'Swap sides', 'Full screen, edge to edge', 'Hide apps for more room', 'Apps always stay upright'].map(x => chip(s.root, x))
+  const chips = ['Two apps side by side', 'Swap sides', 'Full screen, edge to edge', 'Hide apps for more room', 'Apps always stay upright', 'Drag the line to resize'].map(x => chip(s.root, x))
+  const veils = ['Maps', 'YouTube'].map(x => el('div', '', s.root, x))
+  veils.forEach(v => css(v, { position: 'absolute', background: '#111a1f', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.85)', fontWeight: '600', zIndex: 24 }))
+  const backing = el('div', '', s.root)
+  css(backing, { position: 'absolute', background: '#0c1d24', zIndex: 23 })
+  const ftButton = el('div', '', s.root)
+  css(ftButton, { position: 'absolute', backgroundImage: `url(${shot('car-cast-swapped')})`, borderRadius: '999px', zIndex: 26 })
+  const line = el('div', '', s.root)
+  css(line, { position: 'absolute', background: '#5fe3c0', borderRadius: '99px', zIndex: 25 })
+  const finger = el('div', '', s.root)
+  css(finger, { position: 'absolute', width: '46px', height: '46px', borderRadius: '50%', background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 0 10px rgba(95,227,192,0.35), 0 8px 24px rgba(0,0,0,0.4)', zIndex: 25 })
   const needs = el('div', 'foot', s.root, 'Needs root, or one command from a computer, once')
   const credit4 = el('div', 'foot', s.root, 'Map: Google Maps · Video: Big Buck Bunny © Blender Foundation, CC BY 3.0')
   const seam = el('div', '', cr.s)
@@ -525,16 +536,32 @@ const S = []
     const y = mix(mix(345, 205, full), 380, shrink)
     cr.place(x, y, w, mix(0.94, 1, cv), `translateY(${(1 - cv) * 60}px)`)
     css(cr.c, { opacity: cv })
-    screenSeq(cr.imgs, t, [['car-cast-one', 29.5, 32.2], ['car-cast-two', 32.2, 35.0], ['car-cast-swapped', 35.0, 37.6], ['car-cast-full', 37.6, 40.1], ['car-cast-hidden', 40.1, 45]], 'fade')
+    screenSeq(cr.imgs, t, [['car-cast-one', 29.5, 32.2], ['car-cast-two', 32.2, 35.0], ['car-cast-swapped', 35.0, 36.85], ['car-cast-resized', 36.85, 37.6], ['car-cast-full', 37.6, 40.1], ['car-cast-hidden', 40.1, 45]], 'fade')
     if (!ready) { ready = true }
     const dock = cr.at(1000, 627)
     c1.set('Pick apps from your own list', dock[0], dock[1], 1240, 950)
     c1.update(t, 30.2, 32.5, 1180, 952)
     showChip(chips[0], t, 32.6, 34.9, 799, 952)
     css(seam, { height: `${p(t, 32.6, 33.4, E.io3) * 100}%`, opacity: env(t, 32.6, 35.0, 0.3, 0.3) })
-    const sv = env(t, 35.1, 37.3, 0.4, 0.4)
-    css(swapIco, { opacity: sv, transform: `scale(${mix(0.4, 1, p(t, 35.1, 35.6, E.back))}) rotate(${p(t, 35.3, 36.3, E.io3) * 180}deg)` })
-    showChip(chips[1], t, 35.3, 37.3, 860, 952)
+    const sv = env(t, 35.05, 36.1, 0.3, 0.3)
+    css(swapIco, { opacity: sv, transform: `scale(${mix(0.4, 1, p(t, 35.05, 35.55, E.back))}) rotate(${p(t, 35.15, 35.85, E.io3) * 180}deg)` })
+    showChip(chips[1], t, 35.2, 36.15, 860, 952)
+    const fx = mix(960, RESIZED_X, p(t, 36.2, 36.8, E.io3))
+    const vv = Math.min(p(t, 36.15, 36.27, E.lin), 1 - p(t, 36.85, 37.15, E.io3))
+    const kk = cr.w / 1920
+    ;[[42, fx - 7.5], [fx + 7.5, 1878]].forEach(([x1, x2], i) => {
+      const a = cr.at(x1, 21)
+      css(veils[i], { left: `${a[0]}px`, top: `${a[1]}px`, width: `${(x2 - x1) * kk}px`, height: `${531 * kk}px`, borderRadius: `${27 * kk}px`, fontSize: `${33 * kk}px`, opacity: vv })
+    })
+    const bp = cr.at(42, 21)
+    css(backing, { left: `${bp[0]}px`, top: `${bp[1]}px`, width: `${1836 * kk}px`, height: `${531 * kk}px`, opacity: vv })
+    const bt = cr.at(22, 22)
+    css(ftButton, { left: `${bt[0]}px`, top: `${bt[1]}px`, width: `${102 * kk}px`, height: `${65 * kk}px`, backgroundSize: `${1920 * kk}px ${720 * kk}px`, backgroundPosition: `${-22 * kk}px ${-22 * kk}px`, opacity: vv })
+    const lp = cr.at(fx - 6, 21 + 531 / 2 - 72)
+    css(line, { left: `${lp[0]}px`, top: `${lp[1]}px`, width: `${12 * kk}px`, height: `${144 * kk}px`, opacity: vv })
+    const fp = cr.at(fx, 360)
+    css(finger, { left: `${fp[0] - 23}px`, top: `${fp[1] - 23}px`, opacity: env(t, 36.15, 37.0, 0.15, 0.2), transform: `scale(${mix(1.25, 1, p(t, 36.15, 36.35))})` })
+    showChip(chips[5], t, 36.3, 37.45, 780, 952)
     showChip(chips[2], t, 37.9, 39.9, 560, 870)
     showChip(chips[4], t, 38.1, 39.9, 944, 870)
     const bx = cr.x, by = cr.y, bw = cr.w + 24, bh = cr.w * 720 / 1920 + 24
@@ -780,8 +807,8 @@ const S = []
   const wrap = el('div', 'layer', s.root)
   const logo = el('div', 'big', wrap, '<span class="accent" style="display:inline-block">FT</span>')
   css(logo, { position: 'absolute', left: '0', width: '1920px', top: '170px', textAlign: 'center', fontSize: '240px' })
-  const ver = el('div', 'chip', wrap, '3.9.7')
-  const feats = ['CarLife over Hotspot, WiFi Direct and USB', 'Android Auto on a CarLife car', 'Phone apps side by side, full screen', 'Mirror your phone', 'Gear actions for screen and sound', 'Steering wheel double press', 'Car microphone for the assistant', 'Music, videos and song info', 'English, Arabic and Kurdish', 'Light and dark']
+  const ver = el('div', 'chip', wrap, '3.9.8')
+  const feats = ['CarLife over Hotspot, WiFi Direct and USB', 'Android Auto on a CarLife car', 'Phone apps side by side, resizable', 'Mirror your phone', 'Gear actions for screen and sound', 'Steering wheel double press', 'Car microphone for the assistant', 'Music, videos and song info', 'English, Arabic and Kurdish', 'Light and dark']
   const fe = feats.map(x => { const e = el('div', 'chip', wrap, x); css(e, { fontSize: '23px' }); return e })
   const by = el('div', '', wrap, 'Made by OneAboveAll1964 · github.com/OneAboveAll1964')
   const credit = el('div', '', wrap, 'FT is an independent app, not affiliated with Baidu, Google or Toyota.<br>Big Buck Bunny (c) copyright 2008, Blender Foundation / www.bigbuckbunny.org, CC BY 3.0 (creativecommons.org/licenses/by/3.0) · Map: Google Maps · Music: Apple Loops')
