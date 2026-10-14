@@ -1,7 +1,7 @@
 # FT
 
-<p align="center"><a href="docs/ft-tour.mp4"><img src="docs/ft-tour.gif" alt="FT on the car and the phone: the car home, two phone apps side by side, swap and full screen, reverse gear, and the phone app in every language" width="100%"></a></p>
-<p align="center"><a href="docs/ft-tour.mp4"><b>Watch the full tour</b></a> (86 seconds, with sound)</p>
+<p align="center"><a href="docs/ft-tour.mp4"><img src="docs/ft-tour.gif" alt="FT on the car and the phone: two phone apps side by side, swap and full screen, reverse gear, and the phone app in every language" width="100%"></a></p>
+<p align="center"><a href="docs/ft-tour.mp4"><b>Watch the full tour</b></a> (2½ minutes, with sound)</p>
 
 FT turns an Android phone into the phone side of Baidu CarLife, so a Chinese-market head unit shows FT's own launcher on the car display. From there the car can show the phone's real Android Auto with one button, mirror any phone app with the car's touchscreen driving it, or run real phone apps side by side on the car while the phone screen stays dark.
 
@@ -96,7 +96,7 @@ Every protocol message is logged with its bytes on the Log tab, so a head unit's
 
 ## Tour video
 
-`tools/video/` makes the tour above. Real car and phone screenshots from the emulator sit on one timed HTML page, headless Chrome draws it frame by frame, and ffmpeg encodes the frames. After `npm install`, `node render.mjs --fps=60 --audio=<soundtrack> --out=<file>` renders the whole video, and `--stills=14,38.5` saves single frames to check a moment.
+`tools/video/` makes the tour above. Real car and phone screenshots from the emulator sit on one timed HTML page, headless Chrome draws it frame by frame, and ffmpeg encodes the frames. The story pauses wherever there is something to read, while the background keeps moving. After `npm install`, `./music.sh` mixes the soundtrack from Apple Loops on the Mac, `node render.mjs --fps=60 --audio=out/bed.wav --out=<file>` renders the whole video, `--stills=14,38.5` saves single frames to check a moment, and `--holds=0.4` shortens the pauses, as the moving preview does.
 
 ## Building
 
