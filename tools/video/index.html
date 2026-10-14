@@ -1,0 +1,809 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FT tour</title>
+<link rel="stylesheet" href="node_modules/@fontsource-variable/inter/index.css">
+<link rel="stylesheet" href="node_modules/@fontsource-variable/noto-sans-arabic/index.css">
+<style>
+  :root {
+    --teal: #5fe3c0;
+    --teal-deep: #1f8f78;
+    --ink: #eaf6f2;
+    --muted: #8fa9a6;
+    --bg: #050d13;
+    --glass: rgba(255, 255, 255, 0.06);
+    --line: rgba(255, 255, 255, 0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+  body { font-family: "Inter Variable", "Noto Sans Arabic Variable", sans-serif; font-feature-settings: "ss01", "cv11"; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  #stage { position: absolute; inset: 0; overflow: hidden; background: var(--bg); }
+  .layer { position: absolute; inset: 0; }
+  .glow { position: absolute; border-radius: 50%; filter: blur(120px); will-change: transform; }
+  .grid { position: absolute; inset: -80px; background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 80px 80px; }
+  .scene { position: absolute; inset: 0; visibility: hidden; }
+  .kicker { position: absolute; left: 120px; top: 104px; font-size: 20px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: var(--teal); display: flex; align-items: center; gap: 16px; }
+  .kicker .num { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid rgba(95,227,192,0.5); font-size: 17px; letter-spacing: 0; }
+  .kicker .bar { width: 0; height: 2px; background: var(--teal); }
+  .headline { position: absolute; left: 120px; top: 158px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; }
+  .headline .row { display: block; overflow: hidden; padding-bottom: 0.08em; }
+  .headline .w { display: inline-block; will-change: transform; }
+  .accent { background: linear-gradient(100deg, #5fe3c0 10%, #8ff0ff 55%, #b69cff 95%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .car { position: absolute; background: linear-gradient(160deg, #1a2228, #07090b 60%); border-radius: 34px; padding: 12px; box-shadow: 0 60px 120px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.08); will-change: transform; }
+  .car .screen { position: relative; width: 100%; height: 100%; border-radius: 22px; overflow: hidden; background: #000; }
+  .car .screen img, .phone .screen img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; will-change: transform, opacity; }
+  .car .sheen { position: absolute; inset: 0; border-radius: 22px; background: linear-gradient(115deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 35%); pointer-events: none; }
+  .phone { position: absolute; background: linear-gradient(160deg, #20282e, #06080a 70%); border-radius: 52px; padding: 10px; box-shadow: 0 50px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.07), inset 0 1px 0 rgba(255,255,255,0.1); will-change: transform; }
+  .phone .screen { position: relative; width: 100%; height: 100%; border-radius: 42px; overflow: hidden; background: #000; }
+  .chip { position: absolute; padding: 14px 22px; border-radius: 999px; background: rgba(9, 22, 28, 0.72); border: 1px solid rgba(95,227,192,0.35); font-size: 24px; font-weight: 600; white-space: nowrap; backdrop-filter: blur(14px); box-shadow: 0 12px 30px rgba(0,0,0,0.35); display: flex; align-items: center; gap: 12px; will-change: transform, opacity; }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 14px var(--teal); }
+  .pin { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 2px solid var(--teal); }
+  .pin::after { content: ""; position: absolute; left: 5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
+  svg.lines { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; pointer-events: none; }
+  .card { position: absolute; width: 600px; height: 108px; border-radius: 24px; background: var(--glass); border: 1px solid var(--line); display: flex; align-items: center; gap: 22px; padding: 0 26px; backdrop-filter: blur(12px); }
+  .card .ico { width: 62px; height: 62px; border-radius: 18px; background: rgba(95,227,192,0.14); display: flex; align-items: center; justify-content: center; flex: none; }
+  .card .ico svg { width: 34px; height: 34px; fill: var(--teal); }
+  .card .t1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+  .card .t2 { font-size: 21px; color: var(--muted); margin-top: 4px; }
+  .step { position: absolute; display: flex; align-items: center; gap: 14px; font-size: 24px; font-weight: 600; }
+  .step .tick { width: 38px; height: 38px; border-radius: 50%; background: var(--teal); display: flex; align-items: center; justify-content: center; }
+  .step .tick svg { width: 24px; height: 24px; fill: #052019; }
+  .feature { position: absolute; left: 120px; display: flex; align-items: center; gap: 20px; font-size: 30px; font-weight: 650; }
+  .feature .ico { width: 64px; height: 64px; border-radius: 20px; background: rgba(95,227,192,0.13); border: 1px solid rgba(95,227,192,0.3); display: flex; align-items: center; justify-content: center; }
+  .feature .ico svg { width: 34px; height: 34px; fill: var(--teal); }
+  .cover { position: absolute; width: 150px; height: 150px; border-radius: 18px; box-shadow: 0 24px 50px rgba(0,0,0,0.5); }
+  .label { position: absolute; font-size: 24px; font-weight: 650; color: var(--ink); text-align: center; white-space: nowrap; z-index: 30; }
+  .label.sub { font-size: 19px; color: var(--muted); font-weight: 500; }
+  .wipe { position: absolute; inset: 0; pointer-events: none; }
+  .bar-w { position: absolute; top: 0; height: 100%; }
+  #chapters { position: absolute; left: 120px; right: 120px; bottom: 44px; height: 4px; display: flex; gap: 10px; }
+  #chapters div { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.10); overflow: hidden; }
+  #chapters div i { display: block; height: 100%; width: 0; background: var(--teal); }
+  .big { font-weight: 900; letter-spacing: -0.06em; line-height: 0.82; }
+  .meter-num { position: absolute; font-weight: 800; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+  .meter-bar { position: absolute; width: 22px; border-radius: 6px; }
+  .gear { position: absolute; width: 120px; height: 104px; display: flex; align-items: center; justify-content: center; font-size: 64px; font-weight: 800; color: rgba(255,255,255,0.28); }
+  .rail { position: absolute; border-radius: 70px; background: var(--glass); border: 1px solid var(--line); }
+  .cap { position: absolute; width: 112px; height: 96px; border-radius: 48px; background: var(--teal); box-shadow: 0 0 40px rgba(95,227,192,0.5); }
+  .rear { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 100%, #3a4b55 0%, #121b21 55%, #070b0e 100%); }
+  .tag { position: absolute; padding: 10px 18px; border-radius: 12px; font-size: 20px; font-weight: 700; letter-spacing: 0.12em; }
+  .ring { position: absolute; border-radius: 50%; border: 3px solid var(--teal); }
+  .foot { position: absolute; font-size: 17px; color: #8fa9a6; font-weight: 500; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="layer" id="bg">
+    <div class="glow" id="g1" style="width:900px;height:900px;background:rgba(95,227,192,0.20)"></div>
+    <div class="glow" id="g2" style="width:1000px;height:1000px;background:rgba(58,123,213,0.16)"></div>
+    <div class="glow" id="g3" style="width:800px;height:800px;background:rgba(182,156,255,0.12)"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <div class="layer" id="scenes"></div>
+  <div class="layer" id="wipes"></div>
+  <div id="chapters"></div>
+</div>
+<script>
+const W = 1920, H = 1080
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
+const E = {
+  lin: x => x,
+  out3: x => 1 - Math.pow(1 - x, 3),
+  io3: x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2,
+  outX: x => x === 1 ? 1 : 1 - Math.pow(2, -10 * x),
+  inX: x => x === 0 ? 0 : Math.pow(2, 10 * x - 10),
+  io5: x => x < 0.5 ? 16 * x ** 5 : 1 - Math.pow(-2 * x + 2, 5) / 2,
+  back: x => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2) },
+}
+const p = (t, a, b, e = E.outX) => e(clamp((t - a) / (b - a)))
+const mix = (a, b, k) => a + (b - a) * k
+const env = (t, a, b, fi = 0.5, fo = 0.45) => Math.min(p(t, a, a + fi, E.out3), 1 - p(t, b - fo, b, E.io3))
+
+function el(tag, cls, parent, html) {
+  const e = document.createElement(tag)
+  if (cls) e.className = cls
+  if (html !== undefined) e.innerHTML = html
+  parent.appendChild(e)
+  return e
+}
+function css(e, s) { for (const k in s) e.style[k] = s[k] }
+const shot = n => `shots/${n}.jpg`
+
+const ICON = {
+  wifi: 'M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z',
+  bt: 'M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z',
+  usb: 'M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2-1.21 0-2.2.99-2.2 2.2 0 .85.5 1.56 1.2 1.93V13c0 1.11.89 2 2 2h3v3.05c-.71.37-1.2 1.1-1.2 1.95 0 1.22.99 2.2 2.2 2.2 1.21 0 2.2-.98 2.2-2.2 0-.85-.49-1.58-1.2-1.95V15h3c1.11 0 2-.89 2-2v-2h1V7h-4z',
+  check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+  music: 'M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z',
+  play: 'M8 5v14l11-7z',
+  info: 'M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z',
+  power: 'M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z',
+  swap: 'M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z',
+}
+const svg = (name, extra = '') => `<svg viewBox="0 0 24 24" ${extra}><path d="${ICON[name]}"/></svg>`
+
+const scenes = el('div', '', document.getElementById('scenes'))
+const wipes = document.getElementById('wipes')
+const lines = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+lines.setAttribute('class', 'lines')
+
+function scene(a, b) {
+  const root = el('div', 'scene', scenes)
+  return { a, b, root }
+}
+
+function kicker(parent, num, text) {
+  const k = el('div', 'kicker', parent, `<span class="num">${num}</span><span class="tx">${text}</span><span class="bar"></span>`)
+  return {
+    el: k,
+    update(t, a, b) {
+      const v = env(t, a, b, 0.6, 0.4)
+      css(k, { opacity: v, transform: `translateX(${(1 - p(t, a, a + 0.8)) * -30}px)` })
+      css(k.querySelector('.bar'), { width: `${p(t, a + 0.2, a + 1.2) * 120}px` })
+    }
+  }
+}
+
+function headline(parent, rows, size, x = 120, y = 158) {
+  const h = el('div', 'headline', parent)
+  css(h, { left: `${x}px`, top: `${y}px`, fontSize: `${size}px` })
+  const words = []
+  rows.forEach(r => {
+    const row = el('span', 'row', h)
+    r.split(' ').forEach((w, i) => {
+      const accent = w.startsWith('*')
+      const span = el('span', 'w' + (accent ? ' accent' : ''), row, (accent ? w.slice(1) : w))
+      words.push(span)
+      el('span', '', row, ' ')
+    })
+  })
+  return {
+    el: h,
+    update(t, a, b) {
+      words.forEach((w, i) => {
+        const inn = p(t, a + i * 0.06, a + i * 0.06 + 0.9)
+        const out = p(t, b - 0.5 + i * 0.03, b - 0.05 + i * 0.03, E.io3)
+        css(w, { transform: `translateY(${(1 - inn) * 110 - out * 110}%)` })
+      })
+    }
+  }
+}
+
+function car(parent, src) {
+  const c = el('div', 'car', parent)
+  const s = el('div', 'screen', c)
+  const imgs = {}
+  src.forEach(n => { const i = el('img', '', s); i.src = shot(n); i.style.opacity = 0; imgs[n] = i })
+  el('div', 'sheen', s)
+  return {
+    c, s, imgs,
+    place(x, y, w, scale = 1, extra = '') {
+      const h = w * 720 / 1920
+      css(c, { left: `${x}px`, top: `${y}px`, width: `${w + 24}px`, height: `${h + 24}px`, transform: `scale(${scale}) ${extra}`, transformOrigin: '50% 50%' })
+      this.x = x; this.y = y; this.w = w
+    },
+    at(cx, cy) { return [this.x + 12 + cx * this.w / 1920, this.y + 12 + cy * this.w / 1920] },
+  }
+}
+
+function phone(parent, src, w) {
+  const c = el('div', 'phone', parent)
+  const s = el('div', 'screen', c)
+  const imgs = {}
+  src.forEach(n => { const i = el('img', '', s); i.src = shot(n); i.style.opacity = 0; imgs[n] = i })
+  const h = w * 2992 / 1344
+  css(c, { width: `${w + 20}px`, height: `${h + 20}px` })
+  return { c, s, imgs, w, h }
+}
+
+function chip(parent, html) {
+  return el('div', 'chip', parent, `<span class="dot"></span>${html}`)
+}
+
+function showChip(e, t, a, b, x, y, from = 'up') {
+  const v = env(t, a, b, 0.5, 0.35)
+  const d = (1 - p(t, a, a + 0.6, E.back)) * 24
+  css(e, { left: `${x}px`, top: `${y}px`, opacity: v, transform: `translateY(${from === 'up' ? d : -d}px) scale(${mix(0.92, 1, p(t, a, a + 0.5))})` })
+}
+
+function screenSeq(imgs, t, seq, style = 'fade') {
+  seq.forEach(([name, a, b], i) => {
+    const img = imgs[name]
+    const fi = i === 0 ? 0.001 : (style === 'push' ? 0.6 : 0.4)
+    const vin = p(t, a, a + fi, style === 'push' ? E.io5 : E.io3)
+    let clip = 'none', op = vin
+    if (style === 'push') { clip = `inset(${(1 - vin) * 100}% 0 0 0)`; op = 1 }
+    const gone = t > b + 0.65 && i < seq.length - 1
+    css(img, { opacity: t < a || gone ? 0 : op, clipPath: clip, zIndex: i + 1 })
+  })
+}
+
+function line(x1, y1, x2, y2) {
+  const l = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  l.setAttribute('d', `M${x1} ${y1} L${x2} ${y2}`)
+  l.setAttribute('stroke', '#5fe3c0')
+  l.setAttribute('stroke-width', '2')
+  l.setAttribute('fill', 'none')
+  const len = Math.hypot(x2 - x1, y2 - y1)
+  l.setAttribute('stroke-dasharray', `${len}`)
+  l.dataset.len = len
+  return l
+}
+function drawLine(l, t, a, b) {
+  const v = p(t, a, a + 0.6, E.io3)
+  const len = +l.dataset.len
+  l.setAttribute('stroke-dashoffset', `${len * (1 - v)}`)
+  l.setAttribute('opacity', `${env(t, a, b, 0.2, 0.3)}`)
+}
+
+function callout(parent, svgRoot) {
+  const pin = el('div', 'pin', parent)
+  const ch = chip(parent, '')
+  const ln = line(0, 0, 0, 0)
+  svgRoot.appendChild(ln)
+  return {
+    set(html, px, py, cx, cy) {
+      ch.innerHTML = `<span class="dot"></span>${html}`
+      this.px = px; this.py = py; this.cx = cx; this.cy = cy
+      const r = ch.getBoundingClientRect()
+      ln.setAttribute('d', `M${px} ${py} L${cx} ${cy}`)
+      const len = Math.hypot(cx - px, cy - py)
+      ln.setAttribute('stroke-dasharray', `${len}`)
+      ln.dataset.len = len
+    },
+    update(t, a, b, lx, ly) {
+      drawLine(ln, t, a, b)
+      const v = env(t, a, b, 0.3, 0.3)
+      css(pin, { left: `${this.px}px`, top: `${this.py}px`, opacity: v, transform: `scale(${mix(0.3, 1, p(t, a, a + 0.4, E.back))})` })
+      showChip(ch, t, a + 0.35, b, lx, ly)
+    }
+  }
+}
+
+const S = []
+
+{
+  const s = scene(0, 5)
+  const wrap = el('div', 'layer', s.root)
+  const logo = el('div', 'big', wrap)
+  css(logo, { position: 'absolute', left: '0', width: '1920px', top: '300px', textAlign: 'center', fontSize: '330px' })
+  const F = el('span', 'accent', logo, 'F'), T2 = el('span', 'accent', logo, 'T')
+  ;[F, T2].forEach(e => css(e, { display: 'inline-block' }))
+  const rule = el('div', '', wrap)
+  css(rule, { position: 'absolute', top: '612px', height: '3px', left: '760px', width: '400px', background: 'linear-gradient(90deg, transparent, #5fe3c0, transparent)' })
+  const sub = el('div', '', wrap, 'Your phone, on your car’s screen.')
+  css(sub, { position: 'absolute', left: '0', width: '1920px', top: '650px', textAlign: 'center', fontSize: '50px', fontWeight: '700', letterSpacing: '-0.02em' })
+  const tags = ['For Baidu CarLife cars', 'Android Auto', 'Phone apps', 'Gear actions', 'Arabic · Kurdish'].map((x, i) => {
+    const e = el('div', 'chip', wrap, x)
+    css(e, { top: '760px', fontSize: '22px', padding: '10px 20px' })
+    return e
+  })
+  const rings = [0, 1, 2].map(() => el('div', 'ring', wrap))
+  s.update = t => {
+    ;[F, T2].forEach((e, i) => {
+      const v = p(t, 0.3 + i * 0.12, 1.5 + i * 0.12)
+      css(e, { transform: `translateY(${(1 - v) * 120}px) scale(${mix(0.8, 1, v)})`, opacity: v, filter: `blur(${(1 - v) * 18}px)` })
+    })
+    css(rule, { transform: `scaleX(${p(t, 1.1, 2.1, E.io3)})`, opacity: 1 - p(t, 4.2, 4.6) })
+    const sv = p(t, 1.4, 2.3)
+    css(sub, { opacity: sv, transform: `translateY(${(1 - sv) * 30}px)` })
+    let x = 960 - (tags.reduce((a, e) => a + e.offsetWidth + 16, 0) - 16) / 2
+    tags.forEach((e, i) => {
+      const v = p(t, 2.2 + i * 0.12, 2.9 + i * 0.12, E.back)
+      css(e, { left: `${x}px`, opacity: clamp(v), transform: `translateY(${(1 - v) * 20}px)` })
+      x += e.offsetWidth + 16
+    })
+    rings.forEach((r, i) => {
+      const k = ((t - 0.2 - i * 0.9) / 2.7)
+      const v = k < 0 ? 0 : k % 1
+      const d = mix(200, 1400, E.out3(v))
+      css(r, { width: `${d}px`, height: `${d}px`, left: `${960 - d / 2}px`, top: `${450 - d / 2}px`, opacity: (1 - v) * 0.35 * (k < 0 ? 0 : 1) * (1 - p(t, 4.2, 4.7)) })
+    })
+    css(wrap, { transform: `scale(${mix(1, 0.94, p(t, 4.1, 4.9, E.io3))})`, filter: `blur(${p(t, 4.2, 4.9) * 6}px)` })
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(5, 12)
+  const k = kicker(s.root, '01', 'Connect')
+  const h = headline(s.root, ['Joins your car', 'the way it *likes.'], 86)
+  const modes = [
+    ['wifi', 'Hotspot', 'Your car joins the phone’s hotspot'],
+    ['bt', 'WiFi + BL', 'Bluetooth wakes it, WiFi Direct links it'],
+    ['usb', 'USB', 'One cable, all six channels'],
+  ].map(([ic, a, b]) => el('div', 'card', s.root, `<div class="ico">${svg(ic)}</div><div><div class="t1">${a}</div><div class="t2">${b}</div></div>`))
+  const cr = car(s.root, ['car-home'])
+  const ph = phone(s.root, ['phone-home'], 240)
+  const searching = el('div', 'layer', cr.s)
+  css(searching, { background: 'radial-gradient(circle at 50% 50%, #0d1c24, #030607)', zIndex: 5 })
+  const pr = [0, 1, 2].map(() => el('div', 'ring', searching))
+  const steps = ['Hotspot on', 'Car connected', 'On the car screen'].map(x => el('div', 'step', s.root, `<span class="tick">${svg('check')}</span>${x}`))
+  const flow = line(0, 0, 0, 0)
+  const svgR = lines.cloneNode()
+  s.root.appendChild(svgR)
+  svgR.appendChild(flow)
+  s.update = t => {
+    k.update(t, 5.2, 11.7)
+    h.update(t, 5.3, 11.7)
+    modes.forEach((m, i) => {
+      const v = p(t, 5.9 + i * 0.16, 6.9 + i * 0.16)
+      const o = 1 - p(t, 11.2, 11.6)
+      css(m, { left: '120px', top: `${468 + i * 128}px`, opacity: v * o, transform: `translateX(${(1 - v) * -60}px)` })
+      css(m, { borderColor: i === 0 ? `rgba(95,227,192,${0.15 + 0.5 * p(t, 7.0, 7.6)})` : 'rgba(255,255,255,0.12)' })
+    })
+    const cv = p(t, 5.6, 6.8)
+    cr.place(760, 230, 800, mix(0.94, 1, cv), `translateY(${(1 - cv) * 40}px)`)
+    css(cr.c, { opacity: cv * (1 - p(t, 11.2, 11.6)) })
+    css(cr.imgs['car-home'], { opacity: 1, transform: `scale(${mix(1.08, 1, p(t, 8.7, 10.2))})` })
+    const sOff = p(t, 8.6, 9.2, E.io3)
+    css(searching, { opacity: 1 - sOff, clipPath: `inset(${sOff * 100}% 0 0 0)` })
+    pr.forEach((r, i) => {
+      const k2 = (t - 6 - i * 0.6) / 1.8
+      const v2 = k2 < 0 ? 0 : k2 % 1
+      const d = mix(40, 560, E.out3(v2))
+      css(r, { width: `${d}px`, height: `${d}px`, left: `${400 - d / 2}px`, top: `${150 - d / 2}px`, opacity: (1 - v2) * 0.6 })
+    })
+    const pv = p(t, 6.1, 7.2)
+    css(ph.c, { left: '1556px', top: '420px', opacity: pv * (1 - p(t, 11.2, 11.6)), transform: `translateY(${(1 - pv) * 80}px) rotate(${mix(6, 0, pv)}deg)` })
+    css(ph.imgs['phone-home'], { opacity: 1 })
+    steps.forEach((e, i) => {
+      const a = 7.2 + i * 0.7
+      const v = p(t, a, a + 0.6, E.back)
+      css(e, { left: '800px', top: `${640 + i * 64}px`, opacity: clamp(v) * (1 - p(t, 11.2, 11.6)), transform: `translateX(${(1 - v) * 30}px)` })
+      css(e.querySelector('.tick'), { transform: `scale(${clamp(v, 0, 1.2)})` })
+    })
+    flow.setAttribute('d', 'M1562 700 C 1500 700, 1480 610, 1450 556')
+    flow.setAttribute('stroke-dasharray', '10 12')
+    flow.setAttribute('stroke-dashoffset', `${-t * 60}`)
+    flow.setAttribute('opacity', `${env(t, 7.0, 11.5, 0.5, 0.4) * 0.9}`)
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(12, 21)
+  const k = kicker(s.root, '02', 'On the car')
+  const h = headline(s.root, ['A car home that’s *yours.'], 80)
+  const cr = car(s.root, ['car-home-playing', 'car-look-sunset', 'car-look-arabic'])
+  const svgR = lines.cloneNode()
+  s.root.appendChild(svgR)
+  const cs = [0, 1, 2, 3].map(() => callout(s.root, svgR))
+  const edge = el('div', '', cr.s)
+  css(edge, { position: 'absolute', top: '0', width: '6px', height: '100%', background: '#5fe3c0', boxShadow: '0 0 30px #5fe3c0', zIndex: 20 })
+  const look1 = chip(s.root, 'Backgrounds, colours or your own photo')
+  const look2 = chip(s.root, 'Right to left in Arabic and Kurdish')
+  let ready = false
+  s.update = t => {
+    k.update(t, 12.2, 20.6)
+    h.update(t, 12.3, 20.6)
+    const cv = p(t, 12.4, 13.6)
+    cr.place(320, 360, 1280, mix(0.92, 1, cv), `translateY(${(1 - cv) * 60}px)`)
+    css(cr.c, { opacity: cv })
+    if (!ready) {
+      const a = cr.at(150, 120), b = cr.at(100, 445), c = cr.at(120, 620), d = cr.at(1400, 360)
+      cs[0].set('Clock, weather and phone battery', a[0], a[1], 520, 338)
+      cs[1].set('Now playing, with controls', b[0], b[1], 280, 905)
+      cs[2].set('Android Auto in one tap', c[0], c[1], 820, 905)
+      cs[3].set('Your tiles, your order', d[0], d[1], d[0], 338)
+      ready = true
+    }
+    cs[0].update(t, 13.5, 16.8, 440, 276)
+    cs[1].update(t, 13.9, 16.8, 120, 905)
+    cs[2].update(t, 14.3, 16.8, 790, 905)
+    cs[3].update(t, 14.7, 16.8, 1170, 276)
+    const w1 = p(t, 16.9, 17.6, E.io3)
+    const w2 = p(t, 18.5, 19.2, E.io3)
+    css(cr.imgs['car-home-playing'], { opacity: 1 })
+    css(cr.imgs['car-look-sunset'], { opacity: 1, clipPath: `inset(0 ${(1 - w1) * 100}% 0 0)` })
+    css(cr.imgs['car-look-arabic'], { opacity: 1, clipPath: `circle(${w2 * 120}% at 50% 50%)` })
+    css(edge, { left: `calc(${w1 * 100}% - 3px)`, opacity: w1 > 0 && w1 < 1 ? 1 : 0 })
+    showChip(look1, t, 17.2, 18.6, 700, 905)
+    showChip(look2, t, 18.7, 20.6, 730, 905)
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(21, 29)
+  const k = kicker(s.root, '03', 'Music & video')
+  const h = headline(s.root, ['Your music and videos,', '*built in.'], 80)
+  const cr = car(s.root, ['car-songs', 'car-now-playing', 'car-videos', 'car-video-playing'])
+  const feats = [
+    ['music', 'Your songs and albums', 21.8],
+    ['info', 'Now playing, with cover art', 23.8],
+    ['play', 'Your videos, full screen', 25.8],
+  ].map(([ic, x, a]) => ({ e: el('div', 'feature', s.root, `<div class="ico">${svg(ic)}</div>${x}`), a }))
+  const covers = [0, 1, 2, 3, 4, 5].map(i => { const c = el('img', 'cover', s.root); c.src = shot(`cover-${i}`); return c })
+  s.update = t => {
+    k.update(t, 21.2, 28.6)
+    h.update(t, 21.3, 28.6)
+    const cv = p(t, 21.5, 22.7)
+    cr.place(800, 300, 976, mix(0.94, 1, cv), `translateX(${(1 - cv) * 80}px)`)
+    css(cr.c, { opacity: cv })
+    screenSeq(cr.imgs, t, [['car-songs', 21.5, 23.6], ['car-now-playing', 23.6, 25.6], ['car-videos', 25.6, 27.2], ['car-video-playing', 27.2, 29]], 'push')
+    feats.forEach(({ e, a }, i) => {
+      const v = p(t, a, a + 0.7)
+      css(e, { top: `${470 + i * 100}px`, opacity: v * (1 - p(t, 28.3, 28.7)), transform: `translateX(${(1 - v) * -40}px)` })
+    })
+    covers.forEach((c, i) => {
+      const v = p(t, 22 + i * 0.15, 23 + i * 0.15)
+      const x = 800 + i * 170 - (t - 21) * 3
+      const y = 750 + Math.sin(t * 1.3 + i) * 8
+      css(c, { left: `${x}px`, top: `${y}px`, opacity: v * 0.9 * (1 - p(t, 28.2, 28.7)), transform: `rotate(${(i % 2 ? 1 : -1) * 4}deg) scale(${mix(0.8, 1, v)})` })
+    })
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(29, 45)
+  const k = kicker(s.root, '04', 'Apps on the car')
+  const h = headline(s.root, ['Real phone apps.', '*Right on the car.'], 76)
+  const cr = car(s.root, ['car-cast-one', 'car-cast-two', 'car-cast-swapped', 'car-cast-full', 'car-cast-hidden'])
+  const svgR = lines.cloneNode()
+  s.root.appendChild(svgR)
+  const c1 = callout(s.root, svgR)
+  const chips = ['Two apps side by side', 'Swap sides', 'Full screen, edge to edge', 'Hide apps for more room', 'Apps always stay upright'].map(x => chip(s.root, x))
+  const needs = el('div', 'foot', s.root, 'Needs root, or one command from a computer, once')
+  const credit4 = el('div', 'foot', s.root, 'Map: Google Maps · Video: Big Buck Bunny © Blender Foundation, CC BY 3.0')
+  const seam = el('div', '', cr.s)
+  css(seam, { position: 'absolute', left: '50%', top: '0', width: '4px', marginLeft: '-2px', background: '#5fe3c0', boxShadow: '0 0 24px #5fe3c0', zIndex: 20 })
+  const swapIco = el('div', '', cr.s, svg('swap', 'style="width:100%;height:100%;fill:#052019"'))
+  css(swapIco, { position: 'absolute', width: '120px', height: '120px', left: '50%', top: '50%', margin: '-60px', borderRadius: '50%', background: '#5fe3c0', padding: '22px', zIndex: 21, boxShadow: '0 0 60px rgba(95,227,192,0.6)' })
+  const corners = [0, 1, 2, 3].map(() => el('div', '', s.root))
+  corners.forEach(c => css(c, { position: 'absolute', width: '60px', height: '60px', borderColor: '#5fe3c0', borderStyle: 'solid', borderWidth: '0' }))
+  const ph = phone(s.root, ['phone-home'], 250)
+  const dark = el('div', 'layer', ph.s)
+  css(dark, { background: '#000', zIndex: 5 })
+  const pw = el('div', '', ph.c, svg('power', 'style="width:100%;height:100%;fill:#5fe3c0"'))
+  css(pw, { position: 'absolute', right: '-70px', top: '220px', width: '52px', height: '52px' })
+  const pwRing = el('div', 'ring', ph.c)
+  const darkChips = ['Phone screen goes dark', 'Power button to use the phone'].map(x => chip(s.root, x))
+  let ready = false
+  s.update = t => {
+    k.update(t, 29.2, 44.6)
+    h.update(t, 29.3, 44.6)
+    const cv = p(t, 29.5, 30.7)
+    const full = p(t, 37.4, 38.3, E.io3) * (1 - p(t, 39.9, 40.7, E.io3))
+    css(h.el, { opacity: 1 - full })
+    css(k.el, { opacity: +k.el.style.opacity * (1 - full) })
+    css(needs, { left: '120px', top: '330px', opacity: env(t, 30.2, 37.2, 0.6, 0.5) * (1 - full) })
+    css(credit4, { left: '120px', top: '1000px', opacity: env(t, 32.2, 44.6, 0.6, 0.4) * 0.9 })
+    const shrink = p(t, 41.8, 42.6, E.io3)
+    const w = mix(mix(1440, 1640, full), 1100, shrink)
+    const x = mix(mix(228, 128, full), 120, shrink)
+    const y = mix(mix(345, 205, full), 380, shrink)
+    cr.place(x, y, w, mix(0.94, 1, cv), `translateY(${(1 - cv) * 60}px)`)
+    css(cr.c, { opacity: cv })
+    screenSeq(cr.imgs, t, [['car-cast-one', 29.5, 32.2], ['car-cast-two', 32.2, 35.0], ['car-cast-swapped', 35.0, 37.6], ['car-cast-full', 37.6, 40.1], ['car-cast-hidden', 40.1, 45]], 'fade')
+    if (!ready) { ready = true }
+    const dock = cr.at(1000, 627)
+    c1.set('Pick apps from your own list', dock[0], dock[1], 1240, 950)
+    c1.update(t, 30.2, 32.5, 1180, 952)
+    showChip(chips[0], t, 32.6, 34.9, 799, 952)
+    css(seam, { height: `${p(t, 32.6, 33.4, E.io3) * 100}%`, opacity: env(t, 32.6, 35.0, 0.3, 0.3) })
+    const sv = env(t, 35.1, 37.3, 0.4, 0.4)
+    css(swapIco, { opacity: sv, transform: `scale(${mix(0.4, 1, p(t, 35.1, 35.6, E.back))}) rotate(${p(t, 35.3, 36.3, E.io3) * 180}deg)` })
+    showChip(chips[1], t, 35.3, 37.3, 860, 952)
+    showChip(chips[2], t, 37.9, 39.9, 560, 870)
+    showChip(chips[4], t, 38.1, 39.9, 944, 870)
+    const bx = cr.x, by = cr.y, bw = cr.w + 24, bh = cr.w * 720 / 1920 + 24
+    const cvv = env(t, 37.6, 39.9, 0.5, 0.4)
+    const off = (1 - p(t, 37.6, 38.4, E.back)) * 30 - 18
+    ;[[bx - off, by - off, 'Top', 'Left'], [bx + bw + off - 60, by - off, 'Top', 'Right'], [bx - off, by + bh + off - 60, 'Bottom', 'Left'], [bx + bw + off - 60, by + bh + off - 60, 'Bottom', 'Right']].forEach(([cx, cy, v, hz], i) => {
+      css(corners[i], { left: `${cx}px`, top: `${cy}px`, opacity: cvv, borderTopWidth: v === 'Top' ? '4px' : '0', borderBottomWidth: v === 'Bottom' ? '4px' : '0', borderLeftWidth: hz === 'Left' ? '4px' : '0', borderRightWidth: hz === 'Right' ? '4px' : '0' })
+    })
+    showChip(chips[3], t, 40.3, 41.9, 800, 952)
+    const pv = p(t, 42.0, 42.9)
+    css(ph.c, { left: '1420px', top: '170px', opacity: pv, transform: `translateX(${(1 - pv) * 120}px)` })
+    css(ph.imgs['phone-home'], { opacity: 1 })
+    const lit = p(t, 43.5, 43.9, E.io3)
+    css(dark, { opacity: 1 - lit })
+    const press = p(t, 43.2, 43.8)
+    css(pw, { opacity: pv, transform: `scale(${1 - Math.sin(press * Math.PI) * 0.2})` })
+    const rr = mix(52, 140, press)
+    css(pwRing, { width: `${rr}px`, height: `${rr}px`, right: `${-70 - (rr - 52) / 2}px`, top: `${220 - (rr - 52) / 2}px`, opacity: (1 - press) * (press > 0 ? 1 : 0) })
+    showChip(darkChips[0], t, 42.5, 43.6, 1379, 770)
+    showChip(darkChips[1], t, 43.3, 44.8, 1343, 850)
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(45, 49)
+  const k = kicker(s.root, '05', 'Mirror')
+  const h = headline(s.root, ['Or mirror *your phone.'], 80)
+  const cr = car(s.root, ['car-mirror'])
+  const svgR = lines.cloneNode()
+  s.root.appendChild(svgR)
+  const c1 = callout(s.root, svgR), c2 = callout(s.root, svgR)
+  s.update = t => {
+    k.update(t, 45.2, 48.6)
+    h.update(t, 45.3, 48.6)
+    const cv = p(t, 45.4, 46.5)
+    cr.place(260, 320, 1400, mix(0.94, 1, cv), `translateY(${(1 - cv) * 50}px)`)
+    css(cr.c, { opacity: cv })
+    css(cr.imgs['car-mirror'], { opacity: 1 })
+    const a = cr.at(260, 685), b = cr.at(960, 260)
+    c1.set('Phone keys right on the car', a[0], a[1], 300, 905)
+    c2.set('Your phone, live on the car', b[0], b[1], 1420, 311)
+    c1.update(t, 45.9, 48.7, 260, 905)
+    c2.update(t, 46.3, 48.7, 1300, 248)
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(49, 59)
+  const k = kicker(s.root, '06', 'Gears & steering wheel')
+  const hA = headline(s.root, ['Shift into reverse.', '*FT knows.'], 76)
+  const hB = headline(s.root, ['Press twice', 'for *more.'], 76)
+  const rail = el('div', 'rail', s.root)
+  const cap = el('div', 'cap', s.root)
+  const gears = ['P', 'R', 'N', 'D'].map(x => el('div', 'gear', s.root, x))
+  const cr = car(s.root, ['car-home-playing'])
+  const rear = el('div', 'rear', cr.s)
+  rear.innerHTML = `<svg viewBox="0 0 960 360" style="position:absolute;inset:0;width:100%;height:100%">
+    <path d="M250 360 L400 150" stroke="#ff5a4e" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M710 360 L560 150" stroke="#ff5a4e" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M300 290 L660 290" stroke="#ff5a4e" stroke-width="8"/>
+    <path d="M345 225 L615 225" stroke="#ffd166" stroke-width="7"/>
+    <path d="M385 170 L575 170" stroke="#5fe3c0" stroke-width="6"/>
+  </svg>`
+  css(rear, { zIndex: 5 })
+  const rearTag = el('div', 'tag', rear, 'REAR CAMERA')
+  css(rearTag, { left: '24px', top: '20px', background: 'rgba(0,0,0,0.5)', color: '#fff' })
+  const camChip = chip(s.root, 'The car’s own screen, for the camera')
+  const num = el('div', 'meter-num', s.root)
+  const bars = Array.from({ length: 10 }, () => el('div', 'meter-bar', s.root))
+  const mLabel = el('div', 'label sub', s.root, 'FT’s sound to the car')
+  const downChip = chip(s.root, 'Or turn it down, if you choose')
+  const upChip = chip(s.root, 'Back up when you shift out')
+  const wheel = el('div', '', s.root)
+  wheel.innerHTML = `<svg viewBox="0 0 400 400" style="width:100%;height:100%">
+    <circle cx="200" cy="200" r="170" stroke="#d7e4e1" stroke-width="34" fill="none" opacity="0.9"/>
+    <circle cx="200" cy="200" r="60" fill="#1b262c" stroke="#d7e4e1" stroke-width="10"/>
+    <path d="M30 210 L140 210 M260 210 L370 210 M200 260 L200 370" stroke="#d7e4e1" stroke-width="30" stroke-linecap="round"/>
+    <rect id="btn" x="286" y="168" width="54" height="34" rx="12" fill="#5fe3c0"/>
+  </svg>`
+  const presses = [0, 1].map(() => el('div', 'ring', s.root))
+  const x2 = el('div', 'big accent', s.root, '×2')
+  const aaChip = chip(s.root, 'Next, pressed twice → Android Auto')
+  const ph = phone(s.root, ['phone-gears'], 300)
+  const hl = el('div', '', ph.s)
+  css(hl, { position: 'absolute', left: '3%', width: '94%', borderRadius: '18px', border: '3px solid #5fe3c0', zIndex: 5 })
+  s.update = t => {
+    k.update(t, 49.2, 58.6)
+    hA.update(t, 49.3, 55.4)
+    hB.update(t, 55.7, 58.6)
+    const A = env(t, 49.4, 55.6, 0.7, 0.5)
+    css(rail, { left: '150px', top: '420px', width: '140px', height: '440px', opacity: A })
+    const g = t < 50.8 ? 0 : t < 53.4 ? mix(0, 1, p(t, 50.8, 51.3, E.io3)) : mix(1, 3, p(t, 53.4, 54.0, E.io3))
+    css(cap, { left: '164px', top: `${432 + g * 104}px`, opacity: A })
+    gears.forEach((e, i) => css(e, { left: '160px', top: `${428 + i * 104}px`, opacity: A, color: Math.abs(g - i) < 0.3 ? '#052019' : 'rgba(255,255,255,0.3)' }))
+    cr.place(430, 450, 860, mix(0.95, 1, p(t, 49.6, 50.6)), '')
+    css(cr.c, { opacity: A })
+    css(cr.imgs['car-home-playing'], { opacity: 1 })
+    const r = p(t, 51.0, 51.6, E.io3) * (1 - p(t, 53.5, 54.1, E.io3))
+    css(rear, { clipPath: `inset(0 0 ${(1 - r) * 100}% 0)` })
+    showChip(camChip, t, 51.4, 53.4, 624, 880)
+    const lvl = t < 51.2 ? 100 : t < 53.6 ? mix(100, 20, p(t, 51.2, 52.2, E.io3)) : mix(20, 100, p(t, 53.6, 54.6, E.io3))
+    css(num, { left: '1400px', top: '430px', fontSize: '150px', opacity: A })
+    num.textContent = `${Math.round(lvl)}%`
+    bars.forEach((b, i) => {
+      const on = (i + 1) * 10 <= Math.round(lvl) + 0.5
+      css(b, { left: `${1410 + i * 32}px`, top: `${720 - i * 12}px`, height: `${60 + i * 12}px`, background: on ? '#5fe3c0' : 'rgba(255,255,255,0.1)', opacity: A, boxShadow: on ? '0 0 20px rgba(95,227,192,0.4)' : 'none' })
+    })
+    css(mLabel, { left: '1410px', top: '820px', opacity: A })
+    showChip(downChip, t, 51.9, 53.4, 1400, 880)
+    showChip(upChip, t, 53.7, 55.5, 1400, 880)
+    const B = env(t, 55.8, 59, 0.6, 0.4)
+    css(wheel, { position: 'absolute', left: '170px', top: '400px', width: '440px', height: '440px', opacity: B, transform: `rotate(${mix(-12, 0, p(t, 55.8, 56.8))}deg) scale(${mix(0.9, 1, p(t, 55.8, 56.8))})` })
+    presses.forEach((r2, i) => {
+      const a = 56.5 + i * 0.35
+      const v = p(t, a, a + 0.7, E.out3)
+      const d = mix(40, 180, v)
+      css(r2, { left: `${170 + 313 * 1.1 - d / 2}px`, top: `${400 + 185 * 1.1 - d / 2}px`, width: `${d}px`, height: `${d}px`, opacity: (t > a ? 1 - v : 0) * B })
+    })
+    const xv = p(t, 56.6, 57.2, E.back)
+    css(x2, { position: 'absolute', left: '660px', top: '480px', fontSize: '150px', opacity: clamp(xv) * B, transform: `scale(${xv})` })
+    showChip(aaChip, t, 57.1, 58.7, 660, 700)
+    const pv = p(t, 55.9, 56.9)
+    css(ph.c, { left: '1360px', top: '150px', opacity: pv * B, transform: `translateY(${(1 - pv) * 90}px)` })
+    css(ph.imgs['phone-gears'], { opacity: 1 })
+    css(hl, { top: '35.3%', height: '7%', opacity: env(t, 57.0, 58.8, 0.4, 0.3) })
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(59, 68)
+  const k = kicker(s.root, '07', 'The phone app')
+  const h = headline(s.root, ['Set it up once.', '*Tweak everything.'], 76)
+  const list = [['phone-home', 'Connect'], ['phone-car-screen', 'Preview your car screen'], ['phone-apps-on-car', 'Apps on the car'], ['phone-log-dark', 'Every message, logged']]
+  const phones = list.map(([n]) => phone(s.root, [n], 230))
+  const labels = list.map(([, l]) => el('div', 'label', s.root, l))
+  s.update = t => {
+    k.update(t, 59.2, 67.6)
+    h.update(t, 59.3, 67.6)
+    phones.forEach((ph, i) => {
+      const a = 59.7 + i * 0.16
+      const v = p(t, a, a + 1.1)
+      const drift = (t - 60) * -4
+      const x = 250 + i * 400 + drift
+      const y = 372 + (i % 2) * 20
+      const f = E.io3(clamp(1 - Math.abs((t - 61.2) / 1.4 - i) * 1.4))
+      css(ph.c, { left: `${x}px`, top: `${y}px`, opacity: v * (1 - p(t, 67.3, 67.7)), transform: `perspective(1600px) translateY(${(1 - v) * 160 - f * 12}px) rotateY(${mix(-24, -8, v) + f * 8}deg) scale(${1 + f * 0.04})` })
+      css(ph.imgs[list[i][0]], { opacity: 1 })
+      css(labels[i], { left: `${x - 38}px`, width: '330px', top: '958px', color: f > 0.5 ? '#5fe3c0' : '', opacity: p(t, a + 0.6, a + 1.2) * (1 - p(t, 67.3, 67.7)) })
+    })
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(68, 74)
+  const k = kicker(s.root, '08', 'Languages & looks')
+  const h = headline(s.root, ['Speaks *your language.'], 76)
+  const list = [['phone-home', 'English'], ['phone-home-ar', 'العربية'], ['phone-home-ckb', 'سۆرانی'], ['phone-home-kmr', 'بادینی'], ['phone-home-dark', 'Dark']]
+  const phones = list.map(([n]) => phone(s.root, [n], 230))
+  const labels = list.map(([, l]) => el('div', 'label', s.root, l))
+  s.update = t => {
+    k.update(t, 68.2, 73.6)
+    h.update(t, 68.3, 73.6)
+    const fan = p(t, 68.8, 70.2, E.io3)
+    phones.forEach((ph, i) => {
+      const off = i - 2
+      const v = p(t, 68.5 + Math.abs(off) * 0.05, 69.4 + Math.abs(off) * 0.05)
+      const x = 960 - 125 + off * mix(40, 300, fan)
+      const y = 330 + Math.abs(off) * mix(4, 26, fan)
+      css(ph.c, { left: `${x}px`, top: `${y}px`, zIndex: 10 - Math.abs(off), opacity: v * (1 - p(t, 73.3, 73.7)), transform: `rotate(${off * mix(2, 7, fan)}deg) translateY(${(1 - v) * 120}px)`, transformOrigin: '50% 120%' })
+      css(ph.imgs[list[i][0]], { opacity: 1 })
+      css(labels[i], { left: `${x}px`, width: '250px', top: `${y + 552}px`, opacity: p(t, 70.0 + i * 0.1, 70.6 + i * 0.1) * (1 - p(t, 73.3, 73.7)) })
+    })
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(74, 78)
+  const k = kicker(s.root, '09', 'Always ready')
+  const h = headline(s.root, ['Starts with', '*your car.'], 86)
+  const lines2 = ['Leave it on, and FT starts when your car’s Bluetooth connects', 'Switch it on or off from Quick Settings'].map(x => el('div', 'feature', s.root, x))
+  const ph = phone(s.root, ['phone-quick-settings'], 330)
+  const ring = el('div', 'ring', s.root)
+  const tag = chip(s.root, 'FT')
+  s.update = t => {
+    k.update(t, 74.2, 77.6)
+    h.update(t, 74.3, 77.6)
+    lines2.forEach((e, i) => {
+      const v = p(t, 74.8 + i * 0.4, 75.6 + i * 0.4)
+      css(e, { top: `${520 + i * 80}px`, fontSize: '32px', fontWeight: '600', color: '#cfe3df', opacity: v * (1 - p(t, 77.3, 77.7)), transform: `translateX(${(1 - v) * -40}px)` })
+    })
+    const pv = p(t, 74.5, 75.5)
+    const px = 1320, py = 120
+    css(ph.c, { left: `${px}px`, top: `${py}px`, opacity: pv * (1 - p(t, 77.3, 77.7)), transform: `translateY(${(1 - pv) * 100}px)` })
+    css(ph.imgs['phone-quick-settings'], { opacity: 1 })
+    const tx = px + 10 + 127 / 896 * 330, ty = py + 10 + 533 / 1995 * (330 * 2992 / 1344)
+    const rv = p(t, 75.6, 76.3, E.back)
+    const d = mix(260, 96, clamp(rv))
+    css(ring, { left: `${tx - d / 2}px`, top: `${ty - d / 2}px`, width: `${d}px`, height: `${d}px`, opacity: clamp(rv) * (1 - p(t, 77.3, 77.7)), boxShadow: '0 0 30px rgba(95,227,192,0.6)' })
+    showChip(tag, t, 76.0, 77.6, tx - 160, ty - 30)
+  }
+  S.push(s)
+}
+
+{
+  const s = scene(78, 86)
+  const wrap = el('div', 'layer', s.root)
+  const logo = el('div', 'big', wrap, '<span class="accent" style="display:inline-block">FT</span>')
+  css(logo, { position: 'absolute', left: '0', width: '1920px', top: '170px', textAlign: 'center', fontSize: '240px' })
+  const ver = el('div', 'chip', wrap, '3.9.7')
+  const feats = ['CarLife over Hotspot, WiFi Direct and USB', 'Android Auto on a CarLife car', 'Phone apps side by side, full screen', 'Mirror your phone', 'Gear actions for screen and sound', 'Steering wheel double press', 'Car microphone for the assistant', 'Music, videos and song info', 'English, Arabic and Kurdish', 'Light and dark']
+  const fe = feats.map(x => el('div', 'chip', wrap, x))
+  const by = el('div', '', wrap, 'Made by OneAboveAll1964 · github.com/OneAboveAll1964')
+  const credit = el('div', '', wrap, 'FT is an independent app, not affiliated with Baidu, Google or Toyota.<br>Big Buck Bunny (c) copyright 2008, Blender Foundation / www.bigbuckbunny.org, CC BY 3.0 (creativecommons.org/licenses/by/3.0) · Map: Google Maps · Music: Apple Loops')
+  css(by, { position: 'absolute', left: '0', width: '1920px', top: '890px', textAlign: 'center', fontSize: '26px', fontWeight: '600', color: '#cfe3df' })
+  css(credit, { position: 'absolute', left: '0', width: '1920px', top: '948px', textAlign: 'center', fontSize: '17px', lineHeight: '1.6', color: '#8fa9a6' })
+  s.update = t => {
+    const lv = p(t, 78.4, 79.6)
+    css(logo, { opacity: lv, transform: `scale(${mix(1.2, 1, lv)})`, filter: `blur(${(1 - lv) * 14}px)` })
+    const vv = p(t, 79.2, 79.9, E.back)
+    css(ver, { left: '908px', top: '430px', fontSize: '26px', opacity: clamp(vv), transform: `scale(${vv})` })
+    const rows = [fe.slice(0, 4), fe.slice(4, 7), fe.slice(7)]
+    rows.forEach((row, r) => {
+      const total = row.reduce((a, e) => a + e.offsetWidth + 16, 0) - 16
+      let x = 960 - total / 2
+      row.forEach((e, i) => {
+        const a = 79.8 + (r * 4 + i) * 0.12
+        const v = p(t, a, a + 0.6, E.back)
+        css(e, { left: `${x}px`, top: `${560 + r * 84}px`, fontSize: '23px', opacity: clamp(v), transform: `translateY(${(1 - v) * 24}px)` })
+        x += e.offsetWidth + 16
+      })
+    })
+    css(by, { opacity: p(t, 81.0, 81.8) })
+    css(credit, { opacity: p(t, 81.4, 82.2) })
+    css(wrap, { opacity: 1 - p(t, 85.2, 86, E.io3) })
+  }
+  S.push(s)
+}
+
+const T = []
+function iris(at, color, fromX, fromY, toX, toY) {
+  const e = el('div', 'wipe', wipes)
+  css(e, { background: color })
+  const R = (x, y) => Math.hypot(Math.max(x, W - x), Math.max(y, H - y))
+  T.push({ at, update(t) {
+    const a = p(t, at - 0.45, at, E.io3), b = p(t, at, at + 0.5, E.io3)
+    if (t < at - 0.45 || t > at + 0.5) { e.style.visibility = 'hidden'; return }
+    e.style.visibility = 'visible'
+    if (t < at) css(e, { clipPath: `circle(${a * R(fromX, fromY)}px at ${fromX}px ${fromY}px)` })
+    else css(e, { clipPath: `circle(${(1 - b) * R(toX, toY)}px at ${toX}px ${toY}px)` })
+  } })
+}
+function bars(at, color) {
+  const n = 7
+  const bs = Array.from({ length: n }, (_, i) => { const b = el('div', 'bar-w', wipes); css(b, { left: `${i * W / n}px`, width: `${W / n + 1}px`, background: i % 2 ? color : '#0e2733' }); return b })
+  T.push({ at, update(t) {
+    bs.forEach((b, i) => {
+      const d = i * 0.035
+      const a = p(t, at - 0.5 + d, at - 0.02 + d * 0.3, E.io5), c = p(t, at + d * 0.5, at + 0.5 + d, E.io5)
+      const vis = t > at - 0.5 && t < at + 0.8
+      css(b, { visibility: vis ? 'visible' : 'hidden', transform: `translateY(${t < at ? (1 - a) * 100 : -c * 100}%)` })
+    })
+  } })
+}
+function slide(at, color) {
+  const e = el('div', 'wipe', wipes)
+  css(e, { background: `linear-gradient(90deg, ${color} 0%, ${color} 92%, #5fe3c0 92%, #5fe3c0 100%)` })
+  T.push({ at, update(t) {
+    const a = p(t, at - 0.45, at, E.io5), b = p(t, at, at + 0.5, E.io5)
+    if (t < at - 0.45 || t > at + 0.5) { e.style.visibility = 'hidden'; return }
+    e.style.visibility = 'visible'
+    css(e, { transform: t < at ? `translateX(${(a - 1) * 100}%)` : `translateX(${b * 110}%)` })
+  } })
+}
+iris(5.0, '#0e2733', 960, 450, 1520, 900)
+bars(12.0, '#5fe3c0')
+iris(21.0, '#0e2733', 960, 600, 1300, 500)
+slide(29.0, '#0e2733')
+bars(45.0, '#5fe3c0')
+iris(49.0, '#0e2733', 960, 700, 900, 650)
+slide(59.0, '#0e2733')
+bars(68.0, '#5fe3c0')
+iris(74.0, '#0e2733', 960, 540, 1480, 500)
+slide(78.0, '#0e2733')
+
+const chapterBox = document.getElementById('chapters')
+const chapters = [[5, 12], [12, 21], [21, 29], [29, 45], [45, 49], [49, 59], [59, 68], [68, 74], [74, 78]]
+const chapterFill = chapters.map(() => el('i', '', el('div', '', chapterBox)))
+
+const DURATION = 86
+const g1 = document.getElementById('g1'), g2 = document.getElementById('g2'), g3 = document.getElementById('g3'), grid = document.getElementById('grid')
+
+window.render = t => {
+  css(g1, { transform: `translate(${-200 + Math.sin(t * 0.21) * 220}px, ${-260 + Math.cos(t * 0.17) * 160}px)` })
+  css(g2, { transform: `translate(${1200 + Math.cos(t * 0.13) * 260}px, ${380 + Math.sin(t * 0.19) * 200}px)` })
+  css(g3, { transform: `translate(${600 + Math.sin(t * 0.11 + 1) * 300}px, ${600 + Math.cos(t * 0.15) * 140}px)` })
+  css(grid, { transform: `translate(${(t * 6) % 80}px, ${(t * 4) % 80}px)`, opacity: mix(0, 1, p(t, 0.1, 1.2)) })
+  S.forEach(s => {
+    const on = t >= s.a && t < s.b
+    s.root.style.visibility = on ? 'visible' : 'hidden'
+    if (on) s.update(t)
+  })
+  T.forEach(x => x.update(t))
+  chapterFill.forEach((f, i) => { const [a, b] = chapters[i]; f.style.width = `${clamp((t - a) / (b - a)) * 100}%` })
+  css(chapterBox, { opacity: env(t, 4.8, 78.2, 0.6, 0.6) })
+}
+window.DURATION = DURATION
+window.ready = Promise.all([...document.images].map(i => i.decode().catch(() => {})).concat(['400', '500', '600', '700', '800', '900'].map(w => document.fonts.load(`${w} 40px "Inter Variable"`)), document.fonts.load('700 40px "Noto Sans Arabic Variable"', 'العربية'))).then(() => document.fonts.ready)
+const q = new URLSearchParams(location.search)
+if (q.has('t')) window.ready.then(() => window.render(parseFloat(q.get('t'))))
+</script>
+</body>
+</html>
