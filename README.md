@@ -1,5 +1,8 @@
 # FT
 
+<p align="center"><a href="docs/ft-tour.mp4"><img src="docs/ft-tour.gif" alt="FT on the car and the phone: the car home, two phone apps side by side, swap and full screen, reverse gear, and the phone app in every language" width="100%"></a></p>
+<p align="center"><a href="docs/ft-tour.mp4"><b>Watch the full tour</b></a> (86 seconds, with sound)</p>
+
 FT turns an Android phone into the phone side of Baidu CarLife, so a Chinese-market head unit shows FT's own launcher on the car display. From there the car can show the phone's real Android Auto with one button, mirror any phone app with the car's touchscreen driving it, or run real phone apps side by side on the car while the phone screen stays dark.
 
 FT speaks CarLife the way the official Baidu CarLife app does: the same handshake order, the same way of starting, pausing and resuming the picture, and the same media and navigation messages around sound. Where Baidu's choices can be changed, the settings can change them.
@@ -90,6 +93,10 @@ Every protocol message is logged with its bytes on the Log tab, so a head unit's
 `tools/sim/` has a CarLife head-unit simulator and an Android Auto phone simulator that speak the real wire protocols. The CarLife simulator checks Baidu's handshake order, the stream size in `INIT_DONE`, the codec header, pause and resume (including a quick trip to the car's own screen while nothing on FT's screen moves), gear changes, picture resets, the media and navigation modules, and it can demand content encryption. It dials again while FT is still starting, the way a car does.
 
 `tools/sim/e2e.sh [apk] [outdir]` installs FT on a connected emulator and runs plain, encrypted and Corolla-shaped head units, a USB test cable and the Android Auto phone through touches, music, video, directions, screen sharing, phone apps on hidden screens and the Quick Settings button, then prints PASS or FAIL for each check. Each session waits until FT is listening before the car dials. Run the emulator on the host GPU (`emulator -avd <name> -gpu host`): with software rendering the emulator's video encoder falls seconds behind and the picture-timing checks fail.
+
+## Tour video
+
+`tools/video/` makes the tour above. Real car and phone screenshots from the emulator sit on one timed HTML page, headless Chrome draws it frame by frame, and ffmpeg encodes the frames. After `npm install`, `node render.mjs --fps=60 --audio=<soundtrack> --out=<file>` renders the whole video, and `--stills=14,38.5` saves single frames to check a moment.
 
 ## Building
 
