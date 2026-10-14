@@ -109,6 +109,7 @@ import app.ft.projection.MirrorSink
 import app.ft.ui.theme.CarTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -159,6 +160,7 @@ private fun CarRoot(style: CarStyle) {
     var dockApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var castFull by remember { mutableStateOf(false) }
     var dockHidden by remember { mutableStateOf(FTApp.instance.prefs.supercastDockHidden) }
+    var split by remember { mutableStateOf(settleSplit(FTApp.instance.prefs.supercastSplit)) }
     val castFullNow = castFull && view == CarView.SUPERCAST && panes.isNotEmpty() && !state.aaOverlay && !state.mirroring && !state.waitingForShare
     val drawerGrid = rememberLazyGridState()
     val browser = remember { WebPage("https://duckduckgo.com") }
@@ -272,6 +274,14 @@ private fun CarRoot(style: CarStyle) {
                     full = castFullNow,
                     dockHidden = dockHidden,
                     corner = style.corner,
+                    split = { split },
+                    onSplit = { value ->
+                        if (value != split) {
+                            split = value
+                            FTApp.instance.prefs.supercastSplit = value
+                            DiagLog.i("SuperCast", "the left app on the car now takes ${(value * 100).roundToInt()}% of the width")
+                        }
+                    },
                     onPick = { index ->
                         val chosen = dockApps.getOrNull(index) ?: return@SuperCastScreen
                         val taken = panes.map { it.name }.toSet()
@@ -289,7 +299,9 @@ private fun CarRoot(style: CarStyle) {
                     onSwap = {
                         if (panes.size == 2) {
                             panes = listOf(panes[1], panes[0])
-                            DiagLog.i("SuperCast", "the two apps on the car traded places")
+                            split = 1f - split
+                            FTApp.instance.prefs.supercastSplit = split
+                            DiagLog.i("SuperCast", "the two apps on the car traded places, each keeps its width")
                         }
                     },
                     onFull = { castFull = it },

@@ -5,7 +5,14 @@ import app.ft.ui.components.InkText
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,13 +42,20 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -61,6 +75,8 @@ import app.ft.ui.theme.ownDirection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 data class CarPane(val name: String, val packageName: String, val label: String)
 
@@ -73,6 +89,8 @@ fun SuperCastScreen(
     full: Boolean,
     dockHidden: Boolean,
     corner: Int,
+    split: () -> Float,
+    onSplit: (Float) -> Unit,
     onPick: (Int) -> Unit,
     onClose: (String) -> Unit,
     onSwap: () -> Unit,
@@ -94,10 +112,14 @@ fun SuperCastScreen(
     LeftToRight {
         Box(Modifier.fillMaxSize().background(if (full) Color.Black else Color.Transparent)) {
             Column(Modifier.fillMaxSize().padding(padding)) {
-                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (full) 2.dp else 10.dp)) {
-                    panes.forEach { pane ->
+                var live by remember { mutableStateOf<Float?>(null) }
+                val shown = if (panes.size == 2) live ?: split() else 1f
+                val gap = if (full) 2.dp else 10.dp
+                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().splitByDragging(panes.size == 2, gap, split, onLive = { live = it }, onSplit = onSplit)) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    panes.forEachIndexed { index, pane ->
                         key(pane.name, pane.packageName) {
-                            Pane(pane, full, Modifier.weight(1f).fillMaxHeight()) { onClose(pane.name) }
+                            Pane(pane, full, live != null, Modifier.weight(if (index == 0) shown else 1f - shown).fillMaxHeight()) { onClose(pane.name) }
                         }
                     }
                     if (panes.isEmpty()) {
@@ -110,6 +132,10 @@ fun SuperCastScreen(
                             )
                         }
                     }
+                }
+                if (panes.size == 2) {
+                    Handle(full, gap, maxWidth, shown, live != null)
+                }
                 }
                 if (!full) {
                     if (tucked) {
@@ -125,10 +151,125 @@ fun SuperCastScreen(
     }
 }
 
+const val SPLIT_MIN = 0.25f
+const val SPLIT_MAX = 0.75f
+
+fun settleSplit(value: Float): Float {
+    val kept = value.coerceIn(SPLIT_MIN, SPLIT_MAX)
+    return if (kotlin.math.abs(kept - 0.5f) < 0.04f) 0.5f else kept
+}
+
+private val GRAB = 32.dp
+
 @Composable
-private fun Pane(pane: CarPane, full: Boolean, modifier: Modifier, onClose: () -> Unit) {
+private fun Modifier.splitByDragging(
+    two: Boolean,
+    gap: androidx.compose.ui.unit.Dp,
+    split: () -> Float,
+    onLive: (Float?) -> Unit,
+    onSplit: (Float) -> Unit
+): Modifier {
+    val density = LocalDensity.current
+    val twoNow by rememberUpdatedState(two)
+    val gapPx by rememberUpdatedState(with(density) { gap.toPx() })
+    val splitNow by rememberUpdatedState(split)
+    val live by rememberUpdatedState(onLive)
+    val save by rememberUpdatedState(onSplit)
+    var width by remember { mutableIntStateOf(0) }
+    val lastTap = remember { longArrayOf(0L) }
+    return this
+        .onSizeChanged { width = it.width }
+        .pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val room = width - gapPx
+                if (!twoNow || room <= 0f) return@awaitEachGesture
+                val from = splitNow()
+                val away = abs(down.position.x - (room * from + gapPx / 2f))
+                if (away > GRAB.toPx() / 2f) return@awaitEachGesture
+                val onGap = away <= gapPx / 2f + 6.dp.toPx()
+                var dragging = false
+                var moved = from
+                try {
+                    while (true) {
+                        val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                        val dx = change.position.x - down.position.x
+                        val dy = change.position.y - down.position.y
+                        if (!dragging) {
+                            if (abs(dx) > viewConfiguration.touchSlop && abs(dx) >= abs(dy)) {
+                                dragging = true
+                            } else if (abs(dy) > viewConfiguration.touchSlop) {
+                                break
+                            }
+                        }
+                        if (dragging) {
+                            change.consume()
+                            moved = (from + dx / room).coerceIn(SPLIT_MIN, SPLIT_MAX)
+                            live(moved)
+                        }
+                        if (!change.pressed) {
+                            if (!dragging && onGap) {
+                                if (change.uptimeMillis - lastTap[0] < 400L) {
+                                    lastTap[0] = 0L
+                                    save(0.5f)
+                                } else {
+                                    lastTap[0] = change.uptimeMillis
+                                }
+                            }
+                            break
+                        }
+                    }
+                } finally {
+                    if (dragging) {
+                        live(null)
+                        save(settleSplit(moved))
+                    }
+                }
+            }
+        }
+}
+
+@Composable
+private fun Handle(full: Boolean, gap: androidx.compose.ui.unit.Dp, width: androidx.compose.ui.unit.Dp, shown: Float, lit: Boolean) {
+    val density = LocalDensity.current
+    val center = with(density) { (width - gap).toPx() * shown + gap.toPx() / 2f }
+    Box(
+        Modifier
+            .offset { IntOffset((center - GRAB.toPx() / 2f).roundToInt(), 0) }
+            .width(GRAB)
+            .fillMaxHeight(),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .width(if (lit) 8.dp else if (full) 4.dp else 6.dp)
+                .height(if (lit) 96.dp else 72.dp)
+                .clip(RoundedCornerShape(50))
+                .background(if (lit) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = if (full) 0.6f else 0.7f))
+                .border(1.dp, Color.Black.copy(alpha = 0.35f), RoundedCornerShape(50))
+        )
+    }
+}
+
+@Composable
+private fun Pane(pane: CarPane, full: Boolean, resizing: Boolean, modifier: Modifier, onClose: () -> Unit) {
     val density = LocalDensity.current
     var size by remember { mutableStateOf(0 to 0) }
+    val resizingNow by rememberUpdatedState(resizing)
+    var waiting by remember { mutableStateOf<Triple<SurfaceTexture, Int, Int>?>(null) }
+    LaunchedEffect(resizing) {
+        if (!resizing) {
+            waiting?.let { (texture, width, height) ->
+                waiting = null
+                open(pane, texture, width, height, density.density)
+            }
+        }
+    }
+    val veil by animateFloatAsState(
+        if (resizing) 1f else 0f,
+        if (resizing) tween(120) else tween(350, delayMillis = 300),
+        label = "veil"
+    )
     Box(modifier.clip(RoundedCornerShape(if (full) 0.dp else 18.dp)).background(Color.Black)) {
         AndroidView(
             factory = { context ->
@@ -141,11 +282,17 @@ private fun Pane(pane: CarPane, full: Boolean, modifier: Modifier, onClose: () -
                         }
 
                         override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
-                            open(pane, texture, width, height, density.density)
+                            if (resizingNow) {
+                                waiting = Triple(texture, width, height)
+                            } else {
+                                waiting = null
+                                open(pane, texture, width, height, density.density)
+                            }
                             size = width to height
                         }
 
                         override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+                            waiting = null
                             SuperCast.later {
                                 SuperCast.detachPane(pane.name)
                                 texture.release()
@@ -165,6 +312,21 @@ private fun Pane(pane: CarPane, full: Boolean, modifier: Modifier, onClose: () -
                 true
             }
         )
+        if (veil > 0f) {
+            Box(
+                Modifier.fillMaxSize().graphicsLayer { alpha = veil }.background(Color(0xFF111A1F)).pointerInteropFilter { true },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    pane.label,
+                    style = MaterialTheme.typography.titleLarge.ownDirection(),
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        }
         if (!full) {
             Row(
                 Modifier.align(Alignment.TopEnd).padding(6.dp).padding(LocalPillRow.current),

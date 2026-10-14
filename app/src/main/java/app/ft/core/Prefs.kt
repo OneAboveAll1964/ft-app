@@ -129,4 +129,5 @@ class Prefs(context: Context) {
     var supercastApps: String get() = str("supercastApps", ""); set(v) = set("supercastApps", v)
     var supercastWay: Int get() = int("supercastWay", 0); set(v) = set("supercastWay", v)
     var supercastDockHidden: Boolean get() = bool("supercastDockHidden", false); set(v) = set("supercastDockHidden", v)
+    var supercastSplit: Float get() = flt("supercastSplit", 0.5f); set(v) = set("supercastSplit", v)
 }
