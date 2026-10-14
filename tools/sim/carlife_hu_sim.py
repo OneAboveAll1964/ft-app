@@ -455,6 +455,26 @@ class Sim:
         time.sleep(0.09)
         self.send_ctrl(TOUCH_ACTION, f_varint(1, 1) + f_varint(2, x) + f_varint(3, y))
 
+    def drag(self, x1, y1, x2, y2, ms=700):
+        self.log("HU -> drag (%d,%d) to (%d,%d) over %d ms" % (x1, y1, x2, y2, ms))
+        self.send_ctrl(TOUCH_ACTION, f_varint(1, 0) + f_varint(2, x1) + f_varint(3, y1))
+        steps = max(2, ms // 20)
+        for i in range(1, steps + 1):
+            self.drain(ms / 1000.0 / steps)
+            x = int(round(x1 + (x2 - x1) * i / steps))
+            y = int(round(y1 + (y2 - y1) * i / steps))
+            self.send_ctrl(TOUCH_ACTION, f_varint(1, 2) + f_varint(2, x) + f_varint(3, y))
+        self.drain(0.05)
+        self.send_ctrl(TOUCH_ACTION, f_varint(1, 1) + f_varint(2, x2) + f_varint(3, y2))
+
+    def double_tap(self, x, y):
+        self.log("HU -> double tap (%d,%d)" % (x, y))
+        for _ in range(2):
+            self.send_ctrl(TOUCH_ACTION, f_varint(1, 0) + f_varint(2, x) + f_varint(3, y))
+            time.sleep(0.06)
+            self.send_ctrl(TOUCH_ACTION, f_varint(1, 1) + f_varint(2, x) + f_varint(3, y))
+            time.sleep(0.12)
+
     def tap_points(self, x, y):
         self.log("HU -> touch down/up messages (%d,%d)" % (x, y))
         self.send_ctrl(TOUCH_DOWN, f_varint(1, x) + f_varint(2, y))
@@ -854,10 +874,14 @@ def main():
                     else:
                         sim.click(px, py)
                     continue
+                kind = "tap"
+                if xy.startswith("drag:") or xy.startswith("dbl:"):
+                    kind, xy = xy.split(":", 1)
                 blind = xy.startswith("now:")
                 if blind:
                     xy = xy[4:]
-                x, y = [int(v) for v in xy.split(",")]
+                vals = [int(v) for v in xy.split(",")]
+                x, y = (vals[2], vals[3]) if kind == "drag" else (vals[0], vals[1])
                 if marks and a.settle > 0 and not blind:
                     began = time.time()
                     while len(sim.video) - marks[-1][2] < 5 and time.time() - began < a.settle:
@@ -869,7 +893,12 @@ def main():
                 marks.append((x, y, len(sim.video)))
                 result.setdefault("tap_clock", []).append([x, y, round(time.time(), 3)])
                 log_from = os.path.getsize(a.log) if a.log and os.path.exists(a.log) else 0
-                sim.tap(x, y)
+                if kind == "drag":
+                    sim.drag(vals[0], vals[1], vals[2], vals[3], vals[4] if len(vals) > 4 else 700)
+                elif kind == "dbl":
+                    sim.double_tap(x, y)
+                else:
+                    sim.tap(x, y)
             sim.drain(a.tail_seconds)
             for i, (x, y, n0) in enumerate(marks):
                 n1 = marks[i + 1][2] if i + 1 < len(marks) else len(sim.video)
@@ -900,6 +929,7 @@ def main():
         clocks = [ts for t, ts, sid in link.video_clock]
         now_s = int(time.time())
         result["checks"]["video_clock_in_seconds"] = bool(clocks) and all(abs(ts - now_s) < 600 for ts in clocks)
+        result["video_clock_off"] = [[round(t, 3), ts, sid] for t, ts, sid in link.video_clock if abs(ts - now_s) >= 600][:20]
         result["module_events"] = [[round(t - (link.audio[0][0] if link.audio else t), 3), cnt, items] for t, cnt, items in sim.modules]
         if a.encrypt:
             result["plain_after_key"] = link.plain_after_key
