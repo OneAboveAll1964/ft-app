@@ -26,6 +26,8 @@ class CarDisplay(private val context: Context) {
     private var fingers = 0
     private var firstId = 0
     private var second: Pair<Float, Float>? = null
+    private var lastX = Float.NaN
+    private var lastY = Float.NaN
     private val moveLock = Any()
     private var pendingMove: CarTouch? = null
     private val flushMove = Runnable {
@@ -183,7 +185,16 @@ class CarDisplay(private val context: Context) {
                 CarTouch.UP -> MotionEvent.ACTION_UP
                 else -> MotionEvent.ACTION_MOVE
             }
-            oneFinger(now, action, firstId, t.x.toFloat(), t.y.toFloat())
+            val x = t.x.toFloat()
+            val y = t.y.toFloat()
+            if (action == MotionEvent.ACTION_UP && (x != lastX || y != lastY)) {
+                val move = oneFinger(now, MotionEvent.ACTION_MOVE, firstId, x, y)
+                v.dispatchTouchEvent(move)
+                move.recycle()
+            }
+            lastX = x
+            lastY = y
+            oneFinger(now, action, firstId, x, y)
         }
         v.dispatchTouchEvent(ev)
         ev.recycle()
