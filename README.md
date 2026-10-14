@@ -1,6 +1,6 @@
 # FT
 
-<p align="center"><a href="docs/ft-tour.mp4"><img src="docs/ft-tour.gif" alt="FT on the car and the phone: two phone apps side by side, swap and full screen, reverse gear, and the phone app in every language" width="100%"></a></p>
+<p align="center"><a href="docs/ft-tour.mp4"><img src="docs/ft-tour.gif" alt="FT on the car and the phone: two phone apps side by side, swap, dragging the line between them to resize, full screen, reverse gear, and the phone app in every language" width="100%"></a></p>
 <p align="center"><a href="docs/ft-tour.mp4"><b>Watch the full tour</b></a> (2½ minutes, with sound)</p>
 
 FT turns an Android phone into the phone side of Baidu CarLife, so a Chinese-market head unit shows FT's own launcher on the car display. From there the car can show the phone's real Android Auto with one button, mirror any phone app with the car's touchscreen driving it, or run real phone apps side by side on the car while the phone screen stays dark.
