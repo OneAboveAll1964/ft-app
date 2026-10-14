@@ -45,7 +45,7 @@ Then the CarLife handshake, as Baidu does it:
 
 ## Touch
 
-Every CarLife touch message is understood: touch actions, down, up and move, single and double clicks, long presses and two-finger gestures. Moves are merged so the car screen never falls behind a finger, and touches are mapped from the stream to FT's full-size screen. On a mirrored phone, a touch on the black bars beside the picture is ignored instead of pressing the phone's edge.
+Every CarLife touch message is understood: touch actions, down, up and move, single and double clicks, long presses and two-finger gestures. Moves are merged so the car screen never falls behind a finger, and the place where the finger lifts always counts as the last move, so drags and scrolls end where the finger did. Touches are mapped from the stream to FT's full-size screen. On a mirrored phone, a touch on the black bars beside the picture is ignored instead of pressing the phone's edge.
 
 ## On the car screen
 
@@ -59,9 +59,10 @@ Every CarLife touch message is understood: touch actions, down, up and move, sin
 
 With root, or once from a computer with one adb line, FT starts a small helper from its own APK that runs real phone apps on hidden screens and shows them on the car:
 
-- One app or two side by side, picked from a dock that lists only the apps you choose. **Swap** puts the two apps in each other's places.
+- One app or two side by side, picked from a dock that lists only the apps you choose. **Swap** puts the two apps in each other's places, each keeping its width.
+- Drag the handle between two apps to give one more room, anywhere from a quarter to three quarters of the width; it settles in the middle when let go near it, and a double tap puts it back in the middle. While it moves, each app shows its name, and its hidden screen takes the new size once the finger lifts. FT remembers the split.
 - **Full screen** shows the apps edge to edge with nothing around them except an exit button in the FT button's corner; the car's back key also leaves full screen. **Hide apps** tucks the dock away behind a small handle.
-- The hidden screens never turn. An app that asks for portrait, like YouTube leaving full screen, stays upright in the landscape picture.
+- The hidden screens never turn. An app that asks for portrait, like YouTube leaving full screen, stays upright in a 4:3 box in the landscape picture. Each app on the car measures its own window rather than the whole hidden screen, so YouTube's exit-full-screen button works and the app stays out of full screen until asked again. Both settings are undone when apps on the car are switched off.
 - The phone screen goes dark while apps run on the car. The power button lights it to use the phone and darkens it again, and it goes dark by itself after the phone's screen timeout once nobody is touching it. Closing a cover or folding the phone never lights it.
 
 ## Android Auto
@@ -90,7 +91,7 @@ Every protocol message is logged with its bytes on the Log tab, so a head unit's
 
 ## Test harness
 
-`tools/sim/` has a CarLife head-unit simulator and an Android Auto phone simulator that speak the real wire protocols. The CarLife simulator checks Baidu's handshake order, the stream size in `INIT_DONE`, the codec header, pause and resume (including a quick trip to the car's own screen while nothing on FT's screen moves), gear changes, picture resets, the media and navigation modules, and it can demand content encryption. It dials again while FT is still starting, the way a car does.
+`tools/sim/` has a CarLife head-unit simulator and an Android Auto phone simulator that speak the real wire protocols. The CarLife simulator checks Baidu's handshake order, the stream size in `INIT_DONE`, the codec header, pause and resume (including a quick trip to the car's own screen while nothing on FT's screen moves), gear changes, picture resets, the media and navigation modules, and it can demand content encryption. It dials again while FT is still starting, the way a car does, and its touch script can tap, drag and double tap.
 
 `tools/sim/e2e.sh [apk] [outdir]` installs FT on a connected emulator and runs plain, encrypted and Corolla-shaped head units, a USB test cable and the Android Auto phone through touches, music, video, directions, screen sharing, phone apps on hidden screens and the Quick Settings button, then prints PASS or FAIL for each check. Each session waits until FT is listening before the car dials. Run the emulator on the host GPU (`emulator -avd <name> -gpu host`): with software rendering the emulator's video encoder falls seconds behind and the picture-timing checks fail.
 
