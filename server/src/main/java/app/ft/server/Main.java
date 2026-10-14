@@ -16,6 +16,7 @@ public final class Main {
         try {
             Map<String, String> options = options(args);
             if (options.containsKey("selftest")) {
+                Apps.leaveSystemAlone = true;
                 Sys.context();
                 Commands check = new Commands("self", null);
                 Bundle request = new Bundle();
@@ -39,6 +40,7 @@ public final class Main {
                 return;
             }
             Sys.context();
+            Apps.undoLeftovers();
             Bridge bridge = new Bridge(token);
             Commands commands = new Commands(token, bridge);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {

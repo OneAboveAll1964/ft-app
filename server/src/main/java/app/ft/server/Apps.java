@@ -12,10 +12,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class Apps {
+    private static final String OWN_WINDOW = "ALWAYS_SANDBOX_DISPLAY_APIS";
+    private static final java.util.Set<String> ownWindow = new java.util.HashSet<>();
+    private static final String RECORD = "/data/local/tmp/ft-car-changes.txt";
+    public static volatile boolean leaveSystemAlone;
+    private static volatile boolean blind;
+
     private Apps() {
     }
 
     public static boolean launch(String packageName, int displayId) {
+        ownWindow(packageName);
         String component = component(packageName);
         String target = component != null ? "-n '" + component + "'" : "-p " + packageName;
         String command = "am start --display " + displayId
@@ -38,6 +45,118 @@ public final class Apps {
     public static boolean stop(String packageName) {
         shell("am force-stop " + packageName);
         return true;
+    }
+
+    public static void ownWindow(String packageName) {
+        if (leaveSystemAlone || packageName == null || packageName.isEmpty() || OURSELVES.equals(packageName)) {
+            return;
+        }
+        synchronized (ownWindow) {
+            if (!ownWindow.add(packageName)) {
+                return;
+            }
+            remember(packageName);
+        }
+        String out = shell("am compat enable --no-kill " + OWN_WINDOW + " " + packageName);
+        if (out != null && out.toLowerCase().contains("enabled")) {
+            Log.i(packageName + " now measures its own window, not the whole screen");
+        } else {
+            Log.w(packageName + " could not be set to measure its own window: " + (out == null ? "no answer" : out.replace('\n', ' ')));
+        }
+    }
+
+    public static void wholeScreenAgain() {
+        java.util.List<String> all;
+        synchronized (ownWindow) {
+            all = new ArrayList<>(ownWindow);
+            ownWindow.clear();
+        }
+        for (String packageName : all) {
+            shell("am compat reset --no-kill " + OWN_WINDOW + " " + packageName);
+            Log.i(packageName + " measures the whole screen again");
+        }
+    }
+
+    static void remember(String line) {
+        try (java.io.FileWriter out = new java.io.FileWriter(RECORD, true)) {
+            out.write(line + "\n");
+        } catch (Throwable t) {
+            Log.w("could not note a change for later: " + t);
+        }
+    }
+
+    static void forget() {
+        new java.io.File(RECORD).delete();
+    }
+
+    public static void undoLeftovers() {
+        java.io.File record = new java.io.File(RECORD);
+        if (!record.exists()) {
+            return;
+        }
+        try (BufferedReader in = new BufferedReader(new java.io.FileReader(record))) {
+            String line;
+            while ((line = in.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+                if (line.equals(Displays.BOXES)) {
+                    shell("cmd window reset-letterbox-style aspectRatio");
+                    Log.i("portrait boxes left over from last time are back to the phone's own shape");
+                } else {
+                    shell("am compat reset --no-kill " + OWN_WINDOW + " " + line);
+                    Log.i(line + " was left measuring its own window last time, now it measures the whole screen again");
+                }
+            }
+        } catch (Throwable t) {
+            Log.w("could not read what was left over: " + t);
+        }
+        record.delete();
+    }
+
+    public static List<String> packagesOn(int displayId) {
+        List<String> found = new ArrayList<>();
+        if (blind) {
+            return found;
+        }
+        try {
+            Object service = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null);
+            java.lang.reflect.Method method = null;
+            for (String name : new String[]{"getAllRootTaskInfosOnDisplay", "getAllStackInfosOnDisplay"}) {
+                try {
+                    method = service.getClass().getMethod(name, int.class);
+                    break;
+                } catch (NoSuchMethodException ignored) {
+                }
+            }
+            if (method == null) {
+                blind = true;
+                Log.w("cannot see which apps are on the car's screens on this Android");
+                return found;
+            }
+            Object tasks = method.invoke(service, displayId);
+            if (tasks instanceof List) {
+                for (Object task : (List<?>) tasks) {
+                    for (String field : new String[]{"topActivity", "baseActivity"}) {
+                        try {
+                            Object component = task.getClass().getField(field).get(task);
+                            if (component instanceof android.content.ComponentName) {
+                                String name = ((android.content.ComponentName) component).getPackageName();
+                                if (!found.contains(name)) {
+                                    found.add(name);
+                                }
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            blind = true;
+            Log.w("cannot see which apps are on the car's screens: " + t);
+        }
+        return found;
     }
 
     private static String component(String packageName) {

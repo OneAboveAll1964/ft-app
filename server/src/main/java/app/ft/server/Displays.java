@@ -25,6 +25,7 @@ public final class Displays {
         public int height;
         public String packageName;
         public boolean fresh;
+        boolean shown = true;
 
         Pane(String name, VirtualDisplay display, int width, int height) {
             this.name = name;
@@ -49,6 +50,9 @@ public final class Displays {
         if (existing != null) {
             existing.fresh = false;
             existing.display.setSurface(surface);
+            existing.shown = true;
+            showing();
+            Apps.ownWindow(existing.packageName);
             if (existing.width != width || existing.height != height) {
                 existing.display.resize(width, height, dpi);
                 existing.width = width;
@@ -65,6 +69,7 @@ public final class Displays {
         }
         Pane pane = new Pane(name, display, width, height);
         pane.fresh = true;
+        showing();
         holdStill(pane.id());
         panes.put(name, pane);
         Log.i("pane " + name + " opened as display " + pane.id() + " at " + width + "x" + height);
@@ -77,6 +82,69 @@ public final class Displays {
             + "cmd window user-rotation" + d + " lock 0; "
             + "cmd window set-ignore-orientation-request" + d + " true");
         Log.i("display " + id + " stays the way it was made, apps cannot turn it" + (out == null || out.isEmpty() ? "" : " (" + out.replace('\n', ' ') + ")"));
+    }
+
+    static final String BOXES = "letterbox";
+    private static final String UPRIGHT_ASPECT = "1.3333";
+    private boolean boxed;
+    private Thread watcher;
+
+    private void showing() {
+        if (Apps.leaveSystemAlone) {
+            return;
+        }
+        if (!boxed) {
+            boxed = true;
+            Apps.remember(BOXES);
+            String out = Apps.shell("cmd window set-letterbox-style --aspectRatio " + UPRIGHT_ASPECT);
+            Log.i("apps that ask for portrait get a " + UPRIGHT_ASPECT + " box" + (out == null || out.isEmpty() ? "" : " (" + out.replace('\n', ' ') + ")"));
+        }
+        if (watcher == null) {
+            watcher = new Thread(this::watch, "ft-pane-apps");
+            watcher.setDaemon(true);
+            watcher.start();
+        }
+    }
+
+    private void showingNothing() {
+        for (Pane pane : panes.values()) {
+            if (pane.shown) {
+                return;
+            }
+        }
+        if (boxed) {
+            boxed = false;
+            Apps.shell("cmd window reset-letterbox-style aspectRatio");
+            Log.i("portrait boxes are back to the phone's own shape");
+        }
+        Apps.wholeScreenAgain();
+        Apps.forget();
+    }
+
+    private synchronized int[] shownIds() {
+        int[] ids = new int[panes.size()];
+        int n = 0;
+        for (Pane pane : panes.values()) {
+            if (pane.shown) {
+                ids[n++] = pane.id();
+            }
+        }
+        return java.util.Arrays.copyOf(ids, n);
+    }
+
+    private void watch() {
+        while (true) {
+            try {
+                Thread.sleep(1500);
+            } catch (InterruptedException e) {
+                return;
+            }
+            for (int id : shownIds()) {
+                for (String packageName : Apps.packagesOn(id)) {
+                    Apps.ownWindow(packageName);
+                }
+            }
+        }
     }
 
     private VirtualDisplay create(String name, Surface surface, int width, int height, int dpi) {
@@ -136,7 +204,9 @@ public final class Displays {
             pane.display.setSurface(null);
         } catch (Throwable ignored) {
         }
+        pane.shown = false;
         Log.i("pane " + name + " is off screen, " + pane.packageName + " keeps running");
+        showingNothing();
         return true;
     }
 
@@ -150,6 +220,7 @@ public final class Displays {
         } catch (Throwable ignored) {
         }
         Log.i("pane " + name + " closed");
+        showingNothing();
     }
 
     public synchronized void closeAll() {
@@ -160,5 +231,6 @@ public final class Displays {
             }
         }
         panes.clear();
+        showingNothing();
     }
 }
