@@ -19,6 +19,12 @@ const page = await browser.newPage()
 await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 1 })
 await page.goto(pathToFileURL(resolve(here, 'index.html')).href, { waitUntil: 'load' })
 await page.evaluate(() => window.ready)
+if (args.holds) await page.evaluate(k => window.scaleHolds(k), Number(args.holds))
+if (args.marks) {
+  console.log(JSON.stringify(await page.evaluate(m => m.map(x => +window.real(x).toFixed(2)), args.marks.split(',').map(Number))))
+  await browser.close()
+  process.exit(0)
+}
 const duration = await page.evaluate(() => window.DURATION)
 
 if (args.stills) {
