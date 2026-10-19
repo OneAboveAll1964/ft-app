@@ -81,7 +81,7 @@ When the assistant listens, FT asks the car to record from its own microphone an
   - the screen: show the car's own screen (the default in reverse, for the camera), FT home, Maps or Android Auto;
   - the sound: pause it, or turn it down to a level you pick.
 
-  Shifting out brings back only what the gear changed: music plays again only if the gear paused it, and the sound comes back up only if the gear turned it down.
+  Shifting out brings back only what the gear changed: music plays again only if the gear paused it, and the sound comes back up only if the gear turned it down. Going into reverse or park acts at once; coming out counts only once the new gear has lasted 0.7 seconds, so a car that briefly reports another gear (or a gear FT does not know) in the middle of reversing never brings the full sound back early. When the sound goes over Bluetooth, FT turns the phone's volume down instead, and if the car turns it back up in the next few seconds, FT turns it down again. A second and a half into reverse the log says where the sound is going and how loud it is.
 
 ## Settings
 
