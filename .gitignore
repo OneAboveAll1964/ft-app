@@ -10,3 +10,4 @@ captures/
 tools/sim/.car_bt_keys.json
 tools/video/node_modules/
 tools/video/out/
+tools/sim/fake_aa/out/
