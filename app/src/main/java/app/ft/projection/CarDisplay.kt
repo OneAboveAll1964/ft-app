@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.compose.runtime.Composable
+import app.ft.FTApp
 import app.ft.carlife.CarTouch
 import app.ft.core.DiagLog
 import app.ft.core.Sizing
@@ -58,12 +59,13 @@ class CarDisplay(private val context: Context) {
     ) {
         stop()
         val fps = plan.fps
+        val savePower = FTApp.instance.prefs.encoderSavePower
         width = plan.contentWidth
         height = plan.contentHeight
         streamWidth = plan.streamWidth
         streamHeight = plan.streamHeight
         frameIntervalMs = (1000L / fps.coerceIn(1, 120)).coerceAtLeast(8L)
-        var enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, gated = true)
+        var enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, gated = true, savePower = savePower)
         enc.start()
         val g = FrameGate(width, height, streamWidth, streamHeight, enc.surface ?: throw IllegalStateException("no encoder surface"))
         val surface = if (g.start(fps)) {
@@ -74,7 +76,7 @@ class CarDisplay(private val context: Context) {
             width = streamWidth
             height = streamHeight
             DiagLog.w(tag, "drawing straight at ${streamWidth}x$streamHeight, the car stretches it to fill its screen")
-            enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame)
+            enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, savePower = savePower)
             enc.start()
             enc.surface ?: throw IllegalStateException("no encoder surface")
         }

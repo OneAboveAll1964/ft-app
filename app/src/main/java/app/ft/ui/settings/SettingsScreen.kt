@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -448,7 +449,8 @@ private fun PictureSettings() {
     var fps by remember(rev) { mutableIntStateOf(p.videoFps) }
     var rate by remember(rev) { mutableIntStateOf(p.videoBitrate) }
     var floor by remember(rev) { mutableIntStateOf(p.videoQpFloor) }
-    val defaults = size == VideoPlans.SIZE_CAR && fps == 0 && rate == VideoPlans.DEFAULT_BITRATE && p.videoMinFps == 0 && floor == DEFAULT_FLOOR
+    var savePower by remember(rev) { mutableStateOf(p.encoderSavePower) }
+    val defaults = size == VideoPlans.SIZE_CAR && fps == 0 && rate == VideoPlans.DEFAULT_BITRATE && p.videoMinFps == 0 && floor == DEFAULT_FLOOR && !savePower
     Text(
         stringResource(if (defaults) R.string.picture_defaults_body else R.string.picture_changed_body),
         style = MaterialTheme.typography.bodyMedium,
@@ -482,6 +484,9 @@ private fun PictureSettings() {
     ) { index -> floor = FLOOR_CHOICES[index].first; p.videoQpFloor = floor }
     IntSetting(stringResource(R.string.picture_min_fps), p.videoMinFps, rev) { p.videoMinFps = it }
     IntSetting(stringResource(R.string.picture_density), p.carDensity, rev) { p.carDensity = it }
+    key(rev) {
+        BoolSetting(stringResource(R.string.picture_save_power), savePower, stringResource(R.string.picture_save_power_body)) { savePower = it; p.encoderSavePower = it }
+    }
     OutlinedButton(
         onClick = {
             p.videoSize = VideoPlans.SIZE_CAR
@@ -492,6 +497,7 @@ private fun PictureSettings() {
             p.videoBitrate = VideoPlans.DEFAULT_BITRATE
             p.videoQpFloor = DEFAULT_FLOOR
             p.carDensity = 160
+            p.encoderSavePower = false
             rev++
         },
         enabled = !defaults || p.carDensity != 160,
