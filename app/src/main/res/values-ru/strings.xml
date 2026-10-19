@@ -426,6 +426,7 @@
     <string name="car_join_timeout_error">Не удалось подключиться к магнитоле по Wi-Fi Direct за %1$d с. Приложение повторяет попытку автоматически. Проверьте, открыт ли CarLife на магнитоле, или увеличьте время ожидания подключения.</string>
     <string name="car_join_timeout_action">Настройки подключения</string>
     <string name="look_phone_style">Оформление приложения</string>
+    <string name="look_phone_style_about">Меняет интерфейс на телефоне и размещение кнопки возврата в FT на экране автомобиля. В альтернативном оформлении кнопка находится рядом с Android Auto и не перекрывает навигатор или плеер.</string>
     <string name="look_phone_classic">Стандартное</string>
     <string name="look_phone_modern">Альтернативное</string>
     <string name="aa_show_return_button">Показывать кнопку возврата в FT в Android Auto</string>

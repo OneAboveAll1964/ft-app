@@ -285,9 +285,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                     _state.value = "searching"
                     DiagLog.w(tag, "left the car group")
                     onLeft?.invoke()
-                } else if (connecting != null && android.os.SystemClock.elapsedRealtime() - attemptAt > JoinWatch.GIVE_UP_MS) {
-                    connecting = null
                 }
+                // A group can still be forming. Only the watchdog ends an active
+                // join, using its selected timeout and reporting the retry.
             }
         }
     }

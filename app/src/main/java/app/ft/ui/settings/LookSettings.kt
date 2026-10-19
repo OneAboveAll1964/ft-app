@@ -43,7 +43,8 @@ fun LookSettings() {
             app.ft.ui.components.Option(stringResource(R.string.look_phone_classic)),
             app.ft.ui.components.Option(stringResource(R.string.look_phone_modern))
         ),
-        if (modern) 1 else 0
+        if (modern) 1 else 0,
+        about = stringResource(R.string.look_phone_style_about)
     ) { app.ft.core.PhoneStyle.setModern(it == 1) }
     val language by Lang.current.collectAsState()
     val mode by Looks.mode.collectAsState()
