@@ -327,7 +327,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaF
                         ReportButton()
                         IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.cd_clear_log)) }
                     }
-                    RootChip()
+                    if (screen == Screen.SETTINGS) RootChip()
                 },
                 scrollBehavior = scroll
             )

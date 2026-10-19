@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
+import app.ft.ui.car.CarIcons
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -215,18 +216,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             }
         }
 
-        if (!touchOn || !overlayOn || !backgroundOn) {
-            item {
-                Section(stringResource(R.string.home_finish_setup)) {
-                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
-                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
-                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
-                }
-            }
-        }
-
         item {
             Section(stringResource(R.string.settings_aa_title)) {
                 if (!aaInstalled) {
@@ -260,6 +249,18 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                             textAlign = TextAlign.Center
                         )
                     }
+                }
+            }
+        }
+
+        if (!touchOn || !overlayOn || !backgroundOn) {
+            item {
+                Section(stringResource(R.string.home_finish_setup)) {
+                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
+                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
             }
         }
@@ -351,15 +352,22 @@ private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> 
         label = "dot"
     )
     Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = container, contentColor = content)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(12.dp).clip(CircleShape).background(dot))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(status.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(status.detail, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(16.dp), color = content.copy(alpha = 0.08f), contentColor = content) {
+                    Icon(CarIcons.Phone, contentDescription = null, modifier = Modifier.padding(12.dp).size(28.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                Switch(checked = checked, onCheckedChange = onToggle)
             }
-            Spacer(Modifier.width(12.dp))
-            Switch(checked = checked, onCheckedChange = onToggle)
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
+                    Spacer(Modifier.width(8.dp))
+                    Text(status.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                }
+                Text(status.detail, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            }
         }
     }
 }
@@ -383,7 +391,7 @@ private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
         StepMark(0, if (granted) StepState.DONE else StepState.LATER, working = false)
         Spacer(Modifier.width(14.dp))
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 8.dp))
         if (!granted) FilledTonalButton(onClick = onGrant) { Text(stringResource(R.string.action_allow)) }
         else Text(stringResource(R.string.state_done), style = MaterialTheme.typography.labelLarge, color = scheme.primary)
     }
@@ -392,7 +400,7 @@ private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
 @Composable
 private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(12.dp))
         Switch(checked = checked, onCheckedChange = onChange)
     }
@@ -400,10 +408,10 @@ private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Un
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
-            content()
+    Column(Modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp))
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
         }
     }
 }

@@ -1,6 +1,7 @@
 package app.ft.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import app.ft.ui.components.InkText
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +28,7 @@ import app.ft.ui.car.CarIcons
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
@@ -41,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedButton
@@ -123,7 +126,24 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
     ) {
         when {
             page == null -> {
-                items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
+                items(listOf(
+                    listOf(SettingsPage.LOOK, SettingsPage.CAR_SCREEN, SettingsPage.PICTURE, SettingsPage.SOUND),
+                    listOf(SettingsPage.CAR, SettingsPage.ANDROID_AUTO, SettingsPage.SUPERCAST),
+                    listOf(SettingsPage.ADVANCED, SettingsPage.BACKUP)
+                )) { pages ->
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    ) {
+                        pages.forEachIndexed { index, p ->
+                            PageButton(p) { onOpen(p) }
+                            if (index < pages.lastIndex) HorizontalDivider(
+                                modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
                 item { MadeBy() }
             }
             carPage -> {
@@ -145,21 +165,15 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
 
 @Composable
 private fun PageButton(page: SettingsPage, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-                Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
-            }
-            Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
+            Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(8.dp).size(20.dp))
         }
+        Column(Modifier.weight(1f).padding(start = 16.dp, end = 8.dp)) {
+            Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(page.about), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
