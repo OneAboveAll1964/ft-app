@@ -31,6 +31,7 @@ Then the CarLife handshake, as Baidu does it:
 - By default FT sends the car its own screen size (1920×720 on a Corolla) at 3 Mbps. **Like Baidu** sends Baidu's smaller size from its table (1280×720 for the Corolla), and **Custom** takes any size. FT draws at the car's full size, so nothing is stretched.
 - When the car asks for no frame rate, FT starts at 30 frames a second on Hotspot, and at 20 on WiFi Direct before moving to 30. It then follows what the car asks for between 15 and 30; like Baidu, it never paces below 15. A hot phone drops to 24 or 20 to cool down.
 - H.264 Baseline, a full picture every second, and a quality floor that keeps full pictures small enough for the car to take.
+- The encoder is told to run at full speed, for the quickest picture. **Let the video encoder save power** tells it the picture's own frame rate instead, and the new rate whenever FT changes it, which may keep the phone cooler on long drives but can make the car screen answer touches a little later. It is off by default.
 - The codec header goes out once, with the first full picture. If the car asks for a reset, FT sends the header again with a fresh full picture.
 - While the car shows its own screens (the reverse camera, for example), only heartbeats go out. When it comes back, FT keeps drawing for a moment so the encoder makes its next regular full picture within about a second, even if nothing on FT's screen is moving. FT forces a full picture only if none has come after 2.5 seconds; on the Corolla, forced full pictures on resume left the screen black.
 - A heartbeat goes out at least every 0.9 seconds at any frame rate, so the car's video watchdog never drops the connection.
@@ -71,6 +72,8 @@ The head unit speaks CarLife, not Android Auto, so FT shows **your own phone's**
 
 Android Auto only takes FT's head unit when its own head unit server is on, and Android Auto switches that server off whenever the phone restarts or Android Auto updates. FT keeps it on: whenever the car wants Android Auto and the server is off, FT opens Android Auto's settings, taps **Start head unit server** in its menu and comes back, usually in under a second. It does this with root, or without root through FT's accessibility service (the same one the car touchscreen uses). If the phone is locked, FT does it as soon as the phone is unlocked. If Android Auto's developer settings are off, FT says so once instead of trying again and again; the help sheet shows how to switch them on.
 
+Android Auto's frame rate is 30 or 60, the only two it takes from a head unit.
+
 When the assistant listens, FT asks the car to record from its own microphone and passes that sound to Android Auto. When the assistant stops, FT ends the recording and turns the car's microphone light off.
 
 ## Steering wheel and gears
@@ -85,7 +88,7 @@ When the assistant listens, FT asks the car to record from its own microphone an
 
 ## Settings
 
-Language and look, car screen, picture, sound, car and connection, apps on the car, Android Auto, backup and advanced (the CarLife ports). **Picture** can send the car's own size, Baidu's size or a custom size, fix the frame rate, set the data rate and the quality floor, and put everything back to the defaults. **Backup** saves and loads every setting and can share the car look as a code.
+Language and look, car screen, picture, sound, car and connection, apps on the car, Android Auto, backup and advanced (the CarLife ports). **Picture** can send the car's own size, Baidu's size or a custom size, fix the frame rate, set the data rate and the quality floor, let the video encoder save power, and put everything back to the defaults. **Backup** saves and loads every setting and can share the car look as a code.
 
 ## Diagnostics
 
