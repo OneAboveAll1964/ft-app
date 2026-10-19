@@ -1,5 +1,6 @@
 package app.ft
 
+import app.ft.core.LocalModernPhoneUi
 import androidx.compose.ui.unit.sp
 import app.ft.ui.components.FitText
 import app.ft.ui.car.CarStyles
@@ -49,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -294,9 +296,17 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
+    val modern by app.ft.core.PhoneStyle.modern.collectAsState()
+    androidx.compose.runtime.CompositionLocalProvider(LocalModernPhoneUi provides modern) {
+        FTRootContent(onOpenAccessibility, onOpenOverlay, onPickAaFile)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     val inPage = screen == Screen.SETTINGS && settingsPage != null
@@ -327,7 +337,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaF
                         ReportButton()
                         IconButton(onClick = { DiagLog.clear() }) { Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.cd_clear_log)) }
                     }
-                    if (screen == Screen.SETTINGS) RootChip()
+                    if (!LocalModernPhoneUi.current || screen == Screen.SETTINGS) RootChip()
                 },
                 scrollBehavior = scroll
             )
@@ -372,6 +382,10 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaF
                     pad = pad,
                     onOpenAccessibility = onOpenAccessibility,
                     onOpenOverlay = onOpenOverlay,
+                    onOpenConnectionSettings = {
+                        settingsPage = SettingsPage.CAR
+                        screen = Screen.SETTINGS
+                    },
                     onOpenAaSetup = {
                         settingsPage = SettingsPage.ANDROID_AUTO
                         screen = Screen.SETTINGS

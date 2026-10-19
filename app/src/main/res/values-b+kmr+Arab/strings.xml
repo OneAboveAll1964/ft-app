@@ -420,4 +420,16 @@
     <string name="supercast_hide_dock">ڤەشارتنا ئەپان</string>
     <string name="supercast_show_dock">نیشادانا ئەپان</string>
     <string name="supercast_screen_off_about">دوگمەیا پاوەری بگرە دا مۆبایلێ ب کار بینی. پشتی دەمێ ڤەمراندنا شاشا مۆبایلی دێ دیسا تاری بیت.</string>
+    <!-- New settings use English until native translations are reviewed. -->
+    <string name="car_join_timeout">Wi-Fi Direct connection timeout</string>
+    <string name="car_join_timeout_about">How long to wait before retrying an unanswered connection attempt. Increase this if the car takes longer to connect. Applies to the next attempt.</string>
+    <string name="car_join_timeout_seconds">%1$d s</string>
+    <string name="car_join_timeout_error">Could not connect to the car over Wi-Fi Direct within %1$d s. Retrying automatically. Check that CarLife is open on the car screen, or increase the connection timeout.</string>
+    <string name="car_join_timeout_action">Connection settings</string>
+    <string name="look_phone_style">Phone app appearance</string>
+    <string name="look_phone_classic">Default</string>
+    <string name="look_phone_modern">Alternative</string>
+    <string name="aa_show_return_button">Show the FT return button in Android Auto</string>
+    <string name="aa_show_return_button_about">The corner button returns to FT. If hidden, you can show it again from these settings on your phone.</string>
+    <string name="aa_back_to_ft">Back to FT</string>
 </resources>

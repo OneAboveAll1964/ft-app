@@ -28,6 +28,7 @@ import app.ft.MainActivity
 import app.ft.ShareActivity
 import app.ft.aa.AaKeep
 import app.ft.aa.AaInstaller
+import app.ft.aa.AaTouchViewport
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
@@ -73,6 +74,7 @@ data class CarState(
     val btCar: String? = null,
     val carWifi: String? = null,
     val wifiDirect: Boolean = false,
+    val joinTimedOutSeconds: Int = 0,
     val beacon: Boolean = false,
     val step: String = "",
     val refused: Int = 0,
@@ -873,7 +875,7 @@ class CarLifeService : Service() {
                 if (ip != null && !up) {
                     DiagLog.i(tag, "WiFi Direct is up at $ip, picking it up")
                     finder?.checkExisting()
-                    _state.update { it.copy(wifiDirect = true, ip = ip) }
+                    _state.update { it.copy(wifiDirect = true, ip = ip, joinTimedOutSeconds = 0) }
                     wireless.wifiDirectReady(ip)
                     updateBeacon()
                 } else if (ip == null && up && carNetworkIface == null) {
@@ -964,7 +966,7 @@ class CarLifeService : Service() {
                 link = "", session = CarLifeSession.State.Idle, listening = false, aaOverlay = false,
                 mirroring = false, mirrorPackage = "", btCar = null, carWifi = null, wifiDirect = false,
                 beacon = false, step = "", refused = 0, waitingForShare = false, usb = false,
-                blocked = 0, hotspotClients = null
+                blocked = 0, hotspotClients = null, joinTimedOutSeconds = 0
             )
         }
     }
@@ -973,7 +975,9 @@ class CarLifeService : Service() {
         if (finder != null) return
         val f = CarFinder(this, app.prefs, scope)
         finder = f
+        f.onJoinTimeout = { seconds -> _state.update { it.copy(joinTimedOutSeconds = seconds) } }
         f.onJoined = { l ->
+            _state.update { it.copy(joinTimedOutSeconds = 0) }
             DiagLog.i(tag, "on the car's WiFi Direct group ${l.name.ifBlank { l.groupOwnerIp }} (${l.iface ?: "?"}, car ${if (l.weAreOwner) "joined this phone" else "at " + l.groupOwnerIp})")
             step("WiFi Direct connected")
             p2pIface = l.iface
@@ -1404,9 +1408,11 @@ class CarLifeService : Service() {
         if (st.aaOverlay && aa != null && aa.phase.value >= AaSession.Phase.DISCOVERED) {
             if (action < 0) return
             val p = app.prefs
-            val w = carDisplay.width.coerceAtLeast(1)
-            val h = carDisplay.height.coerceAtLeast(1)
-            aa.sendTouch(x * p.aaWidth / w, y * p.aaHeight / h, action)
+            val viewport = AaTouchViewport.bounds ?: return
+            if (action == CarTouch.DOWN) touchBeside = !viewport.contains(x, y)
+            if (touchBeside) return
+            val point = viewport.map(x, y, p.aaWidth, p.aaHeight)
+            aa.sendTouch(point.first, point.second, action)
             return
         }
         if (st.mirroring) {

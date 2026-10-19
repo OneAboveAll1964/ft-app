@@ -420,4 +420,15 @@
     <string name="supercast_hide_dock">Скрыть приложения</string>
     <string name="supercast_show_dock">Показать приложения</string>
     <string name="supercast_screen_off_about">Нажмите кнопку питания, чтобы воспользоваться телефоном. Экран снова погаснет через время, указанное в настройках автоматического отключения экрана телефона.</string>
+    <string name="car_join_timeout">Время ожидания подключения Wi-Fi Direct</string>
+    <string name="car_join_timeout_about">Сколько ждать ответа перед повторной попыткой подключения. Увеличьте время, если магнитола не успевает подключиться. Применяется со следующей попытки.</string>
+    <string name="car_join_timeout_seconds">%1$d с</string>
+    <string name="car_join_timeout_error">Не удалось подключиться к магнитоле по Wi-Fi Direct за %1$d с. Приложение повторяет попытку автоматически. Проверьте, открыт ли CarLife на магнитоле, или увеличьте время ожидания подключения.</string>
+    <string name="car_join_timeout_action">Настройки подключения</string>
+    <string name="look_phone_style">Оформление приложения</string>
+    <string name="look_phone_classic">Стандартное</string>
+    <string name="look_phone_modern">Альтернативное</string>
+    <string name="aa_show_return_button">Показывать кнопку возврата в FT в Android Auto</string>
+    <string name="aa_show_return_button_about">Кнопка возвращает в FT. В альтернативном оформлении она размещается рядом с Android Auto и не перекрывает его элементы. Если скрыть её, вернуть кнопку можно в этих настройках на телефоне.</string>
+    <string name="aa_back_to_ft">Вернуться в FT</string>
 </resources>

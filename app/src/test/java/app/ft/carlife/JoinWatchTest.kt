@@ -67,6 +67,35 @@ class JoinWatchTest {
     }
 
     @Test
+    fun configuredTimeoutsAllowTheFullWaitThenRetry() {
+        for (seconds in JoinWatch.TIMEOUT_SECONDS) {
+            val timeout = seconds * 1_000L
+            assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(timeout - 1, false, false, timeoutMs = timeout))
+            assertEquals(JoinWatch.Next.RETRY, JoinWatch.next(timeout, false, false, timeoutMs = timeout))
+            assertEquals(JoinWatch.Next.RETRY, JoinWatch.next(maxOf(timeout, JoinWatch.GIVE_UP_MS), true, true, timeoutMs = timeout))
+        }
+    }
+
+    @Test
+    fun aLongTimeoutIsNotCutShortByTheOldFifteenSecondLimit() {
+        assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(15_000, true, true, timeoutMs = 30_000))
+        assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(29_999, false, false, timeoutMs = 30_000))
+    }
+
+    @Test
+    fun aDeclinedInvitationDoesNotWaitForTheConfiguredTimeout() {
+        assertEquals(JoinWatch.Next.DECLINED, JoinWatch.next(1_000, false, false, carDeclined = true, timeoutMs = 60_000))
+    }
+
+    @Test
+    fun invalidSavedTimeoutsFallBackToTheOriginalDefault() {
+        for (seconds in listOf(-1, 0, 6, 120, Int.MAX_VALUE)) {
+            assertEquals(5, JoinWatch.timeoutSeconds(seconds))
+        }
+        for (seconds in JoinWatch.TIMEOUT_SECONDS) assertEquals(seconds, JoinWatch.timeoutSeconds(seconds))
+    }
+
+    @Test
     fun thisMorningsHangWouldHaveBeenRetriedAtFiveSeconds() {
         val firstTry = listOf(1_000L, 3_000L, 5_000L).map { JoinWatch.next(it, carConnected = false, groupInterfaceUp = false) }
         assertEquals(listOf(JoinWatch.Next.WAIT, JoinWatch.Next.WAIT, JoinWatch.Next.RETRY), firstTry)

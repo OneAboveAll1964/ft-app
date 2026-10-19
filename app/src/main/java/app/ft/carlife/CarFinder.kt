@@ -61,6 +61,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     var onJoined: ((Link) -> Unit)? = null
     var onLeft: (() -> Unit)? = null
     var onRetry: ((name: String, attempt: Int) -> Unit)? = null
+    var onJoinTimeout: ((seconds: Int) -> Unit)? = null
 
     fun start() {
         val m = manager
@@ -351,8 +352,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 connecting = target.name
                 attemptAt = android.os.SystemClock.elapsedRealtime()
                 _state.value = "invited by ${target.name}"
-                DiagLog.i(tag, "${target.name} already invited us, giving it ${JoinWatch.INVITE_MS / 1000}s")
-                watch(target)
+                val timeoutMs = prefs.carJoinTimeoutSeconds * 1_000L
+                DiagLog.i(tag, "${target.name} already invited us, giving it ${timeoutMs / 1000}s")
+                watch(target, timeoutMs)
             }
             WifiP2pDevice.CONNECTED -> m.requestConnectionInfo(ch) { info -> if (info != null && info.groupFormed) onGroup(info) }
             else -> if (armed) connect(target)
@@ -391,7 +393,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (_link.value != null || connecting != null) return
         connecting = p.name
         _state.value = "connecting to ${p.name}"
-        DiagLog.i(tag, "connecting to ${p.name} (${p.address})")
+        val timeoutMs = prefs.carJoinTimeoutSeconds * 1_000L
+        DiagLog.i(tag, "connecting to ${p.name} (${p.address}), join timeout ${timeoutMs / 1000}s")
         val fresh = runCatching {
             WifiP2pConfig.Builder()
                 .setDeviceAddress(android.net.MacAddress.fromString(p.address))
@@ -411,7 +414,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
         attemptAt = android.os.SystemClock.elapsedRealtime()
         m.connect(ch, cfg, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() = watch(p)
+            override fun onSuccess() = watch(p, timeoutMs)
             override fun onFailure(reason: Int) {
                 _state.value = "connect failed ($reason)"
                 DiagLog.w(tag, "connect to ${p.name} failed reason=$reason")
@@ -420,14 +423,15 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         })
     }
 
-    private fun watch(p: Peer) {
+    private fun watch(p: Peer, timeoutMs: Long) {
         watchdog?.cancel()
         watchdog = scope.launch(Dispatchers.Main) {
             while (isActive && _link.value == null && connecting == p.name) {
                 val waited = android.os.SystemClock.elapsedRealtime() - attemptAt
                 val status = _peers.value.firstOrNull { it.address.equals(p.address, true) }?.status
-                when (JoinWatch.next(waited, status == WifiP2pDevice.CONNECTED, NetUtil.p2pGroupUp(), status == WifiP2pDevice.AVAILABLE)) {
+                when (JoinWatch.next(waited, status == WifiP2pDevice.CONNECTED, NetUtil.p2pGroupUp(), status == WifiP2pDevice.AVAILABLE, timeoutMs)) {
                     JoinWatch.Next.RETRY -> {
+                        onJoinTimeout?.invoke((waited / 1000).toInt())
                         restart(p, "no answer after ${waited / 1000}s")
                         return@launch
                     }

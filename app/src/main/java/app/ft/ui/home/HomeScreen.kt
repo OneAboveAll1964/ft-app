@@ -1,5 +1,6 @@
 package app.ft.ui.home
 
+import app.ft.core.LocalModernPhoneUi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
@@ -94,7 +95,8 @@ import app.ft.R
 private data class Status(val title: String, val detail: String, val level: Int)
 
 @Composable
-fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onOpenAaSetup: () -> Unit) {
+fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onOpenAaSetup: () -> Unit, onOpenConnectionSettings: () -> Unit) {
+    val modern = LocalModernPhoneUi.current
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
@@ -206,12 +208,31 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                         }
                     } else Notice(stringResource(car.blocked))
                 }
+                if (direct && running && !connected && !car.wifiDirect && car.joinTimedOutSeconds > 0) {
+                    Notice(
+                        stringResource(R.string.car_join_timeout_error, car.joinTimedOutSeconds),
+                        stringResource(R.string.car_join_timeout_action),
+                        onOpenConnectionSettings
+                    )
+                }
                 val refused = car.refused
                 AnimatedVisibility(visible = refused != 0 && !connected && !cable) {
                     if (refused != 0) Notice(stringResource(refused), stringResource(R.string.home_use_mode, stringResource(if (direct) R.string.mode_hotspot else R.string.mode_direct))) { pickMode(if (direct) 0 else 1) }
                 }
                 if (direct && running && !connected) {
                     TextButton(onClick = { CarLifeService.tryAgain() }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.home_try_again)) }
+                }
+            }
+        }
+
+        if (!modern && (!touchOn || !overlayOn || !backgroundOn)) {
+            item {
+                Section(stringResource(R.string.home_finish_setup)) {
+                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
+                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
             }
         }
@@ -253,7 +274,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             }
         }
 
-        if (!touchOn || !overlayOn || !backgroundOn) {
+        if (modern && (!touchOn || !overlayOn || !backgroundOn)) {
             item {
                 Section(stringResource(R.string.home_finish_setup)) {
                     Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -338,6 +359,10 @@ private fun directSteps(
 
 @Composable
 private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    if (!LocalModernPhoneUi.current) {
+        ClassicStatusCard(status, checked, onToggle)
+        return
+    }
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(
         when (status.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
@@ -408,10 +433,53 @@ private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Un
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+    if (!LocalModernPhoneUi.current) {
+        ClassicSection(title, content)
+        return
+    }
     Column(Modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp))
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
             Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
+        }
+    }
+}
+
+@Composable
+private fun ClassicStatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        when (status.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
+        label = "status"
+    )
+    val content by animateColorAsState(
+        when (status.level) { 3 -> scheme.onPrimaryContainer; 2 -> scheme.onSecondaryContainer; 1 -> scheme.onTertiaryContainer; else -> scheme.onSurface },
+        label = "statusText"
+    )
+    val dot by animateColorAsState(
+        when (status.level) { 3 -> scheme.primary; 2 -> scheme.secondary; 1 -> scheme.tertiary; else -> scheme.outline },
+        label = "dot"
+    )
+    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = container, contentColor = content)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(12.dp).clip(CircleShape).background(dot))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(status.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(status.detail, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = checked, onCheckedChange = onToggle)
+        }
+    }
+}
+
+@Composable
+private fun ClassicSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
+            content()
         }
     }
 }
