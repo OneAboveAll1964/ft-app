@@ -229,6 +229,15 @@ object CarAudioBus {
         while (recentBytes > REAL_TIME && recentLevels.size > 1) recentBytes -= recentLevels.removeFirst()[2].toInt()
     }
 
+    fun describe(): String = synchronized(lock) {
+        val now = System.nanoTime()
+        if (mainAt == 0L || now - mainAt > MAIN_ALIVE_NS) return "FT is sending no music to the car"
+        val sq = recentLevels.sumOf { it[0] }
+        val n = recentLevels.sumOf { it[1] }
+        val rms = if (n > 0) Math.sqrt(sq / n) else 0.0
+        "FT is sending music to the car at ${(mainTurn * 100).toInt()}% of level ${rms.toInt()}"
+    }
+
     fun play(lane: Int, pcm: ByteArray, rate: Int, channels: Int) {
         if (pcm.isEmpty() || out == null) return
         if (lane != LANE_SPEECH && lane != LANE_SYSTEM) {

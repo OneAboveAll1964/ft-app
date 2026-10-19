@@ -113,6 +113,9 @@ class CarLifeService : Service() {
         private const val SOUND_DRAIN_MS = 2_000L
         private const val BESIDE_SLOP = 24f
         private const val GEAR_SETTLE_MS = 1_500L
+        private const val GEAR_HOLD_MS = 700L
+        private const val GEAR_LOOK_MS = 1_500L
+        private const val GEAR_VOLUME_HOLD_MS = 4_000L
 
         private val _state = MutableStateFlow(CarState())
         val state: StateFlow<CarState> = _state
@@ -1607,11 +1610,33 @@ class CarLifeService : Service() {
     @Volatile private var gearHidProjection = false
     private val gearSound = GearSound()
     private var gearSettle: Job? = null
+    private var gearHeld: Job? = null
+    private var gearLook: Job? = null
+    private var gearVolumeHold: Job? = null
+    @Volatile private var gearShown = -1
     private var gearPausedFt = false
     private var gearVolumeBefore = -1
     private var gearVolumeSet = -1
 
     private fun onGear(gear: Int) {
+        if (gear !in 1..5) DiagLog.w(tag, "the car sent gear $gear, which is not a gear FT knows, so it counts only if it lasts")
+        gearHeld?.cancel()
+        gearHeld = null
+        val stopped = gearShown == GearAction.GEAR_REVERSE || gearShown == GearAction.GEAR_PARK
+        val stopping = gear == GearAction.GEAR_REVERSE || gear == GearAction.GEAR_PARK
+        if (stopped && !stopping) {
+            gearHeld = scope.launch {
+                delay(GEAR_HOLD_MS)
+                applyGear(gear)
+            }
+            return
+        }
+        applyGear(gear)
+    }
+
+    private fun applyGear(gear: Int) {
+        if (gear == gearShown) return
+        gearShown = gear
         val p = app.prefs
         val action = when (gear) {
             GearAction.GEAR_REVERSE -> p.gearReverse
@@ -1650,6 +1675,14 @@ class CarLifeService : Service() {
             if (move.level < 1f) DiagLog.i(tag, "car in ${gearName(gear)}, sound to the car down to ${(move.level * 100).toInt()}%")
             else DiagLog.i(tag, "car in ${gearName(gear)}, sound to the car back to normal")
         }
+        gearLook?.cancel()
+        gearLook = null
+        if (sound != GearAction.SOUND_KEEP) {
+            gearLook = scope.launch {
+                delay(GEAR_LOOK_MS)
+                DiagLog.i(tag, "car in ${gearName(gear)} for a moment: ${gearSoundReport(am)}")
+            }
+        }
         if (move.pause) {
             gearPausedFt = ftPlaying
             if (ftPlaying) CarPlayer.pause() else phoneMediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE)
@@ -1677,6 +1710,18 @@ class CarLifeService : Service() {
         }
     }
 
+    private fun gearSoundReport(am: android.media.AudioManager): String {
+        val stream = android.media.AudioManager.STREAM_MUSIC
+        val volume = runCatching { "${am.getStreamVolume(stream)}/${am.getStreamMaxVolume(stream)}" }.getOrDefault("?")
+        val bluetooth = runCatching {
+            am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }?.productName?.toString()
+        }.getOrNull()
+        val route = if (CarPlayer.toCar || !app.prefs.soundOverBluetooth) "the CarLife sound channel" else "bluetooth"
+        return "${CarAudioBus.describe()}, sound goes over $route, phone media volume $volume" +
+            (if (savedVolume >= 0) " (phone speaker silenced by FT)" else "") +
+            (if (bluetooth != null) ", bluetooth sound connected to '$bluetooth'${if (am.isMusicActive) " and playing" else ""}" else ", no bluetooth sound connected")
+    }
+
     private fun gearPhoneVolume(am: android.media.AudioManager, level: Float) {
         val stream = android.media.AudioManager.STREAM_MUSIC
         val now = runCatching { am.getStreamVolume(stream) }.getOrDefault(-1)
@@ -1692,10 +1737,34 @@ class CarLifeService : Service() {
             if (gearVolumeSet < 0) gearVolumeBefore = now
             runCatching { am.setStreamVolume(stream, target, 0) }
             gearVolumeSet = target
+            holdPhoneVolume(am, target)
         } else if (gearVolumeSet >= 0) {
+            gearVolumeHold?.cancel()
+            gearVolumeHold = null
             runCatching { am.setStreamVolume(stream, gearVolumeBefore, 0) }
             gearVolumeBefore = -1
             gearVolumeSet = -1
+        }
+    }
+
+    private fun holdPhoneVolume(am: android.media.AudioManager, target: Int) {
+        gearVolumeHold?.cancel()
+        gearVolumeHold = scope.launch {
+            val stream = android.media.AudioManager.STREAM_MUSIC
+            val until = android.os.SystemClock.elapsedRealtime() + GEAR_VOLUME_HOLD_MS
+            var said = false
+            while (android.os.SystemClock.elapsedRealtime() < until) {
+                delay(250)
+                synchronized(gearSound) {
+                    if (gearVolumeSet != target) return@launch
+                    val now = runCatching { am.getStreamVolume(stream) }.getOrDefault(target)
+                    if (now > target) {
+                        runCatching { am.setStreamVolume(stream, target, 0) }
+                        if (!said) DiagLog.i(tag, "the car turned the phone's volume back up to $now, FT turned it down to $target again")
+                        said = true
+                    }
+                }
+            }
         }
     }
 
@@ -1709,6 +1778,13 @@ class CarLifeService : Service() {
     private fun gearForget() = synchronized(gearSound) {
         gearSettle?.cancel()
         gearSettle = null
+        gearHeld?.cancel()
+        gearHeld = null
+        gearLook?.cancel()
+        gearLook = null
+        gearVolumeHold?.cancel()
+        gearVolumeHold = null
+        gearShown = -1
         val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         if (gearSound.level < 1f) {
             CarAudioBus.soundLevel = 1f
