@@ -119,6 +119,7 @@ class CarDisplay(private val context: Context) {
         val interval = (1000L / f).coerceAtLeast(8L)
         if (interval == frameIntervalMs) return
         frameIntervalMs = interval
+        encoder?.setOperatingRate(f)
         val g = gate
         if (g != null) {
             g.setRate(f)
