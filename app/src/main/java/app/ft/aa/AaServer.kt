@@ -55,16 +55,16 @@ object AaServer {
     }
 
     private fun gone(): Boolean {
-        repeat(8) {
-            Thread.sleep(300)
+        repeat(24) {
+            Thread.sleep(100)
             if (!up()) return true
         }
         return false
     }
 
     private fun settles(): Boolean {
-        repeat(10) {
-            Thread.sleep(300)
+        repeat(20) {
+            Thread.sleep(100)
             if (up()) return true
         }
         return false

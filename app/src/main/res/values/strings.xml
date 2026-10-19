@@ -258,7 +258,7 @@
     <string name="keyboard_go">Go</string>
     <string name="keyboard_space">space</string>
     <string name="keyboard_delete">del</string>
-    <string name="touch_service_desc">Lets the car touchscreen control apps mirrored from this phone.</string>
+    <string name="touch_service_desc">Lets the car touchscreen control apps mirrored from this phone, and switches on Android Auto\'s head unit server for you.</string>
     <string name="touch_service_label">FT car touch</string>
     <string-array name="car_days">
         <item>Sunday</item>
@@ -392,6 +392,9 @@
     <string name="aa_switch_on">Switch it on</string>
     <string name="aa_switching_on">Switching it on</string>
     <string name="aa_switch_failed">FT could not switch it on by itself, so do it by hand below.</string>
+    <string name="aa_let_ft">Let FT switch it on</string>
+    <string name="aa_let_ft_body">Turn on FT in your phone\'s accessibility settings, and FT switches the server on by itself whenever the car needs Android Auto, also after a restart.</string>
+    <string name="aa_no_developer">Android Auto\'s developer settings are off. Do steps 1 and 2 under Show me how, then try again.</string>
     <string name="supercast_not_set_up">Apps on the car is not set up yet. Open FT on your phone, Settings, Apps on the car.</string>
     <string name="supercast_which_apps">Apps to show on the car</string>
     <string name="supercast_all_apps">All of them</string>

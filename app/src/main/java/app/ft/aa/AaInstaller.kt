@@ -46,11 +46,31 @@ object AaInstaller {
         }
     }
 
-    fun openSettings(context: Context) {
-        val settings = Intent()
-            .setClassName(GEARHEAD, "com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (runCatching { context.startActivity(settings) }.isSuccess) return
+    fun stub(context: Context, pkg: String = GEARHEAD): Boolean = runCatching {
+        context.packageManager.getPackageInfo(pkg, 0).versionName.orEmpty().contains("stub", ignoreCase = true)
+    }.getOrDefault(false)
+
+    fun settingsPackage(context: Context): String? {
+        val wanted = app.ft.FTApp.instance.prefs.aaServerPackage
+        val pkg = if (wanted.isNotBlank() && wanted != GEARHEAD && runCatching { context.packageManager.getApplicationInfo(wanted, 0) }.isSuccess) wanted else GEARHEAD
+        return pkg.takeIf { runCatching { context.packageManager.getApplicationInfo(it, 0) }.isSuccess }
+    }
+
+    fun settingsComponent(context: Context): String {
+        val pkg = settingsPackage(context) ?: GEARHEAD
+        if (pkg == GEARHEAD) return "$GEARHEAD/com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity"
+        return context.packageManager.getLaunchIntentForPackage(pkg)?.component?.flattenToString() ?: pkg
+    }
+
+    fun openSettings(context: Context, fallback: Boolean = true): Boolean {
+        val pkg = settingsPackage(context) ?: GEARHEAD
+        val settings = (if (pkg == GEARHEAD) {
+            Intent().setClassName(GEARHEAD, "com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity")
+        } else {
+            context.packageManager.getLaunchIntentForPackage(pkg) ?: Intent()
+        }).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or if (fallback) 0 else Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        if (runCatching { context.startActivity(settings) }.isSuccess) return true
+        if (!fallback) return false
         DiagLog.w(TAG, "Android Auto would not open its settings, showing its app page instead")
         runCatching {
             context.startActivity(
@@ -58,6 +78,7 @@ object AaInstaller {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         }
+        return false
     }
 
     fun installerOfAndroidAuto(context: Context): String? = runCatching {

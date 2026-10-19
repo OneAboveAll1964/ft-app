@@ -110,8 +110,6 @@ object Root {
 
     fun stopHotspot() = ok("cmd wifi stop-softap")
 
-    private const val AA_SETTINGS = "com.google.android.projection.gearhead/com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity"
-
     fun aaServerUp(): Boolean {
         val out = run("cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -i ' 0A ' | grep -ci ':149D'") ?: return false
         return (out.stdout.trim().toIntOrNull() ?: 0) > 0
@@ -119,7 +117,13 @@ object Root {
 
     fun startAaServer(context: android.content.Context? = null): Boolean {
         if (aaServerUp()) return true
+        app.ft.aa.AaInstaller.settingsPackage(app.ft.FTApp.instance)?.let { if (app.ft.aa.AaInstaller.stub(app.ft.FTApp.instance, it)) return false }
         if (context != null && app.ft.aa.AaServer.start(context)) return true
+        if (context != null && !app.ft.aa.AaSwitch.canTap()) {
+            enableAccessibility(context.packageName, "${context.packageName}/${app.ft.FTTouchService::class.java.name}")
+            repeat(30) { if (!app.ft.aa.AaSwitch.canTap()) Thread.sleep(100) }
+        }
+        if (context != null && app.ft.aa.AaSwitch.canTap() && app.ft.aa.AaSwitch.start(context) == app.ft.aa.AaSwitch.Result.ON) return true
         return toggleAaServer(start = true)
     }
 
@@ -133,14 +137,12 @@ object Root {
         if (!granted) return false
         if (aaServerUp() == start) return true
         run("input keyevent KEYCODE_WAKEUP", "wm dismiss-keyguard")
-        Thread.sleep(300)
-        run("am start -n $AA_SETTINGS")
+        run("am start -n ${app.ft.aa.AaInstaller.settingsComponent(app.ft.FTApp.instance)}")
         val menu = waitForNode("content-desc", "More options", 5000) ?: run { back(); return aaServerUp() }
         tap(menu)
-        Thread.sleep(700)
         var xml = dumpUi()
         var tries = 0
-        while (xml != null && !xml.contains("head unit server") && tries++ < 3) { Thread.sleep(400); xml = dumpUi() }
+        while (xml != null && !xml.contains("head unit server") && tries++ < 6) { Thread.sleep(150); xml = dumpUi() }
         val wanted = if (start) "Start head unit server" else "Stop head unit server"
         val item = xml?.let { nodeBounds(it, "text", wanted) }
         if (item == null) {
@@ -149,15 +151,15 @@ object Root {
             return if (opposite) start else aaServerUp()
         }
         tap(item)
-        Thread.sleep(1500)
+        var ok = false
+        repeat(20) { if (!ok) { Thread.sleep(150); ok = aaServerUp() == start } }
         back()
-        val ok = aaServerUp() == start
         if (ok) DiagLog.i("Root", if (start) "started Android Auto's head unit server" else "stopped Android Auto's head unit server")
         else DiagLog.w("Root", "could not ${if (start) "start" else "stop"} Android Auto's head unit server")
         return ok
     }
 
-    private fun back() { run("input keyevent KEYCODE_HOME") }
+    private fun back() { run("input keyevent KEYCODE_BACK") }
 
     private fun tap(p: IntArray) { run("input tap ${p[0]} ${p[1]}") }
 
@@ -177,7 +179,7 @@ object Root {
             val xml = dumpUi()
             val b = xml?.let { nodeBounds(it, attr, value) }
             if (b != null) return b
-            Thread.sleep(300)
+            Thread.sleep(150)
         }
         return null
     }

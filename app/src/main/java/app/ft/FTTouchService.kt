@@ -13,6 +13,8 @@ class FTTouchService : AccessibilityService() {
         @Volatile var instance: FTTouchService? = null
             private set
         val enabled: Boolean get() = instance != null
+        private val _connected = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val connected: kotlinx.coroutines.flow.StateFlow<Boolean> = _connected
         private const val SEGMENT_MS = 32L
     }
 
@@ -25,12 +27,24 @@ class FTTouchService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        _connected.value = true
         DiagLog.i("Touch", "accessibility touch injector connected")
     }
 
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        gone()
+        return super.onUnbind(intent)
+    }
+
     override fun onDestroy() {
-        instance = null
+        gone()
         super.onDestroy()
+    }
+
+    private fun gone() {
+        if (instance !== this) return
+        instance = null
+        _connected.value = false
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
@@ -78,6 +92,11 @@ class FTTouchService : AccessibilityService() {
             dispatchGesture(b.build(), null, null)
         }.getOrDefault(false)
         if (!ok) stroke = null
+    }
+
+    fun tap(x: Float, y: Float) {
+        val p = Path().apply { moveTo(x, y); lineTo(x, y) }
+        runCatching { dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(p, 0L, 50L)).build(), null, null) }
     }
 
     fun back() = performGlobalAction(GLOBAL_ACTION_BACK)

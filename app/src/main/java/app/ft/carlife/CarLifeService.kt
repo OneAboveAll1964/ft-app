@@ -26,6 +26,8 @@ import app.ft.FTApp
 import app.ft.FTTouchService
 import app.ft.MainActivity
 import app.ft.ShareActivity
+import app.ft.aa.AaKeep
+import app.ft.aa.AaInstaller
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
@@ -1329,9 +1331,9 @@ class CarLifeService : Service() {
         }
         DiagLog.i(tag, "bridging this phone's Android Auto onto the car, waiting for it to start projecting")
         scope.launch {
-            if (Root.granted && !Root.aaServerUp()) {
-                DiagLog.i(tag, "starting Android Auto's head unit server with root")
-                Root.startAaServer(this@CarLifeService)
+            if (!AaInstaller.serverRunning(app.prefs.aaSelfPort)) {
+                DiagLog.i(tag, if (Root.granted) "starting Android Auto's head unit server with root" else "starting Android Auto's head unit server through accessibility")
+                AaKeep.switchOn(this@CarLifeService)
             }
             delay(1500)
             askAndroidAutoToConnect()

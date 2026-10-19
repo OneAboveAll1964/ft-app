@@ -257,7 +257,7 @@
     <string name="keyboard_go">انتقال</string>
     <string name="keyboard_space">مسافة</string>
     <string name="keyboard_delete">حذف</string>
-    <string name="touch_service_desc">يتيح لشاشة اللمس في السيارة التحكم بالتطبيقات المعروضة من هذا الهاتف.</string>
+    <string name="touch_service_desc">يتيح لشاشة اللمس في السيارة التحكم بالتطبيقات المعروضة من هذا الهاتف، ويشغّل لك خادم head unit في Android Auto.</string>
     <string name="touch_service_label">FT – لمس السيارة</string>
     <string-array name="car_days">
         <item>الأحد</item>
@@ -391,6 +391,9 @@
     <string name="aa_switch_on">شغّله</string>
     <string name="aa_switching_on">جارٍ تشغيله</string>
     <string name="aa_switch_failed">لم يتمكن FT من تشغيله وحده، فافعل ذلك يدوياً أدناه.</string>
+    <string name="aa_let_ft">دع FT يشغّله</string>
+    <string name="aa_let_ft_body">فعّل FT من إعدادات إمكانية الوصول في هاتفك، وسيشغّل FT الخادم وحده كلما احتاجت السيارة إلى Android Auto، حتى بعد إعادة التشغيل.</string>
+    <string name="aa_no_developer">إعدادات المطوّرين في Android Auto غير مفعّلة. نفّذ الخطوتين 1 و2 في «أرني الطريقة» ثم حاول مجددًا.</string>
     <string name="supercast_not_set_up">لم يتم تجهيز التطبيقات على السيارة بعد. افتح FT على هاتفك، الإعدادات، التطبيقات على السيارة.</string>
     <string name="supercast_which_apps">التطبيقات التي تظهر على السيارة</string>
     <string name="supercast_all_apps">كلها</string>

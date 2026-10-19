@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -67,6 +68,8 @@ import app.ft.FTApp
 import app.ft.R
 import app.ft.core.Root
 import app.ft.aa.AaInstaller
+import app.ft.aa.AaSwitch
+import app.ft.FTTouchService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -109,17 +112,36 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
     val scope = rememberCoroutineScope()
     var switching by remember { mutableStateOf(false) }
     var refused by remember { mutableStateOf(false) }
+    var noMenu by remember { mutableStateOf(false) }
+    val helper by FTTouchService.connected.collectAsState()
     OptionCard(stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking }), framed = framed) {
         Note(stringResource(R.string.aa_server_option_body))
-        if (!on && root) {
+        if (!on && !root && !helper) {
+            Note(stringResource(R.string.aa_let_ft_body))
+            FilledTonalButton(
+                onClick = { runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } },
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+            ) {
+                Text(stringResource(R.string.aa_let_ft), maxLines = 1)
+            }
+        }
+        if (!on && (root || helper)) {
             FilledTonalButton(
                 onClick = {
                     refused = false
+                    noMenu = false
                     scope.launch {
                         switching = true
-                        val ok = withContext(Dispatchers.IO) { Root.startAaServer(context) }
+                        val result = withContext(Dispatchers.IO) {
+                            if (root) {
+                                if (Root.startAaServer(context)) AaSwitch.Result.ON else AaSwitch.Result.FAILED
+                            } else {
+                                AaSwitch.start(context)
+                            }
+                        }
                         switching = false
-                        refused = !ok
+                        noMenu = result == AaSwitch.Result.NO_DEVELOPER_MENU
+                        refused = result != AaSwitch.Result.ON && !noMenu
                     }
                 },
                 enabled = !switching,
@@ -128,6 +150,7 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
                 Text(stringResource(if (switching) R.string.aa_switching_on else R.string.aa_switch_on), maxLines = 1)
             }
             if (refused) Note(stringResource(R.string.aa_switch_failed))
+            if (noMenu) Note(stringResource(R.string.aa_no_developer))
         }
         if (!on) ButtonPair(stringResource(R.string.aa_show_me_how), { help = true }, stringResource(R.string.aa_open_aa), { AaInstaller.openSettings(context) })
     }

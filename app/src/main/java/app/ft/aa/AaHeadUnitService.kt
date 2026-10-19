@@ -180,6 +180,7 @@ class AaHeadUnitService : Service() {
                         onPhone(s, dec)
                     } else {
                         if (_state.value.selfServer) _state.update { it.copy(selfServer = false) }
+                        AaKeep.poke(this@AaHeadUnitService)
                         if (!moaned) {
                             DiagLog.d(tag, "Android Auto's head unit server is off; FT will connect as soon as it is switched on")
                             moaned = true

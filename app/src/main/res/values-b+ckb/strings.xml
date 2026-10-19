@@ -257,7 +257,7 @@
     <string name="keyboard_go">بڕۆ</string>
     <string name="keyboard_space">بۆشایی</string>
     <string name="keyboard_delete">سڕینەوە</string>
-    <string name="touch_service_desc">ڕێگە بە شاشەی دەستلێدانی ئۆتۆمبێل دەدات ئەو ئەپانە کۆنترۆڵ بکات کە لەم مۆبایلەوە پیشان دەدرێن.</string>
+    <string name="touch_service_desc">ڕێگە بە شاشەی دەستلێدانی ئۆتۆمبێل دەدات ئەو ئەپانە کۆنترۆڵ بکات کە لەم مۆبایلەوە پیشان دەدرێن، و سێرڤەری head unitی Android Auto بۆت هەڵدەکات.</string>
     <string name="touch_service_label">FT – دەستلێدانی ئۆتۆمبێل</string>
     <string-array name="car_days">
         <item>یەکشەممە</item>
@@ -391,6 +391,9 @@
     <string name="aa_switch_on">بیکەرەوە</string>
     <string name="aa_switching_on">دەکرێتەوە</string>
     <string name="aa_switch_failed">FT نەیتوانی بە تەنها بیکاتەوە، بۆیە لە خوارەوە بە دەستی بیکەرەوە.</string>
+    <string name="aa_let_ft">با FT هەڵیبکات</string>
+    <string name="aa_let_ft_body">FT لە ڕێکخستنەکانی Accessibilityی مۆبایلەکەت هەڵبکە، ئیتر هەر کاتێک ئۆتۆمبێلەکە پێویستی بە Android Auto بوو، FT خۆی سێرڤەرەکە هەڵدەکات، تەنانەت دوای ڕیستارتیش.</string>
+    <string name="aa_no_developer">ڕێکخستنەکانی گەشەپێدەری Android Auto کوژاونەتەوە. هەنگاوەکانی 1 و 2 لە «پیشانم بدە چۆن» بکە، پاشان دووبارە هەوڵ بدەرەوە.</string>
     <string name="supercast_not_set_up">ئەپەکان لەسەر ئۆتۆمبێل هێشتا ڕێک نەخراوە. FT لەسەر مۆبایلەکەت بکەرەوە، ڕێکخستن، ئەپەکان لەسەر ئۆتۆمبێل.</string>
     <string name="supercast_which_apps">ئەو ئەپانەی لەسەر ئۆتۆمبێل دەردەکەون</string>
     <string name="supercast_all_apps">هەمووی</string>
