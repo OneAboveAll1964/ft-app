@@ -70,9 +70,16 @@ class AudioCapture(private val onPcm: (ByteArray) -> Unit) {
             }.also { it.isDaemon = true; it.start() }
             DiagLog.i(tag, "audio capture started 48000/2/16")
             true
+        } catch (t: SecurityException) {
+            DiagLog.e(tag, "audio capture permission was denied or revoked", t)
+            running.set(false)
+            runCatching { record?.release() }
+            record = null
+            false
         } catch (t: Throwable) {
             DiagLog.e(tag, "audio capture failed", t)
             running.set(false)
+            runCatching { record?.release() }
             record = null
             false
         }

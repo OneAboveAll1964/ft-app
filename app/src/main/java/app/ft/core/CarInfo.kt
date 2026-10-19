@@ -134,10 +134,14 @@ object CarInfo {
             _speed.value = if (location.hasSpeed()) location.speed * 3.6f else -1f
             remember(location)
         }
-        val ok = runCatching {
+        val ok = try {
             manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper())
             true
-        }.getOrDefault(false)
+        } catch (_: SecurityException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
+        }
         if (ok) speedWatch = listener else DiagLog.w(TAG, "no GPS for the speed widget")
     }
 
@@ -168,11 +172,15 @@ object CarInfo {
         val prefs = FTApp.instance.prefs
         if (!needsLocation(context)) {
             val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-            val last = runCatching {
+            val last = try {
                 manager?.getProviders(true)?.asSequence()
                     ?.mapNotNull { manager.getLastKnownLocation(it) }
                     ?.maxByOrNull { it.time }
-            }.getOrNull()
+            } catch (_: SecurityException) {
+                null
+            } catch (_: IllegalArgumentException) {
+                null
+            }
             if (last != null) {
                 remember(last)
                 return last.latitude to last.longitude

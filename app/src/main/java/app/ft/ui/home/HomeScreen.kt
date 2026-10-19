@@ -124,11 +124,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val session = car.session
     val connected = session !is CarLifeSession.State.Idle
     val projecting = session is CarLifeSession.State.Projecting
-    val steps = when {
-        cable -> usbSteps(running, connected, projecting)
-        direct -> directSteps(context, radios, car, running, connected, projecting)
-        else -> hotspotSteps(context, radios, running, connected, projecting, car.hotspotClients)
-    }
     val way = stringResource(
         when {
             car.usb -> R.string.home_way_usb
@@ -188,7 +183,12 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                AnimatedContent(targetState = if (cable) 2 else if (direct) 1 else 0, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "steps") { _ ->
+                AnimatedContent(targetState = if (cable) 2 else if (direct) 1 else 0, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "steps") { mode ->
+                    val steps = when (mode) {
+                        2 -> usbSteps(running, connected, projecting)
+                        1 -> directSteps(context, radios, car, running, connected, projecting)
+                        else -> hotspotSteps(context, radios, running, connected, projecting, car.hotspotClients)
+                    }
                     Stepper(steps, running)
                 }
                 if (car.usb && linkMode != 2) {

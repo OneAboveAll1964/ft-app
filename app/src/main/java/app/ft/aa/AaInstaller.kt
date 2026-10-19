@@ -82,7 +82,12 @@ object AaInstaller {
     }
 
     fun installerOfAndroidAuto(context: Context): String? = runCatching {
-        context.packageManager.getInstallSourceInfo(GEARHEAD).installingPackageName
+        if (Build.VERSION.SDK_INT >= 30) {
+            context.packageManager.getInstallSourceInfo(GEARHEAD).installingPackageName
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getInstallerPackageName(GEARHEAD)
+        }
     }.getOrNull()
 
     fun weInstalledIt(context: Context): Boolean =

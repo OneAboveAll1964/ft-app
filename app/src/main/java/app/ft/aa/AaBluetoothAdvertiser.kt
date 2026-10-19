@@ -68,9 +68,20 @@ class AaBluetoothAdvertiser(private val context: Context, private val port: Int)
             wm.startLocalOnlyHotspot(object : WifiManager.LocalOnlyHotspotCallback() {
                 override fun onStarted(reservation: WifiManager.LocalOnlyHotspotReservation) {
                     hotspot = reservation
-                    val cfg = reservation.softApConfiguration
-                    val ssid = cfg.wifiSsid?.toString()?.trim('"') ?: cfg.ssid ?: "FT"
-                    val pass = cfg.passphrase ?: ""
+                    val (ssid, pass) = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        val cfg = reservation.softApConfiguration
+                        val name = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                            cfg.wifiSsid?.toString()?.trim('"')
+                        } else {
+                            @Suppress("DEPRECATION")
+                            cfg.ssid
+                        }
+                        (name ?: "FT") to (cfg.passphrase ?: "")
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val cfg = reservation.wifiConfiguration
+                        (cfg?.SSID?.trim('"') ?: "FT") to (cfg?.preSharedKey ?: "")
+                    }
                     val ip = app.ft.carlife.NetUtil.localIpv4() ?: "192.168.43.1"
                     _info.value = HotspotInfo(ssid, pass, ip)
                     DiagLog.i(tag, "hotspot ready ssid=$ssid ip=$ip")
