@@ -75,6 +75,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
 import app.ft.FTTouchService
 import app.ft.aa.AaInstaller
+import app.ft.ui.components.FitText
 import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepState
 import app.ft.ui.components.StepMark
@@ -179,7 +180,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                                 selected = linkMode == value,
                                 onClick = { pickMode(value) },
                                 shape = SegmentedButtonDefaults.itemShape(i, 3)
-                            ) { Text(label, maxLines = 1) }
+                            ) { FitText(label) }
                         }
                     }
                 }

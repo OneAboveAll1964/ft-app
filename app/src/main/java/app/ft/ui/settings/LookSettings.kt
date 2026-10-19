@@ -88,4 +88,5 @@ private fun name(l: Language): String = when (l) {
     Language.ARABIC -> "العربية"
     Language.SORANI -> "کوردی (سۆرانی)"
     Language.BADINI -> "کوردی (بادینی)"
+    Language.RUSSIAN -> "Русский"
 }

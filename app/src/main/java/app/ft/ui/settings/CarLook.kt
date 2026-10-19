@@ -1,5 +1,7 @@
 package app.ft.ui.settings
 
+import androidx.compose.ui.unit.sp
+import app.ft.ui.components.FitText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -491,7 +493,7 @@ private fun ChipBody(label: String, icon: @Composable () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)
     ) {
         icon()
-        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+        FitText(label, style = MaterialTheme.typography.labelLarge, maxLines = 2, smallest = 10.sp, align = TextAlign.Center)
     }
 }
 

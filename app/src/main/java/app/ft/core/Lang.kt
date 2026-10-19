@@ -20,7 +20,8 @@ enum class Language(val key: String, val tag: String?) {
     ENGLISH("en", "en"),
     ARABIC("ar", "ar-u-nu-latn"),
     SORANI("ckb", "ckb-u-nu-latn"),
-    BADINI("kmr", "kmr-Arab-u-nu-latn");
+    BADINI("kmr", "kmr-Arab-u-nu-latn"),
+    RUSSIAN("ru", "ru");
 
     companion object {
         fun of(key: String): Language = entries.firstOrNull { it.key == key } ?: SYSTEM
@@ -45,7 +46,7 @@ object Lang {
 
     fun rtl(language: Language = current.value): Boolean = when (language) {
         Language.ARABIC, Language.SORANI, Language.BADINI -> true
-        Language.ENGLISH -> false
+        Language.ENGLISH, Language.RUSSIAN -> false
         Language.SYSTEM -> TextUtils.getLayoutDirectionFromLocale(locale(language)) == View.LAYOUT_DIRECTION_RTL
     }
 

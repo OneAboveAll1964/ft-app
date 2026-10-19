@@ -1,5 +1,7 @@
 package app.ft
 
+import androidx.compose.ui.unit.sp
+import app.ft.ui.components.FitText
 import app.ft.ui.car.CarStyles
 import android.Manifest
 import android.app.Activity
@@ -314,7 +316,7 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaF
                             contentDescription = "FT",
                             modifier = Modifier.height(40.dp)
                         )
-                        else Text(text, style = MaterialTheme.typography.titleLarge)
+                        else FitText(text, style = MaterialTheme.typography.titleLarge, smallest = 16.sp)
                     }
                 },
                 navigationIcon = {

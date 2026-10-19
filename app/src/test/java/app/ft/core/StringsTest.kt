@@ -32,7 +32,8 @@ class StringsTest {
     private val translations = mapOf(
         "Arabic" to read("values-ar"),
         "Sorani" to read("values-b+ckb"),
-        "Badini" to read("values-b+kmr+Arab")
+        "Badini" to read("values-b+kmr+Arab"),
+        "Russian" to read("values-ru")
     )
 
     private fun placeholders(s: String) = Regex("%(\\d+)\\$([sd])").findAll(s).map { it.value }.sorted().toList()
@@ -64,5 +65,13 @@ class StringsTest {
         listOf("Sorani", "Badini").forEach { name ->
             all(translations.getValue(name)).forEach { s -> assertTrue("Arabic-only letter in $name: $s", s.none { it in arabicOnly }) }
         }
+    }
+
+    @Test
+    fun russianIsWrittenInCyrillic() {
+        val t = translations.getValue("Russian")
+        (t.strings.values + t.arrays.values.flatten()).forEach { s -> assertTrue("Arabic script in Russian: $s", s.none { it in '\u0600'..'\u06FF' }) }
+        val cyrillic = t.strings.values.count { s -> s.any { it in '\u0400'..'\u04FF' } }
+        assertTrue("too few Russian strings are in Cyrillic: $cyrillic", cyrillic > t.strings.size * 3 / 4)
     }
 }

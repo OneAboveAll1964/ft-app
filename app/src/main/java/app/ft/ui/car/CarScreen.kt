@@ -1,5 +1,7 @@
 package app.ft.ui.car
 
+import androidx.compose.ui.unit.sp
+import app.ft.ui.components.FitText
 import app.ft.ui.theme.ownDirection
 import app.ft.ui.components.InkText
 import androidx.compose.material3.LocalContentColor
@@ -695,7 +697,7 @@ private fun Tile(modifier: Modifier, spec: TileSpec, onClick: () -> Unit) {
                 if (spec.app != null) Image(spec.app, contentDescription = null, modifier = Modifier.fillMaxSize())
                 else Icon(spec.icon ?: CarIcons.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(30.dp))
             }
-            Text(spec.label, style = MaterialTheme.typography.titleLarge.ownDirection(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FitText(spec.label, style = MaterialTheme.typography.titleLarge.ownDirection(), maxLines = 2, smallest = 15.sp)
         }
     }
 }
