@@ -130,7 +130,7 @@
     <string name="home_way_direct">Через WiFi + BL</string>
     <string name="home_way_hotspot">Через точку доступа</string>
     <string name="home_connection">Соединение</string>
-    <string name="mode_hotspot">Точка доступа</string>
+    <string name="mode_hotspot">Hotspot</string>
     <string name="mode_direct">WiFi + BL</string>
     <string name="mode_usb">USB</string>
     <string name="home_usb_takes_over">Автомобиль подключён по USB-кабелю. После отключения кабеля FT вернётся к режиму «%1$s».</string>

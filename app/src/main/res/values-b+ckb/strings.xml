@@ -130,7 +130,7 @@
     <string name="home_way_direct">بە WiFi + BL</string>
     <string name="home_way_hotspot">بە هۆتسپۆت</string>
     <string name="home_connection">پەیوەندی</string>
-    <string name="mode_hotspot">هۆتسپۆت</string>
+    <string name="mode_hotspot">Hotspot</string>
     <string name="mode_direct">WiFi + BL</string>
     <string name="mode_usb">USB</string>
     <string name="home_usb_takes_over">ئۆتۆمبێلەکە بە کێبڵی USB پەیوەستە. کاتێک کێبڵەکە دەردەهێنرێت، FT دەگەڕێتەوە سەر %1$s.</string>

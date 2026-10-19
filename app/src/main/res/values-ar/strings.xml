@@ -130,7 +130,7 @@
     <string name="home_way_direct">عبر WiFi + BL</string>
     <string name="home_way_hotspot">عبر نقطة الاتصال</string>
     <string name="home_connection">الاتصال</string>
-    <string name="mode_hotspot">نقطة اتصال</string>
+    <string name="mode_hotspot">Hotspot</string>
     <string name="mode_direct">WiFi + BL</string>
     <string name="mode_usb">USB</string>
     <string name="home_usb_takes_over">السيارة متصلة بكابل USB. سيعود FT إلى %1$s عند فصله.</string>
