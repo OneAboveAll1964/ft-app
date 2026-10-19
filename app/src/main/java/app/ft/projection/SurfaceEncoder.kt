@@ -22,7 +22,8 @@ class SurfaceEncoder(
     private val qpFloor: Int,
     private val onConfig: (ByteArray) -> Unit,
     private val onFrame: (frame: ByteArray, keyFrame: Boolean) -> Unit,
-    private val gated: Boolean = false
+    private val gated: Boolean = false,
+    private val savePower: Boolean = false
 ) {
     private val tag = "Encoder"
     private val fps = fps.coerceIn(1, 60)
@@ -65,7 +66,7 @@ class SurfaceEncoder(
                     surface = c.createInputSurface()
                     c.start()
                     codec = c
-                    DiagLog.i(tag, "encoder started ${width}x${height}@$fps at ${bitrate / 1000} kbps, a key picture every second, ${c.name}${if (label == "full") "" else " ($label)"}${if (label != "full" || tuning.isEmpty()) "" else ", " + tuning.entries.joinToString { "${it.key}=${it.value}" }}")
+                    DiagLog.i(tag, "encoder started ${width}x${height}@$fps at ${bitrate / 1000} kbps, a key picture every second, ${if (savePower) "saving power, " else ""}${c.name}${if (label == "full") "" else " ($label)"}${if (label != "full" || tuning.isEmpty()) "" else ", " + tuning.entries.joinToString { "${it.key}=${it.value}" }}")
                     return
                 } catch (t: Throwable) {
                     DiagLog.w(tag, "encoder $name refused the $label setup for ${width}x$height: ${t.javaClass.simpleName} ${t.message ?: ""}")
@@ -112,7 +113,8 @@ class SurfaceEncoder(
         if (!gated) setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, this@SurfaceEncoder.fps.toFloat())
         runCatching {
             setInteger(MediaFormat.KEY_PRIORITY, 0)
-            setFloat(MediaFormat.KEY_OPERATING_RATE, this@SurfaceEncoder.fps.toFloat())
+            if (savePower) setFloat(MediaFormat.KEY_OPERATING_RATE, this@SurfaceEncoder.fps.toFloat())
+            else setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
             if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LATENCY, 1)
         }
         tuning.forEach { (k, v) -> setInteger(k, v) }
@@ -195,6 +197,7 @@ class SurfaceEncoder(
     }
 
     fun setOperatingRate(fps: Int) {
+        if (!savePower) return
         val rate = fps.coerceIn(1, 60)
         val activeCodec = codec ?: return
         handler?.post {

@@ -56,6 +56,7 @@ class Prefs(context: Context) {
     var videoBitrate: Int get() = int("pictureBitrate", VideoPlans.DEFAULT_BITRATE); set(v) = set("pictureBitrate", v)
     var videoQpFloor: Int get() = int("videoQpFloor", 22); set(v) = set("videoQpFloor", v)
     var carDensity: Int get() = int("carDensity", 160); set(v) = set("carDensity", v)
+    var encoderSavePower: Boolean get() = bool("encoderSavePower", false); set(v) = set("encoderSavePower", v)
     var carSizedApps: Boolean get() = bool("carSizedApps", false); set(v) = set("carSizedApps", v)
     var muteWhileProjecting: Boolean get() = bool("muteWhileProjecting", true); set(v) = set("muteWhileProjecting", v)
     var soundOverBluetooth: Boolean get() = bool("soundOverBluetooth", false); set(v) = set("soundOverBluetooth", v)

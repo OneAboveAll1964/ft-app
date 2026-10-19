@@ -110,6 +110,8 @@
     <string name="picture_floor_note">يُبقي كل صورة كاملة صغيرة بما يكفي لتستقبلها السيارة، فتعود الشاشة بعد أن تعرض السيارة شاشاتها الخاصة. يفعل Baidu هذا على أحدث الهواتف. الأرقام الأصغر أوضح وأكبر حجمًا، و«معطّل» يرسل ما يصنعه الهاتف كما هو.</string>
     <string name="picture_min_fps">أدنى معدل إطارات مقبول، و0 يعني بلا حد أدنى</string>
     <string name="picture_density">وضوح التطبيقات على شاشة السيارة</string>
+    <string name="picture_save_power">توفير طاقة مرمّز الفيديو</string>
+    <string name="picture_save_power_body">يعمل مرمّز الفيديو في الهاتف بمعدل إطارات الصورة بدلًا من سرعته القصوى. قد يبقى الهاتف أبرد في الرحلات الطويلة، لكن شاشة السيارة قد تستجيب للمس متأخرة قليلًا.</string>
     <string name="picture_at_defaults">الإعدادات الافتراضية مطبّقة بالفعل</string>
     <string name="picture_reset">إعادة كل شيء إلى الإعدادات الافتراضية</string>
     <string name="corner_title">زر FT على شاشة السيارة</string>

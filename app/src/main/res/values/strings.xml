@@ -111,6 +111,8 @@
     <string name="picture_floor_note">Keeps every full picture small enough for the car to take, so the screen comes back after the car shows its own screens. Baidu does this on its newest phones. Lower numbers are sharper and bigger, Off sends whatever the phone makes.</string>
     <string name="picture_min_fps">Lowest frame rate to accept, 0 means no floor</string>
     <string name="picture_density">Sharpness of apps on the car screen</string>
+    <string name="picture_save_power">Let the video encoder save power</string>
+    <string name="picture_save_power_body">The phone\'s video encoder runs at the picture\'s frame rate instead of full speed. The phone may stay cooler on long drives, but the car screen may answer touches a little later.</string>
     <string name="picture_at_defaults">Already at the defaults</string>
     <string name="picture_reset">Put everything back to the defaults</string>
     <string name="corner_title">FT button on the car</string>
