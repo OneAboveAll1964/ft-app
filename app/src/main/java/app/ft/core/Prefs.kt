@@ -43,7 +43,7 @@ class Prefs(context: Context) {
     var aaSelfPort: Int get() = int("aaSelfPort", 5277); set(v) = set("aaSelfPort", v)
     var aaWidth: Int get() = int("aaWidth", 1280); set(v) = set("aaWidth", v)
     var aaHeight: Int get() = int("aaHeight", 720); set(v) = set("aaHeight", v)
-    var aaFps: Int get() = int("aaFps", 30); set(v) = set("aaFps", v)
+    var aaFps: Int get() = app.ft.aa.AaProtocol.supportedFps(int("aaFps", 30)); set(v) = set("aaFps", app.ft.aa.AaProtocol.supportedFps(v))
     var aaDensity: Int get() = int("aaDensity", 160); set(v) = set("aaDensity", v)
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
     var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)

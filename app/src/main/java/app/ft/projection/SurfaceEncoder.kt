@@ -4,6 +4,7 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -111,7 +112,7 @@ class SurfaceEncoder(
         if (!gated) setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, this@SurfaceEncoder.fps.toFloat())
         runCatching {
             setInteger(MediaFormat.KEY_PRIORITY, 0)
-            setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE.toInt())
+            setFloat(MediaFormat.KEY_OPERATING_RATE, this@SurfaceEncoder.fps.toFloat())
             if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LATENCY, 1)
         }
         tuning.forEach { (k, v) -> setInteger(k, v) }
@@ -190,6 +191,23 @@ class SurfaceEncoder(
         }.getOrElse {
             DiagLog.w(tag, "could not ask the encoder for a fresh key picture: ${it.message}")
             false
+        }
+    }
+
+    fun setOperatingRate(fps: Int) {
+        val rate = fps.coerceIn(1, 60)
+        val activeCodec = codec ?: return
+        handler?.post {
+            if (!running.get() || codec !== activeCodec) return@post
+            runCatching {
+                activeCodec.setParameters(Bundle().apply {
+                    putFloat(MediaFormat.KEY_OPERATING_RATE, rate.toFloat())
+                })
+            }.onSuccess {
+                DiagLog.i(tag, "requested operating rate $rate fps")
+            }.onFailure {
+                DiagLog.w(tag, "operating rate $rate fps not applied: ${it.javaClass.simpleName} ${it.message ?: ""}")
+            }
         }
     }
 

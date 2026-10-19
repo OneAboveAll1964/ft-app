@@ -146,6 +146,7 @@ class AaSession(
             AaProtocol.SERVICE_DISCOVERY_REQUEST -> {
                 _deviceName.value = AaMessages.deviceName(body)
                 DiagLog.i(tag, "service discovery from '${_deviceName.value}'")
+                DiagLog.i(tag, "video settings ${prefs.aaWidth}x${prefs.aaHeight}@${prefs.aaFps} fps")
                 sendEnc(
                     AaProtocol.CH_CONTROL, AaProtocol.SERVICE_DISCOVERY_RESPONSE,
                     AaMessages.serviceDiscoveryResponse(prefs.aaWidth, prefs.aaHeight, prefs.aaFps, prefs.aaDensity, true, prefs.carName, prefs.aaControlsLeft)

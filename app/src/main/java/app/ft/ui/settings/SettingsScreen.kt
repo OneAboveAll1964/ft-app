@@ -245,7 +245,12 @@ private fun PageContent(page: SettingsPage) {
             IntSetting(stringResource(R.string.aa_port), p.aaPort) { p.aaPort = it }
             IntSetting(stringResource(R.string.aa_width), p.aaWidth) { p.aaWidth = it }
             IntSetting(stringResource(R.string.aa_height), p.aaHeight) { p.aaHeight = it }
-            IntSetting(stringResource(R.string.aa_fps), p.aaFps) { p.aaFps = it }
+            var fps by remember { mutableIntStateOf(p.aaFps) }
+            PickSetting(
+                stringResource(R.string.aa_fps),
+                listOf(Option("30"), Option("60")),
+                if (fps == 60) 1 else 0
+            ) { index -> fps = if (index == 1) 60 else 30; p.aaFps = fps }
             IntSetting(stringResource(R.string.aa_density), p.aaDensity) { p.aaDensity = it }
         }
         SettingsPage.ADVANCED -> {
