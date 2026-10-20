@@ -45,9 +45,17 @@ class AaMicrophone(private val onPcm: (ByteArray) -> Unit) {
             }.apply { isDaemon = true; start() }
             DiagLog.i(tag, "microphone open for Android Auto")
             true
+        } catch (t: SecurityException) {
+            DiagLog.e(tag, "microphone permission was denied or revoked", t)
+            running.set(false)
+            runCatching { record?.release() }
+            record = null
+            false
         } catch (t: Throwable) {
             DiagLog.e(tag, "could not open the microphone for Android Auto", t)
             running.set(false)
+            runCatching { record?.release() }
+            record = null
             false
         }
     }

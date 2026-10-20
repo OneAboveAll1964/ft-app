@@ -26,6 +26,7 @@ class FTApp : Application() {
         prefs = Prefs(this)
         Lang.init(prefs)
         Looks.init(prefs)
+        app.ft.core.PhoneStyle.init(prefs)
         DiagLog.attach(getExternalFilesDir("logs"))
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->

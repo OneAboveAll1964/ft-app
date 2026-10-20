@@ -36,6 +36,16 @@ import app.ft.core.Looks
 
 @Composable
 fun LookSettings() {
+    val modern by app.ft.core.PhoneStyle.modern.collectAsState()
+    app.ft.ui.components.PickSetting(
+        stringResource(R.string.look_phone_style),
+        listOf(
+            app.ft.ui.components.Option(stringResource(R.string.look_phone_classic)),
+            app.ft.ui.components.Option(stringResource(R.string.look_phone_modern))
+        ),
+        if (modern) 1 else 0,
+        about = stringResource(R.string.look_phone_style_about)
+    ) { app.ft.core.PhoneStyle.setModern(it == 1) }
     val language by Lang.current.collectAsState()
     val mode by Looks.mode.collectAsState()
     Text(stringResource(R.string.look_language), style = MaterialTheme.typography.labelLarge)

@@ -27,6 +27,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -95,6 +96,9 @@ import app.ft.FTTouchService
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.aa.AaVideoSink
+import app.ft.aa.AaTouchViewport
+import app.ft.aa.AaViewport
+import app.ft.core.PhoneStyle
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
@@ -156,6 +160,7 @@ fun CarScreen() {
 private fun CarRoot(style: CarStyle) {
     val state by CarLifeService.state.collectAsState()
     val aa by AaHeadUnitService.state.collectAsState()
+    val alternative by PhoneStyle.modern.collectAsState()
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
     var panes by remember { mutableStateOf<List<CarPane>>(emptyList()) }
@@ -261,7 +266,21 @@ private fun CarRoot(style: CarStyle) {
             CarBackground(style)
             when {
                 state.waitingForShare -> ShareWait(state.mirrorPackage, state.shareForSound)
-                state.aaOverlay -> LeftToRight { AaOverlay(aa) }
+                state.aaOverlay -> LeftToRight {
+                    val returnHome: () -> Unit = {
+                        view = CarView.LAUNCHER
+                        nowPlaying = false
+                        CarLifeService.goHome()
+                    }
+                    if (alternative && style.aaShowReturnButton) {
+                        Row(Modifier.fillMaxSize().background(Color.Black)) {
+                            val left = style.corner == 0 || style.corner == 2
+                            if (left) AaReturnRail(style.corner, returnHome)
+                            AaOverlay(aa, Modifier.weight(1f))
+                            if (!left) AaReturnRail(style.corner, returnHome)
+                        }
+                    } else AaOverlay(aa)
+                }
                 state.mirroring -> LeftToRight { MirrorOverlay(style.corner) }
                 view == CarView.DRAWER -> AppDrawer(drawerGrid, pad) { view = CarView.LAUNCHER }
                 view == CarView.BROWSER -> CarBrowser(browser) { view = CarView.LAUNCHER }
@@ -333,7 +352,7 @@ private fun CarRoot(style: CarStyle) {
                     if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                 }
             }
-            if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow) {
+            if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || (style.aaShowReturnButton && !alternative))) {
                 CornerPill(style.corner) {
                     view = CarView.LAUNCHER
                     nowPlaying = false
@@ -371,6 +390,36 @@ private fun ShareWait(pkg: String, forSound: Boolean) {
                 color = Color.White.copy(alpha = 0.7f)
             )
             Button(onClick = { CarLifeService.cancelShareWait() }) { Text(stringResource(if (forSound) R.string.action_not_now else R.string.action_cancel)) }
+        }
+    }
+}
+
+@Composable
+private fun AaReturnRail(corner: Int, onClick: () -> Unit) {
+    Box(
+        Modifier.width(104.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer),
+        contentAlignment = if (corner < 2) Alignment.TopCenter else Alignment.BottomCenter
+    ) {
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(8.dp).fillMaxWidth().height(96.dp).touchZone("aa-return")
+        ) {
+            Column(
+                Modifier.fillMaxSize().padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
+            ) {
+                Icon(CarIcons.Back, contentDescription = null, modifier = Modifier.size(26.dp))
+                Text(
+                    stringResource(R.string.aa_back_to_ft),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
     }
 }
@@ -703,12 +752,17 @@ private fun Tile(modifier: Modifier, spec: TileSpec, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AaOverlay(aa: app.ft.aa.AaState) {
+private fun AaOverlay(aa: app.ft.aa.AaState, modifier: Modifier = Modifier) {
     val prefs = FTApp.instance.prefs
     val (fullW, fullH) = app.ft.aa.AaProtocol.standardSize(prefs.aaWidth, prefs.aaHeight)
     val real by AaVideoSink.frame.collectAsState()
     val (frameW, frameH) = real ?: (fullW to fullH)
-    Box(Modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
+    DisposableEffect(Unit) { onDispose { AaTouchViewport.bounds = null } }
+    BoxWithConstraints(modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
+        val ratio = frameW.toFloat() / frameH
+        val picture = if (maxWidth / maxHeight > ratio) {
+            Modifier.fillMaxHeight().aspectRatio(ratio)
+        } else Modifier.fillMaxWidth().aspectRatio(ratio)
         LaunchedEffect(Unit) {
             delay(3000)
             if (AaVideoSink.surface.value == null) DiagLog.w("Car", "Android Auto is on the car but its picture still has no place to be drawn")
@@ -725,7 +779,10 @@ private fun AaOverlay(aa: app.ft.aa.AaState) {
                 }
             },
             update = { v -> v.holder.setFixedSize(frameW, frameH) },
-            modifier = Modifier.fillMaxWidth().aspectRatio(frameW.toFloat() / frameH).align(Alignment.TopCenter)
+            modifier = picture.align(Alignment.TopCenter).onGloballyPositioned { coordinates ->
+                val b = coordinates.boundsInWindow()
+                AaTouchViewport.bounds = AaViewport(b.left.toInt(), b.top.toInt(), b.width.toInt(), b.height.toInt())
+            }
         )
         AnimatedVisibility(visible = aa.phase != AaSession.Phase.STREAMING, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {

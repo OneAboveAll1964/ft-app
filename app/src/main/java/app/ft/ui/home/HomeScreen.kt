@@ -1,5 +1,6 @@
 package app.ft.ui.home
 
+import app.ft.core.LocalModernPhoneUi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +41,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
+import app.ft.ui.car.CarIcons
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -93,7 +95,8 @@ import app.ft.R
 private data class Status(val title: String, val detail: String, val level: Int)
 
 @Composable
-fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onOpenAaSetup: () -> Unit) {
+fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onOpenAaSetup: () -> Unit, onOpenConnectionSettings: () -> Unit) {
+    val modern = LocalModernPhoneUi.current
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
@@ -121,11 +124,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val session = car.session
     val connected = session !is CarLifeSession.State.Idle
     val projecting = session is CarLifeSession.State.Projecting
-    val steps = when {
-        cable -> usbSteps(running, connected, projecting)
-        direct -> directSteps(context, radios, car, running, connected, projecting)
-        else -> hotspotSteps(context, radios, running, connected, projecting, car.hotspotClients)
-    }
     val way = stringResource(
         when {
             car.usb -> R.string.home_way_usb
@@ -185,7 +183,12 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                AnimatedContent(targetState = if (cable) 2 else if (direct) 1 else 0, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "steps") { _ ->
+                AnimatedContent(targetState = if (cable) 2 else if (direct) 1 else 0, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "steps") { mode ->
+                    val steps = when (mode) {
+                        2 -> usbSteps(running, connected, projecting)
+                        1 -> directSteps(context, radios, car, running, connected, projecting)
+                        else -> hotspotSteps(context, radios, running, connected, projecting, car.hotspotClients)
+                    }
                     Stepper(steps, running)
                 }
                 if (car.usb && linkMode != 2) {
@@ -205,6 +208,13 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                         }
                     } else Notice(stringResource(car.blocked))
                 }
+                if (direct && running && !connected && !car.wifiDirect && car.joinTimedOutSeconds > 0) {
+                    Notice(
+                        stringResource(R.string.car_join_timeout_error, car.joinTimedOutSeconds),
+                        stringResource(R.string.car_join_timeout_action),
+                        onOpenConnectionSettings
+                    )
+                }
                 val refused = car.refused
                 AnimatedVisibility(visible = refused != 0 && !connected && !cable) {
                     if (refused != 0) Notice(stringResource(refused), stringResource(R.string.home_use_mode, stringResource(if (direct) R.string.mode_hotspot else R.string.mode_direct))) { pickMode(if (direct) 0 else 1) }
@@ -215,7 +225,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             }
         }
 
-        if (!touchOn || !overlayOn || !backgroundOn) {
+        if (!modern && (!touchOn || !overlayOn || !backgroundOn)) {
             item {
                 Section(stringResource(R.string.home_finish_setup)) {
                     Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -260,6 +270,18 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                             textAlign = TextAlign.Center
                         )
                     }
+                }
+            }
+        }
+
+        if (modern && (!touchOn || !overlayOn || !backgroundOn)) {
+            item {
+                Section(stringResource(R.string.home_finish_setup)) {
+                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
+                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
             }
         }
@@ -337,6 +359,94 @@ private fun directSteps(
 
 @Composable
 private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    if (!LocalModernPhoneUi.current) {
+        ClassicStatusCard(status, checked, onToggle)
+        return
+    }
+    val scheme = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        when (status.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
+        label = "status"
+    )
+    val content by animateColorAsState(
+        when (status.level) { 3 -> scheme.onPrimaryContainer; 2 -> scheme.onSecondaryContainer; 1 -> scheme.onTertiaryContainer; else -> scheme.onSurface },
+        label = "statusText"
+    )
+    val dot by animateColorAsState(
+        when (status.level) { 3 -> scheme.primary; 2 -> scheme.secondary; 1 -> scheme.tertiary; else -> scheme.outline },
+        label = "dot"
+    )
+    Card(shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = container, contentColor = content)) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(16.dp), color = content.copy(alpha = 0.08f), contentColor = content) {
+                    Icon(CarIcons.Phone, contentDescription = null, modifier = Modifier.padding(12.dp).size(28.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                Switch(checked = checked, onCheckedChange = onToggle)
+            }
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
+                    Spacer(Modifier.width(8.dp))
+                    Text(status.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                }
+                Text(status.detail, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Notice(text: String, action: String? = null, onAction: () -> Unit = {}) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(color = scheme.errorContainer, contentColor = scheme.onErrorContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(Modifier.padding(start = 14.dp, end = if (action == null) 14.dp else 6.dp, top = if (action == null) 12.dp else 6.dp, bottom = if (action == null) 12.dp else 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            if (action != null) TextButton(onClick = onAction) { Text(action, color = scheme.onErrorContainer) }
+        }
+    }
+}
+
+@Composable
+private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+        StepMark(0, if (granted) StepState.DONE else StepState.LATER, working = false)
+        Spacer(Modifier.width(14.dp))
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 8.dp))
+        if (!granted) FilledTonalButton(onClick = onGrant) { Text(stringResource(R.string.action_allow)) }
+        else Text(stringResource(R.string.state_done), style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+    if (!LocalModernPhoneUi.current) {
+        ClassicSection(title, content)
+        return
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp))
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
+        }
+    }
+}
+
+@Composable
+private fun ClassicStatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(
         when (status.level) { 3 -> scheme.primaryContainer; 2 -> scheme.secondaryContainer; 1 -> scheme.tertiaryContainer; else -> scheme.surfaceContainerHigh },
@@ -365,41 +475,7 @@ private fun StatusCard(status: Status, checked: Boolean, onToggle: (Boolean) -> 
 }
 
 @Composable
-private fun Notice(text: String, action: String? = null, onAction: () -> Unit = {}) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(color = scheme.errorContainer, contentColor = scheme.onErrorContainer, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Row(Modifier.padding(start = 14.dp, end = if (action == null) 14.dp else 6.dp, top = if (action == null) 12.dp else 6.dp, bottom = if (action == null) 12.dp else 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            if (action != null) TextButton(onClick = onAction) { Text(action, color = scheme.onErrorContainer) }
-        }
-    }
-}
-
-@Composable
-private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-        StepMark(0, if (granted) StepState.DONE else StepState.LATER, working = false)
-        Spacer(Modifier.width(14.dp))
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (!granted) FilledTonalButton(onClick = onGrant) { Text(stringResource(R.string.action_allow)) }
-        else Text(stringResource(R.string.state_done), style = MaterialTheme.typography.labelLarge, color = scheme.primary)
-    }
-}
-
-@Composable
-private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-@Composable
-private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+private fun ClassicSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))

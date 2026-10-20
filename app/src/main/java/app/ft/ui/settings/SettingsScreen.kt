@@ -1,6 +1,8 @@
 package app.ft.ui.settings
 
+import app.ft.core.LocalModernPhoneUi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import app.ft.ui.components.InkText
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +29,7 @@ import app.ft.ui.car.CarIcons
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
@@ -42,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedButton
@@ -66,6 +70,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import app.ft.carlife.GearAction
 import app.ft.carlife.WheelAction
+import app.ft.carlife.JoinWatch
 import app.ft.ui.components.AaMissing
 import app.ft.ui.components.AaStart
 import app.ft.ui.components.rememberRootGranted
@@ -106,6 +111,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
 
 @Composable
 fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> Unit, onOpen: (SettingsPage) -> Unit) {
+    val modern = LocalModernPhoneUi.current
     val root = rememberRootGranted()
     val carPage = page == SettingsPage.CAR_SCREEN
     val preview = rememberCarPreviewState()
@@ -123,8 +129,29 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         when {
-            page == null -> {
+            page == null && !modern -> {
                 items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
+                item { MadeBy() }
+            }
+            page == null -> {
+                items(listOf(
+                    listOf(SettingsPage.LOOK, SettingsPage.CAR_SCREEN, SettingsPage.PICTURE, SettingsPage.SOUND),
+                    listOf(SettingsPage.CAR, SettingsPage.ANDROID_AUTO, SettingsPage.SUPERCAST),
+                    listOf(SettingsPage.ADVANCED, SettingsPage.BACKUP)
+                )) { pages ->
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    ) {
+                        pages.forEachIndexed { index, p ->
+                            PageButton(p) { onOpen(p) }
+                            if (index < pages.lastIndex) HorizontalDivider(
+                                modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
                 item { MadeBy() }
             }
             carPage -> {
@@ -146,21 +173,19 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
 
 @Composable
 private fun PageButton(page: SettingsPage, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-                Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
-            }
-            Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (!LocalModernPhoneUi.current) {
+        ClassicPageButton(page, onClick)
+        return
+    }
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
+            Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(8.dp).size(20.dp))
         }
+        Column(Modifier.weight(1f).padding(start = 16.dp, end = 8.dp)) {
+            Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(page.about), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -220,6 +245,16 @@ private fun PageContent(page: SettingsPage) {
             TextSetting(stringResource(R.string.car_p2p_label), p.carP2pName) { p.carP2pName = it }
             TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
             TextSetting(stringResource(R.string.car_pin_label), p.carWpsPin) { p.carWpsPin = it }
+            var timeout by remember { mutableIntStateOf(p.carJoinTimeoutSeconds) }
+            PickSetting(
+                stringResource(R.string.car_join_timeout),
+                JoinWatch.TIMEOUT_SECONDS.map { Option(stringResource(R.string.car_join_timeout_seconds, it)) },
+                JoinWatch.TIMEOUT_SECONDS.indexOf(timeout),
+                about = stringResource(R.string.car_join_timeout_about)
+            ) { index ->
+                timeout = JoinWatch.TIMEOUT_SECONDS[index]
+                p.carJoinTimeoutSeconds = timeout
+            }
             BoolSetting(stringResource(R.string.car_swap_keys), p.swapTrackKeys) { p.swapTrackKeys = it }
             Text(stringResource(R.string.wheel_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
             Text(
@@ -241,6 +276,11 @@ private fun PageContent(page: SettingsPage) {
             GearSoundSetting(stringResource(R.string.gear_park_sound), p.gearParkSound, p.gearParkLevel, { p.gearParkSound = it }) { p.gearParkLevel = it }
         }
         SettingsPage.ANDROID_AUTO -> {
+            BoolSetting(stringResource(R.string.aa_show_return_button), p.aaShowReturnButton) {
+                p.aaShowReturnButton = it
+                CarStyles.reload()
+            }
+            Text(stringResource(R.string.aa_show_return_button_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             BoolSetting(stringResource(R.string.aa_match_car), p.aaMatchCar) { p.aaMatchCar = it }
             BoolSetting(stringResource(R.string.aa_controls_left), p.aaControlsLeft) { p.aaControlsLeft = it }
             IntSetting(stringResource(R.string.aa_port), p.aaPort) { p.aaPort = it }
@@ -549,4 +589,24 @@ private fun wheelIcon(action: Int): ImageVector = when (action) {
     WheelAction.PLAY_PAUSE -> CarIcons.Play
     WheelAction.VOICE -> CarIcons.Mic
     else -> Icons.Filled.Close
+}
+
+@Composable
+private fun ClassicPageButton(page: SettingsPage, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+                Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
+            }
+            Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }

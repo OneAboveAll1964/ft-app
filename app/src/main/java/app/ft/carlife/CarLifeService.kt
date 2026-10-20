@@ -28,6 +28,7 @@ import app.ft.MainActivity
 import app.ft.ShareActivity
 import app.ft.aa.AaKeep
 import app.ft.aa.AaInstaller
+import app.ft.aa.AaTouchViewport
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.core.CarAudioBus
@@ -73,6 +74,7 @@ data class CarState(
     val btCar: String? = null,
     val carWifi: String? = null,
     val wifiDirect: Boolean = false,
+    val joinTimedOutSeconds: Int = 0,
     val beacon: Boolean = false,
     val step: String = "",
     val refused: Int = 0,
@@ -641,7 +643,7 @@ class CarLifeService : Service() {
             }
             runCatching {
                 val f = android.content.IntentFilter(USB_PERMISSION)
-                if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED) else registerReceiver(r, f)
+                androidx.core.content.ContextCompat.registerReceiver(this, r, f, androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
                 usbAsk = r
             }.onFailure { DiagLog.w(tag, "USB: cannot listen for the cable permission: ${it.message}") }
         }
@@ -873,7 +875,7 @@ class CarLifeService : Service() {
                 if (ip != null && !up) {
                     DiagLog.i(tag, "WiFi Direct is up at $ip, picking it up")
                     finder?.checkExisting()
-                    _state.update { it.copy(wifiDirect = true, ip = ip) }
+                    _state.update { it.copy(wifiDirect = true, ip = ip, joinTimedOutSeconds = 0) }
                     wireless.wifiDirectReady(ip)
                     updateBeacon()
                 } else if (ip == null && up && carNetworkIface == null) {
@@ -964,7 +966,7 @@ class CarLifeService : Service() {
                 link = "", session = CarLifeSession.State.Idle, listening = false, aaOverlay = false,
                 mirroring = false, mirrorPackage = "", btCar = null, carWifi = null, wifiDirect = false,
                 beacon = false, step = "", refused = 0, waitingForShare = false, usb = false,
-                blocked = 0, hotspotClients = null
+                blocked = 0, hotspotClients = null, joinTimedOutSeconds = 0
             )
         }
     }
@@ -973,7 +975,9 @@ class CarLifeService : Service() {
         if (finder != null) return
         val f = CarFinder(this, app.prefs, scope)
         finder = f
+        f.onJoinTimeout = { seconds -> _state.update { it.copy(joinTimedOutSeconds = seconds) } }
         f.onJoined = { l ->
+            _state.update { it.copy(joinTimedOutSeconds = 0) }
             DiagLog.i(tag, "on the car's WiFi Direct group ${l.name.ifBlank { l.groupOwnerIp }} (${l.iface ?: "?"}, car ${if (l.weAreOwner) "joined this phone" else "at " + l.groupOwnerIp})")
             step("WiFi Direct connected")
             p2pIface = l.iface
@@ -1404,9 +1408,11 @@ class CarLifeService : Service() {
         if (st.aaOverlay && aa != null && aa.phase.value >= AaSession.Phase.DISCOVERED) {
             if (action < 0) return
             val p = app.prefs
-            val w = carDisplay.width.coerceAtLeast(1)
-            val h = carDisplay.height.coerceAtLeast(1)
-            aa.sendTouch(x * p.aaWidth / w, y * p.aaHeight / h, action)
+            val viewport = AaTouchViewport.bounds ?: return
+            if (action == CarTouch.DOWN) touchBeside = !viewport.contains(x, y)
+            if (touchBeside) return
+            val point = viewport.map(x, y, p.aaWidth, p.aaHeight)
+            aa.sendTouch(point.first, point.second, action)
             return
         }
         if (st.mirroring) {
@@ -1456,7 +1462,12 @@ class CarLifeService : Service() {
                 DiagLog.i(tag, "FT does not know which paired device is the car, so it cannot wake it over bluetooth")
                 return@launch
             }
-            val who = runCatching { car.name }.getOrNull() ?: car.address
+            val who = try {
+                car.name ?: car.address
+            } catch (_: SecurityException) {
+                DiagLog.w(tag, "bluetooth permission was denied; cannot wake the car")
+                return@launch
+            }
             if (btAudio.somethingIsPlaying() != null) {
                 DiagLog.i(tag, "'$who' is already connected over bluetooth")
                 return@launch
@@ -2056,7 +2067,11 @@ class CarLifeService : Service() {
         if (!btAudio.ready()) return false
         val playing = btAudio.somethingIsPlaying()
         if (playing != null) {
-            val who = runCatching { playing.name }.getOrNull() ?: playing.address
+            val who = try {
+                playing.name ?: playing.address
+            } catch (_: SecurityException) {
+                "car"
+            }
             restorePhone()
             audio.stop()
             DiagLog.i(tag, "'$who' is already playing this phone's sound over bluetooth, so FT will not send it again")
@@ -2134,7 +2149,15 @@ class CarLifeService : Service() {
         val mp = ensureProjection({ Lang.str(R.string.note_showing_app, shownName) }) ?: return false
         return try {
             val useCar = ownDisplay && app.prefs.carSizedApps && carDisplay.width > 0 && carDisplay.height > 0
-            val metrics = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).maximumWindowMetrics.bounds
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val metrics = if (Build.VERSION.SDK_INT >= 30) {
+                wm.maximumWindowMetrics.bounds
+            } else {
+                val size = android.graphics.Point()
+                @Suppress("DEPRECATION")
+                wm.defaultDisplay.getRealSize(size)
+                android.graphics.Rect(0, 0, size.x, size.y)
+            }
             val w = if (useCar) carDisplay.width else metrics.width()
             val h = if (useCar) carDisplay.height else metrics.height()
             val d = if (useCar) app.prefs.carDensity else resources.displayMetrics.densityDpi

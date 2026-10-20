@@ -2,6 +2,7 @@ package app.ft.core
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.ft.carlife.JoinWatch
 import app.ft.projection.VideoPlans
 
 class Prefs(context: Context) {
@@ -66,6 +67,7 @@ class Prefs(context: Context) {
     var aaPackage: String get() = str("aaPackage", "com.google.android.projection.gearhead"); set(v) = set("aaPackage", v)
     var aaServerPackage: String get() = str("aaServerPackage", ""); set(v) = set("aaServerPackage", v)
     var aaAutoStart: Boolean get() = bool("aaAutoStart", false); set(v) = set("aaAutoStart", v)
+    var aaShowReturnButton: Boolean get() = bool("aaShowReturnButton", true); set(v) = set("aaShowReturnButton", v)
     var aaCorner: Int get() = int("aaCorner", 0); set(v) = set("aaCorner", v)
     var carBackground: String get() = str("carBackground", "deep"); set(v) = set("carBackground", v)
     var carAccent: Int get() = int("carAccent", 0xFF5FE3C0.toInt()); set(v) = set("carAccent", v)
@@ -75,6 +77,7 @@ class Prefs(context: Context) {
     var carSongInfo: Boolean get() = bool("carSongInfo", true); set(v) = set("carSongInfo", v)
 
     var language: String get() = str("language", ""); set(v) = set("language", v)
+    var modernPhoneUi: Boolean get() = bool("modernPhoneUi", false); set(v) = set("modernPhoneUi", v)
     var themeMode: Int get() = int("themeMode", 0); set(v) = set("themeMode", v)
 
     var carName: String get() = str("carName", "FT"); set(v) = set("carName", v)
@@ -86,6 +89,9 @@ class Prefs(context: Context) {
     var guidanceMode: Int get() = int("directions", CarAudioBus.GUIDANCE_UNTOUCHED); set(v) = set("directions", v)
     var linkMode: Int get() = int("linkMode", 0); set(v) = set("linkMode", v)
     var carWpsPin: String get() = str("carWpsPin", ""); set(v) = set("carWpsPin", v)
+    var carJoinTimeoutSeconds: Int
+        get() = JoinWatch.timeoutSeconds(int("carJoinTimeoutSeconds", JoinWatch.DEFAULT_TIMEOUT_SECONDS))
+        set(v) = set("carJoinTimeoutSeconds", JoinWatch.timeoutSeconds(v))
 
     var mapsPackage: String get() = str("pkgMaps", "com.google.android.apps.maps"); set(v) = set("pkgMaps", v)
     var musicPackage: String get() = str("pkgMusic", "com.spotify.music"); set(v) = set("pkgMusic", v)

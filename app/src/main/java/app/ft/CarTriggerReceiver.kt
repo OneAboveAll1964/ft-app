@@ -20,7 +20,12 @@ class CarTriggerReceiver : BroadcastReceiver() {
             }
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
                 val dev: BluetoothDevice? = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                val name = runCatching { dev?.name }.getOrNull() ?: ""
+                val name = try {
+                    dev?.name.orEmpty()
+                } catch (e: SecurityException) {
+                    DiagLog.w("Trigger", "bluetooth permission was denied; ignoring connection trigger")
+                    return
+                }
                 val want = prefs.carBtName.trim()
                 if (want.isEmpty() || name.contains(want, true)) {
                     DiagLog.i("Trigger", "bluetooth connected to '${name.ifBlank { "device" }}', starting")

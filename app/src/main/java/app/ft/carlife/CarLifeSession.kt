@@ -689,8 +689,25 @@ class CarLifeSession(
 
     private fun btPairInfo(status: Int): ByteArray {
         val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-        val address = runCatching { adapter?.address }.getOrNull().orEmpty()
-        val name = runCatching { adapter?.name }.getOrNull().orEmpty().ifBlank { prefs.carName }
+        // Lint requires this privileged permission in the manifest even with a
+        // runtime guard. Only privileged installations can enter the guarded call.
+        @android.annotation.SuppressLint("MissingPermission")
+        val address = try {
+            // Ordinary apps cannot obtain the local MAC; do not send Android's
+            // placeholder address to the head unit as a real pairing address.
+            if (context.checkSelfPermission("android.permission.LOCAL_MAC_ADDRESS") == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                adapter?.address.orEmpty()
+            } else {
+                ""
+            }
+        } catch (_: SecurityException) {
+            ""
+        }
+        val name = try {
+            adapter?.name.orEmpty()
+        } catch (_: SecurityException) {
+            ""
+        }.ifBlank { prefs.carName }
         return ProtoWriter()
             .string(1, address)
             .string(2, "")

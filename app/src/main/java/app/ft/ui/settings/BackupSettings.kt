@@ -55,6 +55,7 @@ fun BackupSettings() {
         Lang.init(prefs)
         Lang.set(Language.of(prefs.language))
         Looks.set(prefs.themeMode)
+        app.ft.core.PhoneStyle.init(prefs)
         CarStyles.reload()
     }
 
