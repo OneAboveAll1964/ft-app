@@ -81,6 +81,11 @@ import app.ft.ui.car.CarStyles
 import app.ft.aa.AaInstaller
 import app.ft.core.CarAudioBus
 import app.ft.projection.VideoPlans
+import app.ft.projection.VideoPlan
+import app.ft.projection.VideoProfile
+import app.ft.carlife.CarLifeService
+import app.ft.carlife.CarLifeSession
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.annotation.StringRes
 import androidx.compose.ui.res.stringResource
 import app.ft.R
@@ -276,6 +281,8 @@ private fun PageContent(page: SettingsPage) {
             GearSoundSetting(stringResource(R.string.gear_park_sound), p.gearParkSound, p.gearParkLevel, { p.gearParkSound = it }) { p.gearParkLevel = it }
         }
         SettingsPage.ANDROID_AUTO -> {
+            BoolSetting(stringResource(R.string.aa_cluster_navigation), p.aaClusterNavigation,
+                detail = stringResource(R.string.aa_cluster_navigation_body)) { p.aaClusterNavigation = it }
             BoolSetting(stringResource(R.string.aa_show_return_button), p.aaShowReturnButton) {
                 p.aaShowReturnButton = it
                 CarStyles.reload()
@@ -450,6 +457,17 @@ private fun PictureSettings() {
     var rate by remember(rev) { mutableIntStateOf(p.videoBitrate) }
     var floor by remember(rev) { mutableIntStateOf(p.videoQpFloor) }
     var savePower by remember(rev) { mutableStateOf(p.encoderSavePower) }
+    var saved by remember { mutableStateOf(p.savedVideoProfile) }
+    DisposableEffect(p) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "savedVideoProfile") saved = p.savedVideoProfile
+        }
+        p.registerListener(listener)
+        onDispose { p.unregisterListener(listener) }
+    }
+    val car by CarLifeService.state.collectAsStateWithLifecycle()
+    VideoStatus(car.video.takeIf { car.session is CarLifeSession.State.Projecting },
+        saved?.takeIf { it.settingsKey == p.videoSettingsKey })
     val defaults = size == VideoPlans.SIZE_CAR && fps == 0 && rate == VideoPlans.DEFAULT_BITRATE && p.videoMinFps == 0 && floor == DEFAULT_FLOOR && !savePower
     Text(
         stringResource(if (defaults) R.string.picture_defaults_body else R.string.picture_changed_body),
@@ -489,6 +507,7 @@ private fun PictureSettings() {
     }
     OutlinedButton(
         onClick = {
+            p.clearVideoProfile()
             p.videoSize = VideoPlans.SIZE_CAR
             p.videoWidth = 0
             p.videoHeight = 0
@@ -500,12 +519,41 @@ private fun PictureSettings() {
             p.encoderSavePower = false
             rev++
         },
-        enabled = !defaults || p.carDensity != 160,
+        enabled = !defaults || p.carDensity != 160 || saved != null,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Text(stringResource(if (defaults && p.carDensity == 160) R.string.picture_at_defaults else R.string.picture_reset))
+        Text(stringResource(if (defaults && p.carDensity == 160 && saved == null) R.string.picture_at_defaults else R.string.picture_reset))
     }
 }
+
+@Composable
+private fun VideoStatus(current: VideoPlan?, saved: VideoProfile?) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.picture_stream_now), style = MaterialTheme.typography.titleSmall)
+            Text(if (current != null) videoSummary(current) else stringResource(R.string.picture_stream_inactive))
+            if (current != null && current == saved?.plan) {
+                Text(stringResource(R.string.picture_stream_using_saved), color = MaterialTheme.colorScheme.primary)
+            } else {
+                HorizontalDivider()
+                Text(stringResource(R.string.picture_stream_saved), style = MaterialTheme.typography.titleSmall)
+                Text(if (saved != null) videoSummary(saved.plan) else stringResource(R.string.picture_stream_unsaved))
+            }
+            if (saved != null) {
+                Text(stringResource(R.string.picture_stream_mode,
+                    stringResource(if (saved.automaticSize) R.string.choice_auto else R.string.picture_stream_manual),
+                    stringResource(if (saved.automaticFps) R.string.choice_auto else R.string.picture_stream_manual)))
+            }
+            Text(stringResource(R.string.picture_stream_note), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun videoSummary(plan: VideoPlan): String = stringResource(R.string.picture_stream_summary,
+    plan.streamWidth, plan.streamHeight, plan.fps,
+    java.text.NumberFormat.getNumberInstance().apply { maximumFractionDigits = 2 }.format(plan.bitrate / 1_000_000.0))
 
 private const val DEFAULT_FLOOR = 22
 

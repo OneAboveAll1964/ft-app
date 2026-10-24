@@ -41,7 +41,12 @@ class CarWirelessSetup(
         return ok
     }
 
+    @Synchronized
     fun wifiDirectReady(ip: String?) {
+        // The Bluetooth call can outlive a WiFi Direct group. Its next group
+        // needs a new IP announcement, even if Android assigns the same address.
+        if (ip == null || ip != phoneIp) ipSent = false
+        if (ip == null) announcedReady = false
         phoneIp = ip
         if (ip != null && ipWanted) sendIp()
     }

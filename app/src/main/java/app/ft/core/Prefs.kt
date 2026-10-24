@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import app.ft.carlife.JoinWatch
 import app.ft.projection.VideoPlans
+import app.ft.projection.VideoProfile
 
 class Prefs(context: Context) {
     private val sp: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
@@ -20,6 +21,8 @@ class Prefs(context: Context) {
     private fun set(key: String, v: Long) = sp.edit().putLong(key, v).apply()
 
     val all: Map<String, *> get() = sp.all
+    fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) = sp.registerOnSharedPreferenceChangeListener(listener)
+    fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) = sp.unregisterOnSharedPreferenceChangeListener(listener)
     fun put(key: String, value: Any?) {
         val e = sp.edit()
         when (value) {
@@ -47,17 +50,42 @@ class Prefs(context: Context) {
     var aaFps: Int get() = app.ft.aa.AaProtocol.supportedFps(int("aaFps", 30)); set(v) = set("aaFps", app.ft.aa.AaProtocol.supportedFps(v))
     var aaDensity: Int get() = int("aaDensity", 160); set(v) = set("aaDensity", v)
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
+    var aaClusterNavigation: Boolean get() = bool("aaClusterNavigation", true); set(v) = set("aaClusterNavigation", v)
     var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)
 
-    var videoSize: Int get() = int("pictureSize", VideoPlans.SIZE_CAR); set(v) = set("pictureSize", v)
-    var videoWidth: Int get() = int("videoWidth", 0); set(v) = set("videoWidth", v)
-    var videoHeight: Int get() = int("videoHeight", 0); set(v) = set("videoHeight", v)
-    var videoFps: Int get() = int("videoFps", 0); set(v) = set("videoFps", v)
-    var videoMinFps: Int get() = int("videoMinFps", 0); set(v) = set("videoMinFps", v)
-    var videoBitrate: Int get() = int("pictureBitrate", VideoPlans.DEFAULT_BITRATE); set(v) = set("pictureBitrate", v)
-    var videoQpFloor: Int get() = int("videoQpFloor", 22); set(v) = set("videoQpFloor", v)
+    var videoSize: Int get() = int("pictureSize", VideoPlans.SIZE_CAR); set(v) = setVideo("pictureSize", v)
+    var videoWidth: Int get() = int("videoWidth", 0); set(v) = setVideo("videoWidth", v)
+    var videoHeight: Int get() = int("videoHeight", 0); set(v) = setVideo("videoHeight", v)
+    var videoFps: Int get() = int("videoFps", 0); set(v) = setVideo("videoFps", v)
+    var videoMinFps: Int get() = int("videoMinFps", 0); set(v) = setVideo("videoMinFps", v)
+    var videoBitrate: Int get() = int("pictureBitrate", VideoPlans.DEFAULT_BITRATE); set(v) = setVideo("pictureBitrate", v)
+    var videoQpFloor: Int get() = int("videoQpFloor", 22); set(v) = setVideo("videoQpFloor", v)
     var carDensity: Int get() = int("carDensity", 160); set(v) = set("carDensity", v)
-    var encoderSavePower: Boolean get() = bool("encoderSavePower", false); set(v) = set("encoderSavePower", v)
+    var encoderSavePower: Boolean get() = bool("encoderSavePower", false); set(v) {
+        synchronized(videoProfileLock) {
+            if (v != encoderSavePower) sp.edit().putBoolean("encoderSavePower", v)
+                .remove("savedVideoProfile").putInt("videoProfileGeneration", videoProfileGeneration + 1).apply()
+        }
+    }
+    private fun setVideo(key: String, value: Int) = synchronized(videoProfileLock) {
+        if (sp.contains(key) && int(key, 0) == value) return@synchronized
+        sp.edit().putInt(key, value).remove("savedVideoProfile")
+            .putInt("videoProfileGeneration", videoProfileGeneration + 1).apply()
+    }
+    val videoSettingsKey: String get() = listOf(videoSize, videoWidth, videoHeight, videoFps,
+        videoMinFps, videoBitrate, videoQpFloor, encoderSavePower).joinToString(":")
+    val videoProfileGeneration: Int get() = int("videoProfileGeneration", 0)
+    val savedVideoProfile: VideoProfile? get() = VideoProfile.decode(str("savedVideoProfile", ""))
+
+    fun saveVideoProfile(profile: VideoProfile, generation: Int) = synchronized(videoProfileLock) {
+        if (generation != videoProfileGeneration || profile.settingsKey != videoSettingsKey) return@synchronized
+        set("savedVideoProfile", profile.encode())
+    }
+
+    fun clearVideoProfile() = synchronized(videoProfileLock) {
+        sp.edit().remove("savedVideoProfile")
+            .putInt("videoProfileGeneration", videoProfileGeneration + 1).apply()
+    }
     var carSizedApps: Boolean get() = bool("carSizedApps", false); set(v) = set("carSizedApps", v)
     var muteWhileProjecting: Boolean get() = bool("muteWhileProjecting", true); set(v) = set("muteWhileProjecting", v)
     var soundOverBluetooth: Boolean get() = bool("soundOverBluetooth", false); set(v) = set("soundOverBluetooth", v)
@@ -139,3 +167,6 @@ class Prefs(context: Context) {
     var supercastDockHidden: Boolean get() = bool("supercastDockHidden", false); set(v) = set("supercastDockHidden", v)
     var supercastSplit: Float get() = flt("supercastSplit", 0.5f); set(v) = set("supercastSplit", v)
 }
+
+// Settings and the service each own a Prefs instance, but must invalidate/save atomically.
+private val videoProfileLock = Any()
