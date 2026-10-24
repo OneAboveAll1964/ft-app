@@ -14,7 +14,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.concurrent.atomic.AtomicBoolean
 
 private val OFF_MAIN = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ft-aa-main-sends").apply { isDaemon = true } }
 
@@ -33,60 +32,74 @@ class AaSession(
     private val crypto = AaCrypto(context)
     private val assembler = AaFraming.Assembler { crypto.decrypt(it) }
     private val outLock = Any()
-    private val running = AtomicBoolean(false)
     private var job: Job? = null
+    private val lifecycle = AaSessionLifecycle(
+        interrupt = {
+            runCatching { input.close() }
+            runCatching { output.close() }
+            job?.cancel()
+        },
+        cleanup = { reason ->
+            runCatching { mic.stop() }
+            if (micWanted) {
+                micWanted = false
+                runCatching { AaHeadUnitService.onCarMicWanted?.invoke(false) }
+            }
+            runCatching { CarAudioBus.end(AaProtocol.CH_SPEECH_AUDIO) }
+            runCatching { CarAudioBus.end(AaProtocol.CH_SYSTEM_AUDIO) }
+            runCatching { synchronized(navigation) { AaHeadUnitService.onNavigation?.invoke(navigation.reset()) } }
+            try { decoder.reset() } finally { onClosed(reason) }
+        }
+    )
     private var videoSession = 0
     private val audioSessions = HashMap<Int, Int>()
     private val audioMeasured = HashSet<Int>()
     private var mediaFrames = 0L
     private val _phase = MutableStateFlow(Phase.CONNECTED)
     val phase: StateFlow<Phase> = _phase
+    @Volatile var hasStreamed = false
+        private set
+    @Volatile var remoteBye = false
+        private set
     private val _deviceName = MutableStateFlow("")
     val deviceName: StateFlow<String> = _deviceName
     private val openChannels = HashSet<Int>()
+    private val navigation = AaNavigation()
     private val mic = AaMicrophone { pcm -> sendMicrophone(pcm) }
     @Volatile private var micWanted = false
     @Volatile private var carMicAt = 0L
 
     fun start() {
-        if (!running.compareAndSet(false, true)) return
+        if (!lifecycle.start()) return
         job = scope.launch(Dispatchers.IO) {
+            var reason = "reader stopped"
             try {
                 sendPlain(AaProtocol.CH_CONTROL, AaProtocol.VERSION_REQUEST, AaMessages.versionRequest(), false)
                 DiagLog.i(tag, "version request sent")
-                while (isActive && running.get()) {
+                while (isActive && lifecycle.running) {
                     val frame = AaFraming.readFrame(input)
-                    val msg = assembler.feed(frame) ?: continue
-                    dispatch(msg)
+                    lifecycle.dispatch {
+                        assembler.feed(frame)?.let { dispatch(it) }
+                    }
                 }
             } catch (t: Throwable) {
-                if (running.get()) DiagLog.w(tag, "session ended: ${t.message}")
+                reason = "read ${t.javaClass.simpleName}: ${t.message}"
+                if (lifecycle.running) DiagLog.w(tag, "session ended: $reason")
             } finally {
-                close("session closed")
+                close(reason)
             }
         }
     }
 
     fun close(reason: String) {
-        if (!running.getAndSet(false)) return
-        mic.stop()
-        if (micWanted) {
-            micWanted = false
-            runCatching { AaHeadUnitService.onCarMicWanted?.invoke(false) }
-        }
-        CarAudioBus.end(AaProtocol.CH_SPEECH_AUDIO)
-        CarAudioBus.end(AaProtocol.CH_SYSTEM_AUDIO)
-        runCatching { input.close() }
-        runCatching { output.close() }
-        decoder.stop()
-        job?.cancel()
-        onClosed(reason)
+        lifecycle.close(reason)
     }
 
     private fun sendPlain(channel: Int, id: Int, body: ByteArray, control: Boolean) = send(channel, id, body, false, control)
     private fun sendEnc(channel: Int, id: Int, body: ByteArray, control: Boolean = false) = send(channel, id, body, true, control)
 
     private fun send(channel: Int, id: Int, body: ByteArray, encrypted: Boolean, control: Boolean) {
+        if (!lifecycle.running) return
         if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
             OFF_MAIN.execute { send(channel, id, body, encrypted, control) }
             return
@@ -94,15 +107,21 @@ class AaSession(
         val payload = ByteArray(2 + body.size)
         Bytes.putU16(id, payload, 0)
         System.arraycopy(body, 0, payload, 2, body.size)
-        synchronized(outLock) {
+        val failure = synchronized(outLock) {
+            if (!lifecycle.running) return
             try {
                 val frames = AaFraming.encode(channel, payload, encrypted, control) { if (encrypted) crypto.encrypt(it) else it }
                 frames.forEach { output.write(it) }
                 output.flush()
+                null
             } catch (t: Throwable) {
-                DiagLog.e(tag, "write failed", t)
-                close("write failed")
+                t
             }
+        }
+        // Never wait for dispatch cleanup while holding outLock.
+        if (failure != null) {
+            if (lifecycle.running) DiagLog.e(tag, "write failed", failure)
+            close("write ${failure.javaClass.simpleName}: ${failure.message}")
         }
     }
 
@@ -119,6 +138,11 @@ class AaSession(
             AaProtocol.CH_SENSOR -> handleSensor(id, body)
             AaProtocol.CH_MEDIA_AUDIO, AaProtocol.CH_SPEECH_AUDIO, AaProtocol.CH_SYSTEM_AUDIO -> handleAudioSink(m.channel, id, body)
             AaProtocol.CH_AV_INPUT -> handleAvInput(id, body)
+            AaProtocol.CH_NAVIGATION -> synchronized(navigation) {
+                if (lifecycle.running) navigation.accept(id, body)?.let {
+                    AaHeadUnitService.onNavigation?.invoke(it)
+                }
+            }
             else -> DiagLog.d(tag, "${AaProtocol.channelName(m.channel)} msg 0x${Integer.toHexString(id)} len=${body.size}")
         }
     }
@@ -158,6 +182,10 @@ class AaSession(
                 openChannels += channel
                 DiagLog.i(tag, "channel open ${AaProtocol.channelName(channel)} (service $sid)")
                 sendEnc(channel, AaProtocol.CHANNEL_OPEN_RESPONSE, AaMessages.channelOpenResponse(), true)
+                if (channel == AaProtocol.CH_NAVIGATION) {
+                    sendEnc(channel, AaProtocol.NAV_START, ByteArray(0))
+                    DiagLog.i(tag, "instrument cluster navigation requested")
+                }
             }
             AaProtocol.PING_REQUEST -> sendEnc(AaProtocol.CH_CONTROL, AaProtocol.PING_RESPONSE, AaMessages.pingResponse(AaMessages.pingTimestamp(body)))
             AaProtocol.PING_RESPONSE -> Unit
@@ -168,11 +196,18 @@ class AaSession(
             }
             AaProtocol.NAV_FOCUS_REQUEST -> sendEnc(AaProtocol.CH_CONTROL, AaProtocol.NAV_FOCUS_NOTIFICATION, AaMessages.navFocusNotification(AaProtocol.NAV_FOCUS_PROJECTED))
             AaProtocol.BYEBYE_REQUEST -> {
+                remoteBye = true
                 DiagLog.i(tag, "phone bye-bye reason=${AaMessages.byeByeReason(body)}")
                 sendEnc(AaProtocol.CH_CONTROL, AaProtocol.BYEBYE_RESPONSE, AaMessages.byeByeResponse())
                 close("bye-bye")
             }
-            AaProtocol.CHANNEL_CLOSE_NOTIFICATION -> DiagLog.i(tag, "channel close ${AaProtocol.channelName(channel)}")
+            AaProtocol.CHANNEL_CLOSE_NOTIFICATION -> {
+                openChannels -= channel
+                if (channel == AaProtocol.CH_NAVIGATION) synchronized(navigation) {
+                    AaHeadUnitService.onNavigation?.invoke(navigation.reset())
+                }
+                DiagLog.i(tag, "channel close ${AaProtocol.channelName(channel)}")
+            }
             AaProtocol.VOICE_SESSION_NOTIFICATION -> Unit
             else -> DiagLog.w(tag, "unhandled control ${AaProtocol.controlName(id)} on ${AaProtocol.channelName(channel)}")
         }
@@ -193,9 +228,12 @@ class AaSession(
                 sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, false))
             }
             AaProtocol.AV_START_INDICATION -> {
+                hasStreamed = true
                 videoSession = AaMessages.startSession(body)
                 mediaFrames = 0
-                decoder.askForAFreshPicture = { askForAFreshPicture() }
+                // Surface changes can request this while holding the decoder lock.
+                // Never wait for session cleanup from that callback.
+                decoder.askForAFreshPicture = { scope.launch { askForAFreshPicture() } }
                 _phase.value = Phase.STREAMING
                 DiagLog.i(tag, "video start session=$videoSession")
                 sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, false))
@@ -305,7 +343,7 @@ class AaSession(
     }
 
     private fun sendMicrophone(pcm: ByteArray) {
-        if (!running.get()) return
+        if (!lifecycle.running) return
         val payload = ByteArray(8 + pcm.size)
         Bytes.putU64(System.nanoTime() / 1000L, payload, 0)
         System.arraycopy(pcm, 0, payload, 8, pcm.size)

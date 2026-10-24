@@ -66,6 +66,7 @@ data class CarState(
     val direct: Boolean = false,
     val link: String = "",
     val session: CarLifeSession.State = CarLifeSession.State.Idle,
+    val video: VideoPlan? = null,
     val listening: Boolean = false,
     val aaOverlay: Boolean = false,
     val mirroring: Boolean = false,
@@ -221,6 +222,9 @@ class CarLifeService : Service() {
     private lateinit var carDisplay: CarDisplay
     private val mirror = PhoneMirror()
     private var session: CarLifeSession? = null
+    private val navigationPreferenceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "aaClusterNavigation" || key == null) scope.launch { session?.refreshNavigationPreference() }
+    }
     private var wifiLink: WifiChannelLink? = null
     private var usbLink: AccessoryLink? = null
     @Volatile private var usbAccessory: android.hardware.usb.UsbAccessory? = null
@@ -467,6 +471,7 @@ class CarLifeService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        app.prefs.registerListener(navigationPreferenceListener)
         CarAudioBus.mixTogether = true
         CarAudioBus.guidance = app.prefs.guidanceMode
         CarAudioBus.voice = carVoice
@@ -486,6 +491,7 @@ class CarLifeService : Service() {
             CarPlayer.state.collect { st -> songPosition(st) }
         }
         carDisplay = CarDisplay(this)
+        carDisplay.onVideoChanged = { plan -> _state.update { it.copy(video = plan) } }
         getSystemService(NotificationManager::class.java)
             .createNotificationChannel(NotificationChannel(CHANNEL, Lang.str(R.string.channel_projection), NotificationManager.IMPORTANCE_LOW))
         languageWatch = scope.launch {
@@ -949,6 +955,7 @@ class CarLifeService : Service() {
         session?.stop()
         session = null
         AaHeadUnitService.onCarMicWanted = null
+        AaHeadUnitService.onNavigation = null
         gearForget()
         stateJob?.cancel()
         stateJob = null
@@ -1010,6 +1017,12 @@ class CarLifeService : Service() {
             _state.update { it.copy(wifiDirect = false) }
             updateBeacon()
             step("WiFi Direct dropped, looking for the car again")
+            f.search()
+            scope.launch {
+                if (mode == 1 && finder === f && !_state.value.wifiDirect && bt.open) {
+                    wireless.begin()
+                }
+            }
         }
         f.start()
     }
@@ -1112,6 +1125,7 @@ class CarLifeService : Service() {
         s.onHardKey = { k -> onHardKey(k) }
         s.onVoiceAudio = { pcm -> AaHeadUnitService.current?.feedCarMicrophone(pcm) }
         AaHeadUnitService.onCarMicWanted = { on -> runCatching { s.carMicrophone(on) } }
+        AaHeadUnitService.onNavigation = { info -> s.sendNavigation(info) }
         s.onPauseMedia = { carMusic(false) }
         s.onMusicControl = { play -> carMusic(play) }
         s.onClosed = { reason ->
@@ -2586,6 +2600,7 @@ class CarLifeService : Service() {
     }
 
     override fun onDestroy() {
+        app.prefs.unregisterListener(navigationPreferenceListener)
         teardown()
         soundQueue.shutdown()
         runCatching { soundQueue.awaitTermination(SOUND_DRAIN_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
@@ -2621,6 +2636,7 @@ class CarLifeService : Service() {
         voiceQueued.set(0)
         btAudio.close()
         CarAudioBus.sink = null
+        AaHeadUnitService.onNavigation = null
         instance = null
         super.onDestroy()
     }

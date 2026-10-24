@@ -115,6 +115,46 @@ class CarWirelessSetupTest {
     }
 
     @Test
+    fun aRestoredGroupAnnouncesTheSameAddressAgainWithoutANewBluetoothCall() {
+        val w = setup()
+        w.wifiDirectReady("192.168.49.23")
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        w.wifiDirectReady(null)
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        assertEquals("the lost group's address must not be sent", 1, sent.size)
+
+        w.wifiDirectReady("192.168.49.23")
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        w.wifiDirectReady("192.168.49.23")
+        assertEquals(listOf(CarWirelessSetup.MD_WIFI_IP, CarWirelessSetup.MD_WIFI_IP), ids())
+        assertEquals("192.168.49.23", ProtoReader(sent[1].copyOfRange(8, sent[1].size)).string(1))
+    }
+
+    @Test
+    fun aChangedAddressIsAnnouncedWithoutWaitingForAnotherIpRequest() {
+        val w = setup()
+        w.wifiDirectReady("192.168.49.23")
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        w.wifiDirectReady("192.168.49.24")
+        assertEquals(listOf(CarWirelessSetup.MD_WIFI_IP, CarWirelessSetup.MD_WIFI_IP), ids())
+        assertEquals("192.168.49.24", ProtoReader(sent[1].copyOfRange(8, sent[1].size)).string(1))
+    }
+
+    @Test
+    fun losingTheGroupAllowsTheCarToSignalReadyAgain() {
+        val w = setup()
+        val readyFrame = frame(CarWirelessSetup.HU_WIRELESS_INFO, ProtoWriter().int32(1, 3).toByteArray())
+        w.feed(target("DIRECT-ab-COROLLA"))
+        w.feed(readyFrame)
+        w.wifiDirectReady("192.168.49.23")
+        w.wifiDirectReady(null)
+        w.feed(readyFrame)
+        w.feed(readyFrame)
+        assertEquals(2, ready)
+        assertEquals("DIRECT-ab-COROLLA", w.carWifiName)
+    }
+
+    @Test
     fun aNewCallStartsOver() {
         val w = setup()
         w.feed(target("DIRECT-ab-COROLLA"))
