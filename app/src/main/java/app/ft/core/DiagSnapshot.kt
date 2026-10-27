@@ -163,6 +163,8 @@ object DiagSnapshot {
         add(line("android auto") { pkg(c, GEARHEAD)?.let { "${it.versionName} (code ${if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else 0}) enabled=${it.applicationInfo?.enabled}" } ?: "not installed" })
         add(line("head unit server ${prefsInt(c, "aaSelfPort", 5277)}") { if (app.ft.aa.AaInstaller.serverRunning(prefsInt(c, "aaSelfPort", 5277))) "running" else "off" })
         add(line("ft head unit listener") { AaHeadUnitService.state.value.listening })
+        add(line("last android auto transport close") { AaHeadUnitService.lastDisconnect })
+        add(line("android auto battery optimization ignored") { c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(GEARHEAD) })
         add(line("android auto installed by") { app.ft.aa.AaInstaller.installerOfAndroidAuto(c) ?: "unknown" })
         listOf("com.baidu.carlife", "com.huawei.hicar").forEach { p ->
             add(line("other car app $p") { pkg(c, p)?.let { "${it.versionName} installed" } ?: "not installed" })

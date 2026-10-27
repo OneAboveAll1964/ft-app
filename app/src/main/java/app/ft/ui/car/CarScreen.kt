@@ -13,6 +13,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.view.SurfaceView
 import android.view.SurfaceHolder
+import app.ft.aa.AaVideoView
+import app.ft.aa.AaVideoLayout
 import android.graphics.Rect
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -266,21 +268,7 @@ private fun CarRoot(style: CarStyle) {
             CarBackground(style)
             when {
                 state.waitingForShare -> ShareWait(state.mirrorPackage, state.shareForSound)
-                state.aaOverlay -> LeftToRight {
-                    val returnHome: () -> Unit = {
-                        view = CarView.LAUNCHER
-                        nowPlaying = false
-                        CarLifeService.goHome()
-                    }
-                    if (alternative && style.aaShowReturnButton) {
-                        Row(Modifier.fillMaxSize().background(Color.Black)) {
-                            val left = style.corner == 0 || style.corner == 2
-                            if (left) AaReturnRail(style.corner, returnHome)
-                            AaOverlay(aa, Modifier.weight(1f))
-                            if (!left) AaReturnRail(style.corner, returnHome)
-                        }
-                    } else AaOverlay(aa)
-                }
+                state.aaOverlay -> LeftToRight { AaOverlay(aa) }
                 state.mirroring -> LeftToRight { MirrorOverlay(style.corner) }
                 view == CarView.DRAWER -> AppDrawer(drawerGrid, pad) { view = CarView.LAUNCHER }
                 view == CarView.BROWSER -> CarBrowser(browser) { view = CarView.LAUNCHER }
@@ -352,7 +340,7 @@ private fun CarRoot(style: CarStyle) {
                     if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                 }
             }
-            if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || (style.aaShowReturnButton && !alternative))) {
+            if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || style.aaShowReturnButton)) {
                 CornerPill(style.corner) {
                     view = CarView.LAUNCHER
                     nowPlaying = false
@@ -390,36 +378,6 @@ private fun ShareWait(pkg: String, forSound: Boolean) {
                 color = Color.White.copy(alpha = 0.7f)
             )
             Button(onClick = { CarLifeService.cancelShareWait() }) { Text(stringResource(if (forSound) R.string.action_not_now else R.string.action_cancel)) }
-        }
-    }
-}
-
-@Composable
-private fun AaReturnRail(corner: Int, onClick: () -> Unit) {
-    Box(
-        Modifier.width(104.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer),
-        contentAlignment = if (corner < 2) Alignment.TopCenter else Alignment.BottomCenter
-    ) {
-        Surface(
-            onClick = onClick,
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(8.dp).fillMaxWidth().height(96.dp).touchZone("aa-return")
-        ) {
-            Column(
-                Modifier.fillMaxSize().padding(6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
-            ) {
-                Icon(CarIcons.Back, contentDescription = null, modifier = Modifier.size(26.dp))
-                Text(
-                    stringResource(R.string.aa_back_to_ft),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-            }
         }
     }
 }
@@ -757,9 +715,10 @@ private fun AaOverlay(aa: app.ft.aa.AaState, modifier: Modifier = Modifier) {
     val (fullW, fullH) = app.ft.aa.AaProtocol.standardSize(prefs.aaWidth, prefs.aaHeight)
     val real by AaVideoSink.frame.collectAsState()
     val (frameW, frameH) = real ?: (fullW to fullH)
+    val layout = AaVideoLayout.forFrame(prefs.aaWidth, prefs.aaHeight, frameW, frameH)
     DisposableEffect(Unit) { onDispose { AaTouchViewport.bounds = null } }
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
-        val ratio = frameW.toFloat() / frameH
+        val ratio = layout.contentWidth.toFloat() / layout.contentHeight
         val picture = if (maxWidth / maxHeight > ratio) {
             Modifier.fillMaxHeight().aspectRatio(ratio)
         } else Modifier.fillMaxWidth().aspectRatio(ratio)
@@ -769,17 +728,10 @@ private fun AaOverlay(aa: app.ft.aa.AaState, modifier: Modifier = Modifier) {
         }
         AndroidView(
             factory = { ctx ->
-                SurfaceView(ctx).apply {
-                    holder.setFixedSize(fullW, fullH)
-                    holder.addCallback(object : SurfaceHolder.Callback {
-                        override fun surfaceCreated(h: SurfaceHolder) = AaVideoSink.attach(h.surface, fullW, fullH)
-                        override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, height: Int) = Unit
-                        override fun surfaceDestroyed(h: SurfaceHolder) = AaVideoSink.detach(h.surface)
-                    })
-                }
+                AaVideoView(ctx).apply { setVideoLayout(layout) }
             },
-            update = { v -> v.holder.setFixedSize(frameW, frameH) },
-            modifier = picture.align(Alignment.TopCenter).onGloballyPositioned { coordinates ->
+            update = { v -> v.setVideoLayout(layout) },
+            modifier = picture.align(Alignment.Center).onGloballyPositioned { coordinates ->
                 val b = coordinates.boundsInWindow()
                 AaTouchViewport.bounds = AaViewport(b.left.toInt(), b.top.toInt(), b.width.toInt(), b.height.toInt())
             }

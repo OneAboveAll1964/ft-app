@@ -63,6 +63,8 @@ object AaMessages {
             .message(1, video)
             .message(1, input)
             .message(1, sensor)
+            .message(1, ProtoWriter().int32(1, AaProtocol.CH_NAVIGATION)
+                .message(8, ProtoWriter().int32(1, 1000).enum(2, 2)))
         if (advertiseAudio) {
             fun sink(ch: Int, type: Int, rate: Int, channels: Int) = ProtoWriter()
                 .int32(1, ch)

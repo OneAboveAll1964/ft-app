@@ -46,6 +46,8 @@ class CarDisplay(private val context: Context) {
     private val watch = DrawWatch(context)
     private val _active = MutableStateFlow(false)
     val active: StateFlow<Boolean> = _active
+    var onVideoChanged: ((VideoPlan?) -> Unit)? = null
+    private var video: VideoPlan? = null
     var width = 0; private set
     var height = 0; private set
     var streamWidth = 0; private set
@@ -86,6 +88,8 @@ class CarDisplay(private val context: Context) {
         val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
         val vd = dm.createVirtualDisplay("FT", width, height, density, surface, flags)
         virtualDisplay = vd
+        video = plan
+        onVideoChanged?.invoke(video)
         DiagLog.i(tag, "virtual display ${width}x${height} dpi=$density id=${vd.display.displayId}")
         main.post {
             try {
@@ -122,6 +126,8 @@ class CarDisplay(private val context: Context) {
         if (interval == frameIntervalMs) return
         frameIntervalMs = interval
         encoder?.setOperatingRate(f)
+        video = video?.copy(fps = f)
+        onVideoChanged?.invoke(video)
         val g = gate
         if (g != null) {
             g.setRate(f)
@@ -240,6 +246,8 @@ class CarDisplay(private val context: Context) {
     }
 
     fun stop() {
+        video = null
+        onVideoChanged?.invoke(null)
         watch.stop()
         main.removeCallbacks(ticker)
         val p = presentation

@@ -63,6 +63,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,6 +78,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
 import app.ft.FTTouchService
 import app.ft.aa.AaInstaller
+import app.ft.aa.AaHeadUnitService
+import app.ft.ui.components.SystemReportHelp
 import app.ft.ui.components.FitText
 import app.ft.ui.components.Stepper
 import app.ft.ui.components.StepState
@@ -100,6 +103,9 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val context = LocalContext.current
     val app = FTApp.instance
     val car by CarLifeService.state.collectAsState()
+    val disconnectHelp by AaHeadUnitService.disconnectHelpPending.collectAsState()
+    var systemHelp by rememberSaveable { mutableStateOf(false) }
+    if (systemHelp) SystemReportHelp(onDismiss = { systemHelp = false })
     var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
     LaunchedEffect(car.running) { if (car.running) autoConnect = true }
     var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
@@ -166,6 +172,22 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             StatusCard(status, on) { want ->
                 autoConnect = want
                 if (want) CarLifeService.switchOn(context) else CarLifeService.switchOff(context)
+            }
+        }
+
+        if (disconnectHelp) item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.report_disconnect_title), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.report_disconnect_detail), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = {
+                        AaHeadUnitService.dismissDisconnectHelp()
+                        systemHelp = true
+                    }) { Text(stringResource(R.string.report_system_action)) }
+                    TextButton(onClick = { AaHeadUnitService.dismissDisconnectHelp() }) {
+                        Text(stringResource(R.string.report_system_close))
+                    }
+                }
             }
         }
 

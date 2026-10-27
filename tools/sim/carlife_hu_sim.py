@@ -32,6 +32,8 @@ FOREGROUND = 0x0001001B
 LAUNCH_MODE_NORMAL = 0x0001801D
 CARLIFE_DATA_SUBSCRIBE = 0x00018043
 CARLIFE_DATA_SUBSCRIBE_DONE = 0x00010044
+CARLIFE_DATA_SUBSCRIBE_START = 0x00018045
+NAVI_NEXT_TURN_INFO = 0x00010030
 FRAME_RATE_CHANGE_DONE = 0x0001000D
 GO_TO_FOREGROUND = 0x00018025
 GO_TO_FOREGROUND_RESPONSE = 0x0001004C
@@ -361,6 +363,7 @@ class Sim:
         self.songs = []
         self.positions = []
         self.modules = []
+        self.navigation = []
         self.marks = []
         self.crash_on_song = False
 
@@ -400,6 +403,16 @@ class Sim:
         if ch == CH_CMD and s == MEDIA_PROGRESS_BAR:
             self.positions.append((time.time(), first(decode(p), 1, 0)))
             return None
+        if ch == CH_CMD and s == NAVI_NEXT_TURN_INFO:
+            d = decode(p)
+            icons = [v for v in d.get(6, []) if isinstance(v, bytes)]
+            self.navigation.append({
+                "t": time.time(), "action": first(d, 1), "turn": first(d, 2),
+                "road": first(d, 3, b"").decode(errors="replace"),
+                "total": first(d, 4), "remaining": first(d, 5),
+                "required_fields": all(k in d for k in range(1, 7)),
+                "png": bool(icons) and icons[0].startswith(b"\x89PNG\r\n\x1a\n"),
+            })
         if ch == CH_CMD and s == MEDIA_INFO and self.crash_on_song:
             self.log("HU crashes on song info, like the Corolla did on 4 October")
             raise RuntimeError("simulated head unit crash on song info")
@@ -741,7 +754,8 @@ def main():
         sd = decode(pl)
         items = [(first(decode(m), 1, -1), first(decode(m), 2, -1)) for m in sd.get(2, [])]
         result["subscribe_done"] = items
-        result["checks"]["subscribe_answered"] = first(sd, 1) == 1 and items == [(0, 0)]
+        result["checks"]["subscribe_answered"] = first(sd, 1) == 1 and items == [(0, 1)]
+        sim.send_cmd(CARLIFE_DATA_SUBSCRIBE_START, f_varint(1, 1) + f_bytes(2, f_varint(1, 0)))
 
         sim.send_cmd(HU_BT_PAIR_INFO, f_str(1, "00:11:22:33:44:55") + f_str(5, "0000110a-0000-1000-8000-00805f9b34fb") + f_str(6, "FT-HU-SIM") + f_varint(7, 0))
         _, _, pl = sim.wait_for(MD_BT_PAIR_INFO)
@@ -931,6 +945,9 @@ def main():
         result["checks"]["video_clock_in_seconds"] = bool(clocks) and all(abs(ts - now_s) < 600 for ts in clocks)
         result["video_clock_off"] = [[round(t, 3), ts, sid] for t, ts, sid in link.video_clock if abs(ts - now_s) >= 600][:20]
         result["module_events"] = [[round(t - (link.audio[0][0] if link.audio else t), 3), cnt, items] for t, cnt, items in sim.modules]
+        result["navigation"] = sim.navigation
+        if sim.navigation:
+            result["checks"]["navigation_payloads_complete"] = all(n["required_fields"] and n["png"] for n in sim.navigation)
         if a.encrypt:
             result["plain_after_key"] = link.plain_after_key
             result["checks"]["everything_encrypted_after_key"] = link.plain_after_key == 0

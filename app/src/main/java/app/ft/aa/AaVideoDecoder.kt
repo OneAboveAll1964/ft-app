@@ -184,11 +184,14 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         while (running.get() && generation == mine) {
             try {
                 val idx = c.dequeueOutputBuffer(info, 20_000)
-                if (idx >= 0) {
-                    c.releaseOutputBuffer(idx, true)
-                    _frames.value = _frames.value + 1
-                } else if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    shown(c.outputFormat)
+                synchronized(lock) {
+                    if (!running.get() || generation != mine || codec !== c) return
+                    if (idx >= 0) {
+                        c.releaseOutputBuffer(idx, true)
+                        _frames.value = _frames.value + 1
+                    } else if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        shown(c.outputFormat)
+                    }
                 }
             } catch (t: Throwable) {
                 if (!running.get() || generation != mine) return
@@ -231,6 +234,14 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
 
     fun stop() {
         synchronized(lock) { stopLocked() }
+    }
+
+    fun reset() {
+        synchronized(lock) {
+            stopLocked()
+            config = null
+            askForAFreshPicture = null
+        }
     }
 
     companion object {

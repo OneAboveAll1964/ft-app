@@ -13,6 +13,13 @@ object AaProtocol {
     const val CH_MEDIA_STATUS = 9
     const val CH_NAVIGATION = 10
 
+    const val NAV_START = 0x8001
+    const val NAV_STATUS = 0x8003
+    const val NAV_NEXT_TURN = 0x8004
+    const val NAV_DISTANCE = 0x8005
+    const val NAV_STATE = 0x8006
+    const val NAV_CURRENT_POSITION = 0x8007
+
     const val FRAME_MIDDLE = 0
     const val FRAME_FIRST = 1
     const val FRAME_LAST = 2
@@ -113,7 +120,8 @@ object AaProtocol {
     fun channelName(ch: Int) = when (ch) {
         CH_CONTROL -> "CONTROL"; CH_INPUT -> "INPUT"; CH_SENSOR -> "SENSOR"; CH_VIDEO -> "VIDEO"
         CH_MEDIA_AUDIO -> "MEDIA_AUDIO"; CH_SPEECH_AUDIO -> "SPEECH_AUDIO"; CH_SYSTEM_AUDIO -> "SYSTEM_AUDIO"
-        CH_AV_INPUT -> "AV_INPUT"; CH_BLUETOOTH -> "BLUETOOTH"; else -> "CH$ch"
+        CH_AV_INPUT -> "AV_INPUT"; CH_BLUETOOTH -> "BLUETOOTH"
+        CH_NAVIGATION -> "NAVIGATION"; else -> "CH$ch"
     }
 
     fun controlName(id: Int) = when (id) {
