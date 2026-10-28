@@ -26,6 +26,18 @@ class VideoProfileSessionTest {
         assertEquals(24, next.session.fps)
     }
 
+    @Test fun aRateTheCarLoweredNeverSlowsTheNextStart() = runTest {
+        val store = Store()
+        val first = Connection(store, backgroundScope)
+        first.init()
+        first.rate(15)
+        assertEquals(15, store.prefs.savedVideoProfile!!.plan.fps)
+        val next = Connection(store, backgroundScope)
+        next.init()
+        assertEquals(VideoPlans.START_FPS, next.started!!.fps)
+        assertEquals(VideoPlans.START_FPS, next.session.fps)
+    }
+
     @Test fun resetClearsProfileAndOldSessionCannotRecreateIt() = runTest {
         val store = Store()
         val first = Connection(store, backgroundScope)

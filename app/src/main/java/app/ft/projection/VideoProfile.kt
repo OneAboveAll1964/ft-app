@@ -14,7 +14,7 @@ data class VideoProfile(
         plan.takeIf {
             settingsKey == settings && carKey == car &&
                 it.contentWidth == candidate.contentWidth && it.contentHeight == candidate.contentHeight
-        }?.let { if (requestedFps > 2) it.copy(fps = candidate.fps) else it }
+        }?.let { if (requestedFps > 2 || it.fps < candidate.fps) it.copy(fps = candidate.fps) else it }
 
     fun encode(): String = JSONObject().apply {
         put("settings", settingsKey)

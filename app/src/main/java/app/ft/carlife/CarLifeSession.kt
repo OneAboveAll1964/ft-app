@@ -517,8 +517,6 @@ class CarLifeSession(
         val carKey = "${prefs.carBtAddress}:${link.name}:$newVehicle"
         val restored = prefs.savedVideoProfile?.resume(candidate, settingsKey, carKey, asked)
         val plan = restored ?: candidate
-        // A remembered rate must not be raised again by the first-session timer.
-        if (restored != null) carAskedRate = true
         width = plan.contentWidth
         height = plan.contentHeight
         streamWidth = plan.streamWidth
