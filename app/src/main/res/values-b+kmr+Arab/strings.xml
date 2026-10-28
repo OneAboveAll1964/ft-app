@@ -448,17 +448,15 @@
     <string name="supercast_hide_dock">ڤەشارتنا ئەپان</string>
     <string name="supercast_show_dock">نیشادانا ئەپان</string>
     <string name="supercast_screen_off_about">دوگمەیا پاوەری بگرە دا مۆبایلێ ب کار بینی. پشتی دەمێ ڤەمراندنا شاشا مۆبایلی دێ دیسا تاری بیت.</string>
-    <!-- New settings use English until native translations are reviewed. -->
-    <string name="car_join_timeout">Wi-Fi Direct connection timeout</string>
-    <string name="car_join_timeout_about">How long to wait before retrying an unanswered connection attempt. Increase this if the car takes longer to connect. Applies to the next attempt.</string>
-    <string name="car_join_timeout_seconds">%1$d s</string>
-    <string name="car_join_timeout_error">Could not connect to the car over Wi-Fi Direct within %1$d s. Retrying automatically. Check that CarLife is open on the car screen, or increase the connection timeout.</string>
-    <string name="car_join_timeout_action">Connection settings</string>
-    <string name="look_phone_style">App appearance</string>
-    <string name="look_phone_style_about">Changes the phone interface and the placement of the return to FT button on the car screen. In Alternative, the button sits beside Android Auto without covering navigation or music controls.</string>
-    <string name="look_phone_classic">Default</string>
-    <string name="look_phone_modern">Alternative</string>
-    <string name="aa_show_return_button">Show the FT return button in Android Auto</string>
-    <string name="aa_show_return_button_about">The button returns to FT. In Alternative, it sits beside Android Auto without covering its controls. If hidden, you can show it again from these settings on your phone.</string>
-    <string name="aa_back_to_ft">Back to FT</string>
+    <string name="car_join_timeout">دەمێ چاڤەرێکرنا گرێدانا WiFi Direct</string>
+    <string name="car_join_timeout_about">ماوێ FT چاڤەرێ دکەت بەری کو دووبارە هەولا گرێدانەکێ بدەت یا بەرسڤ نەهاتیە دان. ئەگەر ترومبێل درەنگتر گرێ ددەت، زێدە بکە. ژ هەولا بهێت ڤە کار دکەت.</string>
+    <string name="car_join_timeout_seconds">%1$d چرکە</string>
+    <string name="car_join_timeout_error">د %1$d چرکان دا نەشیا ب WiFi Direct ب ترومبێلێ ڤە گرێ بدەت. ب شێوەیەکێ ئۆتۆماتیک دووبارە هەول ددەت. پشتراست بە کو CarLife ل سەر شاشەیا ترومبێلێ ڤەکریە، یان دەمێ چاڤەرێکرنا گرێدانێ زێدە بکە.</string>
+    <string name="car_join_timeout_action">رێکخستنێن گرێدانێ</string>
+    <string name="look_phone_style">شێوێ ئەپی</string>
+    <string name="look_phone_style_about">شێوێ FT ل سەر ڤی مۆبایلی دگوهۆڕیت: شاشەیا سەرەکی و لیستا رێکخستنان. شاشەیا ترومبێلێ وەکی خوە دمینیت.</string>
+    <string name="look_phone_classic">بنەرەتی</string>
+    <string name="look_phone_modern">جۆرەکێ دی</string>
+    <string name="aa_show_return_button">نیشاندانا دوگما زڤڕینێ بۆ FT د Android Auto دا</string>
+    <string name="aa_show_return_button_about">دوگما تە دزڤڕینیت بۆ شاشەیا سەرەکی یا FT ل ترومبێلێ. ئەگەر تە ڤەشارت، دشێی ل ڤێرێ ل سەر مۆبایلێ خوە دووبارە نیشان بدەی.</string>
 </resources>

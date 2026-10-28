@@ -85,7 +85,7 @@
     <string name="car_p2p_label">WiFi Direct name (blank = any CarLife)</string>
     <string name="car_bt_label">Bluetooth name for auto-start (blank = any)</string>
     <string name="car_pin_label">WiFi Direct PIN (blank = push button)</string>
-    <string name="car_join_timeout">Wi-Fi Direct connection timeout</string>
+    <string name="car_join_timeout">WiFi Direct connection timeout</string>
     <string name="car_join_timeout_about">How long to wait before retrying an unanswered connection attempt. Increase this if the car takes longer to connect. Applies to the next attempt.</string>
     <string name="car_join_timeout_seconds">%1$d s</string>
     <string name="car_swap_keys">Swap the steering wheel\'s next and previous</string>
@@ -202,7 +202,6 @@
     <string name="report_failed">Could not make the report</string>
     <string name="report_saved">Report saved in Downloads</string>
     <string name="report_send">Send the FT report</string>
-    <!-- Diagnostic guidance currently falls back to English outside Russian. -->
     <string name="report_system_help">Android Auto disconnects? What to check</string>
     <string name="report_disconnect_title">Android Auto connection interrupted</string>
     <string name="report_disconnect_detail">If this happened unexpectedly, check the USB settings. If disconnects continue, collect a system report.</string>
@@ -453,13 +452,12 @@
     <string name="supercast_hide_dock">Hide apps</string>
     <string name="supercast_show_dock">Show apps</string>
     <string name="supercast_screen_off_about">Press the power button to use the phone. It goes dark again after the phone\'s screen timeout.</string>
-    <string name="car_join_timeout_error">Could not connect to the car over Wi-Fi Direct within %1$d s. Retrying automatically. Check that CarLife is open on the car screen, or increase the connection timeout.</string>
+    <string name="car_join_timeout_error">Could not connect to the car over WiFi Direct within %1$d s. Retrying automatically. Check that CarLife is open on the car screen, or increase the connection timeout.</string>
     <string name="car_join_timeout_action">Connection settings</string>
     <string name="look_phone_style">App appearance</string>
-    <string name="look_phone_style_about">Changes the phone interface and the placement of the return to FT button on the car screen. In Alternative, the button sits beside Android Auto without covering navigation or music controls.</string>
+    <string name="look_phone_style_about">Changes how FT looks on this phone: the home screen and the list of settings. The car screen stays the same.</string>
     <string name="look_phone_classic">Default</string>
     <string name="look_phone_modern">Alternative</string>
     <string name="aa_show_return_button">Show the FT return button in Android Auto</string>
-    <string name="aa_show_return_button_about">The button returns to FT. In Alternative, it sits beside Android Auto without covering its controls. If hidden, you can show it again from these settings on your phone.</string>
-    <string name="aa_back_to_ft">Back to FT</string>
+    <string name="aa_show_return_button_about">The button takes you back to FT\'s car home. If you hide it, you can show it again here on your phone.</string>
 </resources>
