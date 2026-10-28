@@ -4,7 +4,6 @@ import app.ft.core.NavigationInfo
 import app.ft.core.ProtoWriter
 import java.util.concurrent.CountDownLatch
 
-/** Serializes cluster and speech ownership of CarLife's shared NAVI module. */
 class NavigationRelay(
     private val send: (action: Int, info: NavigationInfo, totalDistance: Int) -> Unit,
     private val module: (Boolean) -> Unit,
@@ -28,7 +27,6 @@ class NavigationRelay(
     fun subscribe(on: Boolean) = change { subscribed = on; publish() }
     fun enable(on: Boolean) = change { enabled = on; publish() }
     fun voice(on: Boolean) = change { voice = on; updateModule() }
-    /** Only the dedicated voice writer waits here; AA and shutdown never wait for I/O. */
     fun voiceAndWait(on: Boolean) {
         val done = CountDownLatch(1)
         try {
@@ -51,7 +49,6 @@ class NavigationRelay(
         pending.clear()
         voiceWaiters.forEach { it.countDown() }
         voiceWaiters.clear()
-        // Keep the current consumer until its in-flight write actually returns.
         latest = NavigationInfo(); subscribed = false; voice = false
         shown = null; total = 0; active = false
     }
@@ -75,9 +72,7 @@ class NavigationRelay(
                 if (pending.isEmpty()) { draining = false; return }
                 pending.removeFirst()
             }
-            // Transport writes can block. Never hold the state lock while doing I/O.
             try { effect() } catch (e: Exception) {
-                // A failed packet must not strand the queue or prevent shutdown/reset.
                 runCatching { onError(e) }
             }
         }
@@ -89,7 +84,6 @@ class NavigationRelay(
     }
 
     private fun publish() {
-        // Activate NAVI before the first maneuver; clear the maneuver before deactivating it.
         if (enabled && subscribed && latest.active) updateModule()
         val previous = shown
         if (!enabled || !subscribed || !latest.active || latest.maneuver == 0) {
@@ -131,8 +125,6 @@ class NavigationRelay(
             ProtoWriter().int32(1, action).int32(2, turnCode(info.maneuver))
                 .string(3, info.road).int32(4, totalDistance.coerceAtLeast(0))
                 .int32(5, (info.distanceMeters ?: 0).coerceAtLeast(0))
-                // Older CarLife expects seconds here; newer versions expect a PNG. Unknown
-                // wire types are skipped by protobuf, so each receiver reads its own field 6.
                 .int32(6, info.timeSeconds.coerceAtLeast(0)).bytes(6, icon).toByteArray()
     }
 }

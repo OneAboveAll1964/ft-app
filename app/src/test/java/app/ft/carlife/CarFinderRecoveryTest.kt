@@ -102,7 +102,6 @@ class CarFinderRecoveryTest {
         assertEquals(1, h.cancels.size)
         verify(h.manager, never()).removeGroup(any(), any())
 
-        // A broadcast during cleanup must not start another invitation watchdog.
         h.broadcastPeers()
         assertFalse(h.finder.inSight("unrelated"))
         h.cancels.single().onSuccess()
@@ -135,7 +134,6 @@ class CarFinderRecoveryTest {
         verify(h.manager, never()).connect(any(), any(), any())
         assertFalse(h.finder.inSight("CarLife"))
 
-        // A newly discovered pending invitation can be handled normally.
         h.visible = listOf(h.car)
         h.broadcastPeers()
         runCurrent()
@@ -201,7 +199,6 @@ class CarFinderRecoveryTest {
 
     @Test
     fun busyRemovalAfterCancellationResumesJoiningFromFreshPeersWhenNetworkIsIdle() = check { h ->
-        // The Android JVM stub does not initialize WifiP2pConfig.wps.
         mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
             h.finder.connectByName("CarLife")
             advanceTimeBy(5_000)
@@ -248,8 +245,6 @@ class CarFinderRecoveryTest {
         runCurrent()
         h.groups.single().onGroupInfoAvailable(null)
         runCurrent()
-        // The Android callback is annotated non-null, but an unexpected empty
-        // response must still not allow another join. Reflection simulates it.
         WifiP2pManager.NetworkInfoListener::class.java
             .getMethod("onNetworkInfoAvailable", NetworkInfo::class.java)
             .invoke(h.networks.single(), null)

@@ -83,7 +83,6 @@ class AaHeadUnitService : Service() {
         }
 
         fun stop(context: Context) {
-            // Suppress a concurrent socket failure before the asynchronous stop intent arrives.
             disconnectHelp.stop()
             runCatching { context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP)) }
         }

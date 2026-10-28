@@ -339,8 +339,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 if (info != null && info.groupFormed) {
                     onGroup(info)
                 } else {
-                    // Invalidate group queries even if onGroup has not finished
-                    // yet. A delayed answer must not resurrect a vanished group.
                     groupVersion++
                     if (_link.value != null) {
                         cancelAttempt()
@@ -352,8 +350,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                         onLeft?.invoke()
                     }
                 }
-                // A group can still be forming. Only the watchdog ends an active
-                // join, using its selected timeout and reporting the retry.
             }
         }
     }
@@ -555,7 +551,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         watchdog = null
         recovery?.cancel()
         connecting = null
-        // A peer from before cleanup must never become the fallback for a retry.
         peersVersion++
         _peers.value = emptyList()
         failures++
@@ -564,7 +559,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         onRetry?.invoke(p.name, failures + 1)
         recovery = scope.launch(Dispatchers.Main) {
             if (cancel) {
-                // Do not overlap discovery/new joins with an unfinished teardown.
                 while (isActive && current(ch, life) && enabled && attempt == id) {
                     if (clearGroup(m, ch)) break
                     DiagLog.w(tag, "WiFi Direct cleanup not confirmed; waiting before trying cleanup again")
@@ -580,7 +574,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             recovery = null
             _state.value = "searching"
             DiagLog.i(tag, "recovery complete; waiting for the car in a fresh WiFi Direct peer list")
-            // autoMatch only sees this new snapshot. If the car is absent, keep searching.
             refreshPeers()
             discover()
         }
@@ -591,10 +584,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val removed = if (cancelled == -1 || cancelled == WifiP2pManager.ERROR) {
             awaitAction("removeGroup") { m.removeGroup(ch, it) }
         } else null
-        // Android can report BUSY after cancellation has already finished. Always
-        // query the actual state, otherwise every later cancel can stay BUSY and
-        // leave recovery stuck forever. A missing group alone is insufficient:
-        // negotiation also has no group yet, so failed actions need an idle network.
         try {
             return withTimeoutOrNull(5_000) {
                 while (true) {
@@ -654,8 +643,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 -1 -> "completed"
                 else -> "failed reason=$reason (${failureName(reason)})"
             })
-            // Keep ERROR distinct from success: it can mean that there was no
-            // pending join, but still needs confirmation from the actual state.
             return reason
         } catch (e: SecurityException) {
             DiagLog.w(tag, "$name permission denied: ${e.javaClass.simpleName}")

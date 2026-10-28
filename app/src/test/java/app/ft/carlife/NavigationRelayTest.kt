@@ -220,8 +220,6 @@ class NavigationRelayTest {
             assertFalse(finished.await(100, TimeUnit.MILLISECONDS))
             assertTrue(effects.isEmpty())
             start()
-            // Service any subsequent consumer until the writer completes, without relying on
-            // how soon the scheduler resumes it after the first barrier.
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
             while (finished.count != 0L && System.nanoTime() < deadline) {
                 tasks.poll(50, TimeUnit.MILLISECONDS)?.invoke()

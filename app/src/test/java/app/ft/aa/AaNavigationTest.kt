@@ -22,10 +22,8 @@ class AaNavigationTest {
 
     @Test fun modernWireFixtureCombinesManeuverWithSeparateDistance() {
         val nav = AaNavigation()
-        // NavigationState: steps[0] = {maneuver: TURN_NORMAL_RIGHT, road: "Lenina"}.
         val turn = byteArrayOf(10, 14, 10, 2, 8, 8, 18, 8, 10, 6, 76, 101, 110, 105, 110, 97)
         assertNull(nav.accept(AaProtocol.NAV_STATE, turn)?.distanceMeters)
-        // CurrentPosition: step_distance {distance {meters: 300}, time_to_step_seconds: 25}.
         val info = nav.accept(AaProtocol.NAV_CURRENT_POSITION, byteArrayOf(10, 7, 10, 3, 8, -84, 2, 16, 25))!!
         assertTrue(info.active)
         assertEquals(8, info.maneuver)

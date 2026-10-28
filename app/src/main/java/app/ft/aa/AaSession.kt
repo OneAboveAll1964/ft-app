@@ -118,7 +118,6 @@ class AaSession(
                 t
             }
         }
-        // Never wait for dispatch cleanup while holding outLock.
         if (failure != null) {
             if (lifecycle.running) DiagLog.e(tag, "write failed", failure)
             close("write ${failure.javaClass.simpleName}: ${failure.message}")
@@ -231,8 +230,6 @@ class AaSession(
                 hasStreamed = true
                 videoSession = AaMessages.startSession(body)
                 mediaFrames = 0
-                // Surface changes can request this while holding the decoder lock.
-                // Never wait for session cleanup from that callback.
                 decoder.askForAFreshPicture = { scope.launch { askForAFreshPicture() } }
                 _phase.value = Phase.STREAMING
                 DiagLog.i(tag, "video start session=$videoSession")

@@ -168,5 +168,4 @@ class Prefs(context: Context) {
     var supercastSplit: Float get() = flt("supercastSplit", 0.5f); set(v) = set("supercastSplit", v)
 }
 
-// Settings and the service each own a Prefs instance, but must invalidate/save atomically.
 private val videoProfileLock = Any()

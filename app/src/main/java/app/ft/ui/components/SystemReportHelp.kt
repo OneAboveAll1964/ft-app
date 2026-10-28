@@ -20,7 +20,6 @@ import app.ft.R
 import app.ft.aa.AaInstaller
 import app.ft.ui.theme.Localized
 
-/** Guides the user to settings owned by Android Auto and Android; does not change them. */
 @Composable
 fun SystemReportHelp(onDismiss: () -> Unit) {
     val context = LocalContext.current

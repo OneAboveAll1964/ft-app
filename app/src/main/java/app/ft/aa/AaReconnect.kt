@@ -5,7 +5,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** One worker for both periodic discovery and immediate recovery after a real close. */
 internal class AaReconnect {
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
 
@@ -23,7 +22,6 @@ internal class AaReconnect {
             }
             withTimeoutOrNull(wait) {
                 wakeups.receive()
-                // A waiting receiver and the conflated slot can both hold a wakeup.
                 while (wakeups.tryReceive().isSuccess) { }
             }
         }

@@ -3,7 +3,6 @@ package app.ft.aa
 import app.ft.core.NavigationInfo
 import app.ft.core.ProtoReader
 
-/** Stateful decoder: AA sends the maneuver and its distance in separate messages. */
 class AaNavigation {
     private var info = NavigationInfo()
     private var modern = false

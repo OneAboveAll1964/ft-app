@@ -9,7 +9,6 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import app.ft.core.DiagLog
 
-/** Additional system-wide P2P events; these do not change connection state. */
 internal object P2pDiagnostics {
     fun register(context: Context, manager: WifiP2pManager, describe: () -> String): () -> Unit {
         if (Build.VERSION.SDK_INT < 35) return {}
@@ -39,7 +38,6 @@ internal object P2pDiagnostics {
             }})")
 
             override fun onGroupCreated(info: WifiP2pInfo, group: WifiP2pGroup) =
-                // Never stringify WifiP2pGroup: it can expose the passphrase.
                 log("group created iface=${group.`interface`} frequency=${group.frequency}MHz " +
                     "weAreOwner=${info.isGroupOwner} clients=${group.clientList.size}")
 

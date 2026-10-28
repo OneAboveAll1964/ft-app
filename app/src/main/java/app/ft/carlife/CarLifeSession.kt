@@ -102,7 +102,6 @@ class CarLifeSession(
                 NavigationRelay.payload(action, info, total, NavigationIcons.png(info.maneuver, info.exit)), quiet = true)
         },
         { active -> moduleUpdate(CarLifeProtocol.MODULE_NAVI, if (active) 1 else 0) },
-        // The consumer must still run if the session scope is cancelled before it starts.
         dispatch = { task -> Dispatchers.IO.asExecutor().execute { task() } },
         enabled = prefs.aaClusterNavigation,
         onError = { DiagLog.w(tag, "instrument cluster navigation write failed: ${it.message}") }
@@ -729,12 +728,8 @@ class CarLifeSession(
 
     private fun btPairInfo(status: Int): ByteArray {
         val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-        // Lint requires this privileged permission in the manifest even with a
-        // runtime guard. Only privileged installations can enter the guarded call.
         @android.annotation.SuppressLint("MissingPermission")
         val address = try {
-            // Ordinary apps cannot obtain the local MAC; do not send Android's
-            // placeholder address to the head unit as a real pairing address.
             if (context.checkSelfPermission("android.permission.LOCAL_MAC_ADDRESS") == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 adapter?.address.orEmpty()
             } else {

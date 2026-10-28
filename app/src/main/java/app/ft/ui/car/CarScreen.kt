@@ -100,7 +100,6 @@ import app.ft.aa.AaSession
 import app.ft.aa.AaVideoSink
 import app.ft.aa.AaTouchViewport
 import app.ft.aa.AaViewport
-import app.ft.core.PhoneStyle
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
 import app.ft.carlife.CarState
@@ -162,7 +161,6 @@ fun CarScreen() {
 private fun CarRoot(style: CarStyle) {
     val state by CarLifeService.state.collectAsState()
     val aa by AaHeadUnitService.state.collectAsState()
-    val alternative by PhoneStyle.modern.collectAsState()
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
     var panes by remember { mutableStateOf<List<CarPane>>(emptyList()) }

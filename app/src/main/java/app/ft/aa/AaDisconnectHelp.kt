@@ -3,7 +3,6 @@ package app.ft.aa
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** One optional suggestion per service run, retained across screen changes and reconnects. */
 internal class AaDisconnectHelp {
     private val _pending = MutableStateFlow(false)
     val pending: StateFlow<Boolean> = _pending
@@ -23,7 +22,6 @@ internal class AaDisconnectHelp {
 
     @Synchronized fun closed(hasStreamed: Boolean, reason: String, enabled: Boolean, remoteBye: Boolean = false) {
         if (!active || offered || !enabled || !hasStreamed || remoteBye) return
-        // A remote BYEBYE can be intentional; only transport failures warrant a suggestion.
         if (!reason.startsWith("read ") && !reason.startsWith("write ")) return
         offered = true
         _pending.value = true

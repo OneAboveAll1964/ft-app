@@ -1,6 +1,5 @@
 package app.ft.aa
 
-/** Keeps a connection reserved until its media/transport cleanup has finished. */
 internal class AaConnectionOwner<T : Any> {
     private var enabled = false
     private var generation = 0L
@@ -22,7 +21,7 @@ internal class AaConnectionOwner<T : Any> {
         if (!enabled || current != null || token != generation) return false
         val connection = create()
         current = connection
-        generation++ // Invalidates a dial that started before an incoming connection won.
+        generation++
         attached(connection)
         return true
     }

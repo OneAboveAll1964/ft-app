@@ -2,7 +2,6 @@ package app.ft.projection
 
 import org.json.JSONObject
 
-/** A working stream, kept separately from the user's automatic/manual choices. */
 data class VideoProfile(
     val plan: VideoPlan,
     val settingsKey: String,

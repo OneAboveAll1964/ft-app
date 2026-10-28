@@ -108,7 +108,6 @@ object AaProtocol {
     const val WIFI_SECURITY_WPA2_PERSONAL = 8
     const val WIFI_AP_DYNAMIC = 1
 
-    // Service discovery supports only these two frame rates.
     fun supportedFps(requested: Int): Int = if (requested >= 60) 60 else 30
 
     fun standardSize(width: Int, height: Int): Pair<Int, Int> = when {

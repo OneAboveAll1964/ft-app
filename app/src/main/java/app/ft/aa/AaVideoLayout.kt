@@ -1,6 +1,5 @@
 package app.ft.aa
 
-/** AA pads non-standard displays to an enumerated video size with equal margins. */
 data class AaVideoLayout(
     val frameWidth: Int,
     val frameHeight: Int,
@@ -13,8 +12,6 @@ data class AaVideoLayout(
     companion object {
         fun forFrame(width: Int, height: Int, frameWidth: Int, frameHeight: Int): AaVideoLayout {
             val (standardWidth, standardHeight) = AaProtocol.standardSize(width, height)
-            // Some decoders already return the active image. Only remove the margins
-            // when the output still has the full size we advertised to Android Auto.
             val padded = frameWidth == standardWidth && frameHeight == standardHeight
             return AaVideoLayout(
                 frameWidth, frameHeight,
