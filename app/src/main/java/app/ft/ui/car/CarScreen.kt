@@ -376,7 +376,10 @@ private fun CarRoot(style: CarStyle) {
                 }
             }
             if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || style.aaShowReturnButton)) {
-                CornerPill(style.corner, compact = state.aaOverlay && style.aaCompactReturnButton) {
+                // FT163 field log: top-corner taps were intercepted by FT's return pill
+                // rather than reaching small close buttons inside Android Auto.
+                CornerPill(CarOverlayPlacement.corner(style.corner, aa = state.aaOverlay),
+                    compact = state.aaOverlay && style.aaCompactReturnButton) {
                     view = CarView.LAUNCHER
                     nowPlaying = false
                     CarControls.goHome()

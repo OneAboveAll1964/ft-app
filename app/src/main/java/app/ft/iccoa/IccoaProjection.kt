@@ -56,7 +56,8 @@ class IccoaProjection(
     private val promoteProjection: () -> Unit,
     private val onCarHome: () -> Unit,
     private val onAudio: (ByteArray) -> Unit,
-    private val onFailure: (String) -> Unit = {}
+    private val onFailure: (String) -> Unit = {},
+    private val onAaConnectionChanged: (Boolean) -> Unit = {}
 ) : CarControls.Backend {
     private val app get() = FTApp.instance
     private val main = Handler(Looper.getMainLooper())
@@ -394,7 +395,12 @@ class IccoaProjection(
         }
         aaJob?.cancel()
         aaJob = scope.launch {
-            AaHeadUnitService.state.collect { aa -> mutableState.update { it.copy(aaOverlay = aa.connected) } }
+            AaHeadUnitService.state.collect { aa ->
+                val connected = aa.connected
+                val changed = mutableState.value.aaOverlay != connected
+                mutableState.update { it.copy(aaOverlay = connected) }
+                if (changed) onAaConnectionChanged(connected)
+            }
         }
         aaStartJob?.cancel()
         aaStartJob = scope.launch {
@@ -428,6 +434,7 @@ class IccoaProjection(
         }
         ownsAa = false
         mutableState.update { it.copy(aaOverlay = false) }
+        onAaConnectionChanged(false)
     }
 
     override fun navBack() = onMain { FTTouchService.instance?.back() }

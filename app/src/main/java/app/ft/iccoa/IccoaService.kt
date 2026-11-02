@@ -57,13 +57,18 @@ class IccoaService : Service() {
     private var navigationHook: ((NavigationInfo) -> Unit)? = null
     private var latestNavigation = NavigationInfo()
     private var navigationRetries = 0
+    // OEM SensorMgr is enabled only while Android Auto is connected or real navigation runs.
+    // This is an experimentally verifiable activation hint, never a fabricated GPS fix.
+    private var aaSensorAssist = false
     private val navigationSend = object : Runnable {
         override fun run() {
             val connection = session ?: return
+            val activation = IccoaNavigation.sensorActivation(latestNavigation, aaSensorAssist)
             if (connection.sendControl(IccoaNavigation.CONTROL_METHOD,
-                    IccoaNavigation.encode(latestNavigation))) {
+                    IccoaNavigation.encode(activation))) {
                 navigationRetries = 0
-                DiagLog.i("ICCOA", "OEM navigation status forwarded: active=${latestNavigation.active}")
+                DiagLog.i("ICCOA", "OEM sensor activation request: active=${activation.active} " +
+                    "guided=${latestNavigation.active} aaConnected=$aaSensorAssist")
             } else if (navigationRetries++ < 8) {
                 main.postDelayed(this, 500)
             }
@@ -146,7 +151,18 @@ class IccoaService : Service() {
         }
         projection = IccoaProjection(this, ::promoteProjection, {
             session?.sendControl(5, byteArrayOf())
-        }, { pcm -> media?.audio(pcm) }, onFailure = ::connectionFailed)
+        }, { pcm -> media?.audio(pcm) }, onFailure = ::connectionFailed,
+            onAaConnectionChanged = { connected ->
+                main.post {
+                    if (aaSensorAssist != connected) {
+                        aaSensorAssist = connected
+                        navigationRetries = 0
+                        main.removeCallbacks(navigationSend)
+                        DiagLog.i("ICCOA", "AA projection sensor assist changed: connected=$connected")
+                        navigationSend.run()
+                    }
+                }
+            })
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -377,6 +393,7 @@ class IccoaService : Service() {
         if (AaHeadUnitService.onNavigation === navigationHook) AaHeadUnitService.onNavigation = null
         navigationHook = null
         latestNavigation = NavigationInfo()
+        aaSensorAssist = false
         navigationRetries = 0
         if (AaHeadUnitService.onCarMicWanted === microphoneHook) AaHeadUnitService.onCarMicWanted = null
         microphoneHook = null

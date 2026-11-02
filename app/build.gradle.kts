@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft.xa60"
         minSdk = 29
         targetSdk = 36
-        versionCode = 165
-        versionName = "3.9.51-xa60-gps-touch-stability"
+        versionCode = 166
+        versionName = "3.9.52-xa60-oem-sensor-assist"
     }
 
     signingConfigs {
