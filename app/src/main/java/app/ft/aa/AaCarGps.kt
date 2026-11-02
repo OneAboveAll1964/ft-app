@@ -44,6 +44,9 @@ internal object AaCarGps {
  */
 internal class AaGpsGate {
     private var previous: VehicleLocation? = null
+    // The last fix actually delivered to AA is the trusted movement anchor.
+    // A self-consistent cluster of erroneous fixes must not move this anchor.
+    private var lastDelivered: VehicleLocation? = null
     private var lastObservedAt = Long.MIN_VALUE
     private var consecutive = 0
 
@@ -72,11 +75,26 @@ internal class AaGpsGate {
         previous = sample
         lastObservedAt = nowMs
         consecutive++
-        return encoded.takeIf { consecutive >= 3 }
+        if (consecutive < 3) return null
+        val anchor = lastDelivered
+        if (anchor != null) {
+            val elapsedMs = sample.positionAtMs - anchor.positionAtMs
+            val lat1 = anchor.displayLatitude ?: return null
+            val lon1 = anchor.displayLongitude ?: return null
+            val lat2 = sample.displayLatitude ?: return null
+            val lon2 = sample.displayLongitude ?: return null
+            // Guard against a sustained false GPS cluster, not just a single spike.
+            // The stream must genuinely go stale before a far-away fix can reacquire.
+            if (elapsedMs !in 1L..3_000L ||
+                unreasonableJump(lat1, lon1, lat2, lon2, elapsedMs)) return null
+        }
+        lastDelivered = sample
+        return encoded
     }
 
     fun reset() {
         previous = null
+        lastDelivered = null
         consecutive = 0
         lastObservedAt = Long.MIN_VALUE
     }

@@ -95,3 +95,32 @@ Conclusion: **FT ICCOA is a partial, manually reimplemented Toyota-specific tran
 not yet a complete official ICCOA CarLink SDK implementation**. Its basic H.264/touch
 and AES-GCM protocols have working-source and P1 observations, but GPS/DR and
 no-PIN reconnect still have P0 acceptance blockers.
+
+## 2026-11-02 — exact OEM proto readback and AA anti-teleport regression
+
+APK independently re-opened and SHA-256 verified as
+`6292f74524a5f7eecb84fe80d7b4c63acd81835912f03cf085ee78ae44c076d7`.
+The APK contains plaintext `ucar.proto` with these exact declarations:
+
+| Source | OEM field/type | FT mapping | Assessment |
+| --- | --- | --- | --- |
+| `GetPortRequest` | `ServerType type=1` (`SENSOR=1,AUDIO=2,UIBC=3`) | `IccoaPortNegotiation.responseFor` | MATCH for known SENSOR request |
+| `GetPortResponse` | `Result result=1`, `int32 port=2` | SENSOR=success, 57239 | MATCH; other ports unverified |
+| `NotifyNavigationInfo` | `bool isNavigating=1`, `string distance=3`, `string distanceUnit=4`, `string where=6` | `IccoaNavigation.encode` | MATCH for fields used |
+| `Gps` | `double altitude=1,latitude=2,longitude=3`; `uint32 antenna_state=4,pdop=5,speed=6,heading=7,sats_used=8,sats_visible=9`; `uint64 timestamp=10` | `IccoaGpsWire` | MATCH direct protobuf fields; units/CRS not HU-accepted |
+| `GearInfo` | `GearState gear=1`, `uint32 speed=2` | `IccoaGearWire` | MATCH direct protobuf fields; speed unit unknown |
+| `SensorIndex` | `Gps gps=1`, `GearInfo gear_info=6` | ICCOA category=2 method=1/6 | **Runtime envelope unverified**; do not claim OEM sends the nested SensorIndex wrapper, nor fabricate another framing |
+
+**Proven FT behavioral defect (not a proto mismatch):**
+`AaGpsGate` previously reset its consecutive counter on a teleport, then
+delivered the third wrong but locally consistent fix, without comparing it
+against the last position actually transmitted to Android Auto. It could
+relocate navigation despite impossible motion. The fix retains the last
+delivered position as a separate anchor and rejects even sustained
+far-away clusters during a continuous stream. A genuinely stale source
+still resets the filter and supports cautious reacquisition after three
+valid fixes; the existing transient SensorError path remains unchanged.
+
+No change to ICCOA auth, pairing, WFD/H.264, RTP, audio or UIBC. OEM sensor
+frame nesting and trusted PIN-less resume still need P0 car evidence/OEM
+DEX confirmation. This readback is P1 static, not owner physical acceptance.

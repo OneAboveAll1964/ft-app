@@ -59,9 +59,25 @@ class AaCarGpsTest {
         // A 20 km teleport in 100 ms is impossible for the car.
         assertNull(gate.accept(car(55.9300, 37.6173, 1300), 1300))
         assertNull(gate.accept(car(55.93001, 37.61731, 1400), 1400))
-        assertNotNull(gate.accept(car(55.93002, 37.61732, 1500), 1500))
+        // Three wrong fixes in the same distant location remain a teleport.
+        assertNull(gate.accept(car(55.93002, 37.61732, 1500), 1500))
+        // Once the source is genuinely stale, fall back and reacquire cautiously.
         assertNull(gate.accept(null, 5_000))
         assertNull(gate.accept(car(55.93003, 37.61733, 5_100), 5_100))
+        assertNull(gate.accept(car(55.93004, 37.61734, 5_200), 5_200))
+        assertNotNull(gate.accept(car(55.93005, 37.61735, 5_300), 5_300))
+    }
+
+    @Test fun prolongedFalseCoordinateClusterNeverPassesWithoutActualLoss() {
+        val gate = AaGpsGate()
+        assertNull(gate.accept(car(55.75580, 37.61720, 1000), 1000))
+        assertNull(gate.accept(car(55.75581, 37.61721, 1100), 1100))
+        assertNotNull(gate.accept(car(55.75582, 37.61722, 1200), 1200))
+        // 2 km false offset is stable for multiple seconds but remains implausible.
+        for (t in 1300L..3300L step 100L) {
+            val sample = car(55.77382, 37.61722, t)
+            assertNull("unsafe coordinate released at $t", gate.accept(sample, t))
+        }
     }
 
     @Test fun baiduModeMustNotAdvertiseUnusableGps() {
