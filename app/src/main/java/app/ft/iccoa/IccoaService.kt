@@ -220,12 +220,14 @@ class IccoaService : Service() {
             autoConnectAttempted || _state.value.connecting || _state.value.connected) return
         val car = rememberedCar.select(result.peers, result.phase == IccoaPhase.SCAN_COMPLETE) ?: return
         autoConnectAttempted = true
-        DiagLog.i("ICCOA", "Auto-select remembered vehicle; BLE address may rotate; no automatic PIN submission")
+        DiagLog.i("ICCOA", "Auto-select remembered vehicle; encrypted credential will be tried once if available")
         connectTo(car.address)
     }
 
     private fun connectTo(address: String) {
         pendingCar = _state.value.discovery.peers.singleOrNull { it.address.equals(address, ignoreCase = true) }
+        val known = rememberedCar.matches(pendingCar)
+        val trustedCarName = pendingCar?.name?.trim().orEmpty()
         endConnection()
         discovery?.stop()
         val token = generation
@@ -296,7 +298,9 @@ class IccoaService : Service() {
                 navigationRetries = 0
                 main.removeCallbacks(navigationSend)
                 navigationSend.run()
-            } })
+            } },
+            trustedCarName = trustedCarName,
+            tryRememberedPin = known)
         session = connection
         main.postDelayed({
             if (generation == token && session === connection && gearSpeedFrames > 0L && gpsFrameCount == 0L)

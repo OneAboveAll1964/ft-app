@@ -12,6 +12,21 @@ internal class IccoaRememberedCar(context: Context) {
             .putString("name", peer.name.trim()).commit()
     }
 
+    /**
+     * Never try an encrypted remembered credential against a different car.
+     * The BLE address may rotate; a uniquely discovered, hinted matching name
+     * is acceptable only in the already selected/owner-approved car path.
+     */
+    fun matches(peer: IccoaPeer?): Boolean {
+        if (peer == null || !peer.connectable) return false
+        val savedAddress = prefs.getString("address", "").orEmpty()
+        if (savedAddress.isBlank()) return false
+        if (peer.address.equals(savedAddress, ignoreCase = true)) return true
+        val savedName = prefs.getString("name", "").orEmpty()
+        return peer.hint && savedName.isNotBlank() &&
+            peer.name.trim().equals(savedName, ignoreCase = true)
+    }
+
     fun select(peers: List<IccoaPeer>, scanComplete: Boolean): IccoaPeer? {
         val address = prefs.getString("address", "").orEmpty()
         if (address.isBlank()) return null

@@ -37,7 +37,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * One independently owned ICCOA connection: GATT bootstrap, AP join, PIN SignIn and UCAR lanes.
- * PINs, AP credentials and agreement keys are never persisted or included in callbacks/logs.
+ * Current AP credentials and agreement keys are never persisted. If owner chooses
+ * automatic remembered-car reconnect, only the previously confirmed PIN is kept
+ * encrypted under a non-exportable AndroidKeyStore key; never logged.
  * Status/PIN/closed callbacks run on main; ready and messages run on network workers.
  * [onReady] must synchronously open media listeners before returning (before AuthConfirm).
  */
@@ -49,10 +51,13 @@ class IccoaSession(
     private val onReady: (Network, String) -> Unit,
     private val onMessage: (Int, Int, ByteArray) -> Unit,
     private val onClosed: (String) -> Unit,
-    private val onControlReady: () -> Unit = {}
+    private val onControlReady: () -> Unit = {},
+    private val trustedCarName: String = "",
+    private val tryRememberedPin: Boolean = false
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private val trustedPin by lazy { IccoaTrustedPin(context) }
     @Volatile private var current: Attempt? = null
     val cipher: IccoaControl.Cipher? get() = current?.cipher
 
@@ -79,6 +84,7 @@ class IccoaSession(
         var pinReady = false
         var pin: String? = null
         var pinAttempt = 0
+        var reusingPin = false
         var wifiRequested = false
         var authStarted = false
         var hasWifiAddress = false
@@ -116,7 +122,9 @@ class IccoaSession(
         }
     }
 
-    fun submitPin(pin: String) {
+    fun submitPin(pin: String) = submitPin(pin, fromCache = false)
+
+    private fun submitPin(pin: String, fromCache: Boolean) {
         val attempt = current ?: return
         post(attempt) {
             if (!pin.matches(Regex("[0-9]{6}"))) {
@@ -133,6 +141,7 @@ class IccoaSession(
                 require(payload.size <= 512) { "Client info too large" }
                 attempt.pinReady = false
                 attempt.pin = pin
+                attempt.reusingPin = fromCache
                 val revision = ++attempt.pinAttempt
                 attempt.serverInfo.reset()
                 status(attempt, "Проверка кода ICCOA…")
@@ -146,9 +155,16 @@ class IccoaSession(
                     gatt.writeCharacteristic(characteristic)
                 }
                 payload.fill(0)
-                if (!accepted) return@post requestPin(attempt, "Не удалось отправить код. Повторите ввод")
+                if (!accepted) {
+                    if (fromCache) trustedPin.clear()
+                    return@post requestPin(attempt, "Не удалось отправить код. Введите текущий PIN")
+                }
                 later(attempt, 12_000) {
                     if (!attempt.wifiRequested && revision == attempt.pinAttempt) {
+                        if (attempt.reusingPin) {
+                            trustedPin.clear()
+                            DiagLog.w("ICCOA", "Remembered-car PIN rejected during BLE bootstrap, manual PIN required")
+                        }
                         requestPin(attempt, "Автомобиль не принял код. Введите новый код с его экрана")
                     }
                 }
@@ -236,8 +252,14 @@ class IccoaSession(
                 // The observed Carlink bootstrap enables local notification routing and
                 // proceeds directly to CLIENT_INFO. XA60 stalls on the extra CCCD write;
                 // do not introduce an ATT operation absent from that exchange.
-                DiagLog.i("ICCOA", "GATT ICCOA channel ready; local notifications enabled, requesting PIN")
-                requestPin(attempt)
+                DiagLog.i("ICCOA", "GATT ICCOA channel ready; checking remembered-car credentials")
+                val cached = if (tryRememberedPin && trustedCarName.isNotBlank())
+                    trustedPin.load(attempt.profile.id, trustedCarName) else null
+                if (cached != null) {
+                    attempt.pinReady = true
+                    DiagLog.i("ICCOA", "One remembered-car authentication attempt; manual fallback on rejection")
+                    submitPin(cached, fromCache = true)
+                } else requestPin(attempt)
             } catch (e: Exception) { fail(attempt, "Устройство не предоставило канал ICCOA (${e.javaClass.simpleName})") }
         }
 
@@ -245,6 +267,10 @@ class IccoaSession(
             if (gatt !== attempt.gatt) return@post
             DiagLog.i("ICCOA", "GATT characteristic write uuid=${characteristic.uuid} status=$status")
             if (gatt === attempt.gatt && characteristic.uuid == CLIENT_INFO && status != BluetoothGatt.GATT_SUCCESS && !attempt.wifiRequested) {
+                if (attempt.reusingPin) {
+                    trustedPin.clear()
+                    DiagLog.w("ICCOA", "Remembered-car BLE PIN rejected; requesting fresh PIN")
+                }
                 requestPin(attempt, "Автомобиль отклонил запись кода (status=$status)")
             }
         }
@@ -271,6 +297,7 @@ class IccoaSession(
 
     private fun requestPin(attempt: Attempt, message: String = "Введите шестизначный код с экрана автомобиля") {
         attempt.pin = null
+        attempt.reusingPin = false
         attempt.pinReady = true
         status(attempt, message)
         onPinRequired()
@@ -413,6 +440,11 @@ class IccoaSession(
             if (!active(attempt)) return
             progress("send-confirm")
             socket.getOutputStream().run { write(IccoaControl.frame(3, 3, 0, auth.confirm(key, local), 2)); flush() }
+            if (trustedCarName.isNotBlank()) {
+                val stored = trustedPin.save(attempt.profile.id, trustedCarName, pin)
+                DiagLog.i("ICCOA", "Authenticated car credential storage: " +
+                    if (stored) "ENCRYPTED" else "UNAVAILABLE")
+            }
             status(attempt, "ICCOA: аутентификация завершена, ожидание каналов автомобиля…")
             later(attempt, 25_000) {
                 if (attempt.control == null) fail(attempt, "Автомобиль не открыл канал управления ICCOA")
@@ -424,6 +456,10 @@ class IccoaSession(
             socket.close()
         } catch (e: Exception) {
             if (!active(attempt)) return
+            if (attempt.reusingPin) {
+                trustedPin.clear()
+                DiagLog.w("ICCOA", "Remembered-car authentication rejected. Fresh PIN needed on next connection")
+            }
             // Exception messages may contain peer data. Log only our fixed codes and stack locations.
             val reason = (e as? IccoaHandshakeException)?.diagnostic ?: e.javaClass.simpleName
             val location = e.stackTrace.firstOrNull { it.className.startsWith("app.ft.iccoa.") }

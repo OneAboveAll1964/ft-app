@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft.xa60"
         minSdk = 29
         targetSdk = 36
-        versionCode = 168
-        versionName = "3.9.54-xa60-ft-home-gps"
+        versionCode = 169
+        versionName = "3.9.55-xa60-trusted-reconnect"
     }
 
     signingConfigs {
