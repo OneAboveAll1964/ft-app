@@ -1,6 +1,5 @@
 package app.ft.iccoa
 
-import app.ft.core.ProtoReader
 import app.ft.core.ProtoWriter
 
 /**
@@ -15,11 +14,11 @@ internal object IccoaPortNegotiation {
     const val SENSOR_PORT = 57239
 
     fun responseFor(request: ByteArray): ByteArray? {
-        if (request.size !in 2..64) return null
-        val r = ProtoReader(request)
-        if (r.fields.keys != setOf(1)) return null
-        val type = r.int(1, 0)
-        if (type != SENSOR) return null
+        // OEM ucar.proto: GetPortRequest has exactly one enum field (type=1).
+        // Protobuf's canonical encoding for SENSOR=1 is 08 01.
+        // ProtoReader is intentionally permissive on truncated trailing fields:
+        // do not acknowledge an incomplete or duplicate port request.
+        if (!request.contentEquals(byteArrayOf(0x08, 0x01))) return null
         return ProtoWriter().enum(1, 1).int32(2, SENSOR_PORT).toByteArray()
     }
 }

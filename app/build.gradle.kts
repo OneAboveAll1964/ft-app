@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft.xa60"
         minSdk = 29
         targetSdk = 36
-        versionCode = 163
-        versionName = "3.9.49-xa60-android-auto-car-gps"
+        versionCode = 164
+        versionName = "3.9.50-xa60-iccoa-protocol-hardening"
     }
 
     signingConfigs {
