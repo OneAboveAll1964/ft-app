@@ -14,7 +14,7 @@ object Backup {
         "carBackground", "carAccent", "carTiles", "carClock24", "carShowLink", "carSongInfo",
         "carInfoRight", "carColumns", "carShowClock", "carShowMusic", "carShowAa", "carShowCarHome",
         "carWidgets", "weatherFahrenheit", "speedMph", "carDayNight", "carNightBackground", "carNightAccent",
-        "aaCorner"
+        "aaCorner", "aaCompactReturnButton"
     )
 
     fun everything(prefs: Prefs): String = write(prefs.all.filterKeys { it !in SKIP })

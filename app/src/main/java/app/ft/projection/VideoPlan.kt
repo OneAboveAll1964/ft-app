@@ -7,7 +7,9 @@ data class VideoPlan(
     val streamHeight: Int,
     val fps: Int,
     val bitrate: Int,
-    val qpFloor: Int = 0
+    val qpFloor: Int = 0,
+    val constantBitrate: Boolean = false,
+    val preserveAspect: Boolean = false
 )
 
 object VideoPlans {
@@ -42,7 +44,8 @@ object VideoPlans {
                 even(customWidth).coerceIn(320, 4096) to even(customHeight).coerceIn(240, 2160)
             else -> baiduSize(cw, ch, newVehicle)
         }
-        return VideoPlan(cw, ch, sw, sh, startFps(askedFps, forcedFps, floorFps, unaskedStart), if (bitrate > 0) bitrate else baiduBitrate(sw), qpFloor.coerceIn(0, 51))
+        return VideoPlan(cw, ch, sw, sh, startFps(askedFps, forcedFps, floorFps, unaskedStart),
+            (if (bitrate > 0) bitrate else baiduBitrate(sw)).coerceIn(300_000, 40_000_000), qpFloor.coerceIn(0, 51))
     }
 
     fun baiduSize(carWidth: Int, carHeight: Int, newVehicle: Boolean): Pair<Int, Int> {

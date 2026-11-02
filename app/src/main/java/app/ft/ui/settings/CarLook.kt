@@ -367,6 +367,12 @@ fun CarWidgetSettings() {
             if (style.mph) 1 else 0
         ) { index -> save { p.speedMph = index == 1 } }
     }
+    Toggle(stringResource(R.string.widget_coordinates), CarStyle.WIDGET_COORDINATES in style.widgets) { on ->
+        widget(CarStyle.WIDGET_COORDINATES, on)
+    }
+    Toggle(stringResource(R.string.widget_course), CarStyle.WIDGET_COURSE in style.widgets) { on ->
+        widget(CarStyle.WIDGET_COURSE, on)
+    }
     Toggle(stringResource(R.string.widget_calendar), CarStyle.WIDGET_CALENDAR in style.widgets) { on -> widget(CarStyle.WIDGET_CALENDAR, on) }
 
     val needsLocation = remember(permissionTick, style.widgets) { CarInfo.needsLocation(context) }

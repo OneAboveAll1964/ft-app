@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -24,10 +25,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import app.ft.core.DiagLog
+import app.ft.aa.AaHeadUnitService
+import app.ft.ui.components.SystemReportHelp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,6 +40,8 @@ import app.ft.R
 
 @Composable
 fun DiagnosticsScreen(pad: PaddingValues) {
+    var systemHelp by rememberSaveable { mutableStateOf(false) }
+    if (systemHelp) SystemReportHelp(onDismiss = { systemHelp = false })
     val entries by DiagLog.entries.collectAsState()
     var filter by remember { mutableStateOf<String?>(null) }
     val tags = remember(entries) { entries.map { it.tag }.distinct().sorted() }
@@ -44,6 +50,12 @@ fun DiagnosticsScreen(pad: PaddingValues) {
     val listState = rememberLazyListState()
     LaunchedEffect(shown.size) { if (shown.isNotEmpty()) listState.animateScrollToItem(shown.size - 1) }
     Column(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding())) {
+        TextButton(onClick = {
+            AaHeadUnitService.dismissDisconnectHelp()
+            systemHelp = true
+        }, modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text(stringResource(R.string.report_system_help))
+        }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)

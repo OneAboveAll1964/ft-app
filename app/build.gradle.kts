@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 123
-        versionName = "3.9.12"
+        versionCode = 169
+        versionName = "3.9.55-xa60-trusted-reconnect"
     }
 
     signingConfigs {
@@ -39,6 +39,11 @@ android {
         }
         debug {
             signingConfig = signingConfigs.getByName("release")
+        }
+        create("unsignedTransit") {
+            initWith(getByName("release"))
+            signingConfig = null
+            matchingFallbacks += listOf("release")
         }
     }
 
@@ -88,4 +93,3 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation(project(":server"))
 }
-

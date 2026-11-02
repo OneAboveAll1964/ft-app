@@ -8,6 +8,20 @@ captures/
 .cxx/
 .kotlin/
 tools/sim/.car_bt_keys.json
+
+# Keep private XA60 signing material out of public GitHub.
+ft-xa60-signing.properties
+/.ft-xa60/
+*.p12
+*.jks
 tools/video/node_modules/
 tools/video/out/
 tools/sim/fake_aa/out/
+
+# Local build tools, worktrees and generated review/build artifacts.
+/.build-tmp/
+/.codex-attachments/
+/dist/
+/.build-tools/*
+!/.build-tools/*.ps1
+!/.build-tools/*.py

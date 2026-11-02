@@ -5,16 +5,19 @@ import app.ft.core.Bytes
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
+import app.ft.core.CarProtocol
+import app.ft.core.VehicleTelemetry
+import app.ft.core.ProtoReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.concurrent.atomic.AtomicBoolean
 
 private val OFF_MAIN = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ft-aa-main-sends").apply { isDaemon = true } }
 
@@ -33,60 +36,83 @@ class AaSession(
     private val crypto = AaCrypto(context)
     private val assembler = AaFraming.Assembler { crypto.decrypt(it) }
     private val outLock = Any()
-    private val running = AtomicBoolean(false)
     private var job: Job? = null
+    private var carGpsJob: Job? = null
+    @Volatile private var carGpsSubscribed = false
+    private val lifecycle = AaSessionLifecycle(
+        interrupt = {
+            runCatching { input.close() }
+            runCatching { output.close() }
+            job?.cancel()
+        },
+        cleanup = { reason ->
+            carGpsSubscribed = false
+            carGpsJob?.cancel(); carGpsJob = null
+            microphoneInput.close()
+            runCatching { mic.stop() }
+            if (micWanted) {
+                micWanted = false
+                runCatching { AaHeadUnitService.onCarMicWanted?.invoke(false) }
+            }
+            runCatching { CarAudioBus.end(AaProtocol.CH_SPEECH_AUDIO) }
+            runCatching { CarAudioBus.end(AaProtocol.CH_SYSTEM_AUDIO) }
+            runCatching { synchronized(navigation) { AaHeadUnitService.onNavigation?.invoke(navigation.reset()) } }
+            synchronized(music) { AaHeadUnitService.publishMusic(music.reset()) }
+            try { decoder.reset() } finally { onClosed(reason) }
+        }
+    )
     private var videoSession = 0
     private val audioSessions = HashMap<Int, Int>()
     private val audioMeasured = HashSet<Int>()
     private var mediaFrames = 0L
     private val _phase = MutableStateFlow(Phase.CONNECTED)
     val phase: StateFlow<Phase> = _phase
+    @Volatile var hasStreamed = false
+        private set
+    @Volatile var remoteBye = false
+        private set
     private val _deviceName = MutableStateFlow("")
     val deviceName: StateFlow<String> = _deviceName
     private val openChannels = HashSet<Int>()
-    private val mic = AaMicrophone { pcm -> sendMicrophone(pcm) }
+    private val navigation = AaNavigation()
+    private val music = AaMusic()
+    private val mic = AaMicrophone { }
+    private val microphoneInput = AaMicrophoneInput(::sendMicrophone, { mic.stopAsync() }, { DiagLog.i(tag, it) })
+    private var microphoneGeneration = 0L
     @Volatile private var micWanted = false
     @Volatile private var carMicAt = 0L
 
     fun start() {
-        if (!running.compareAndSet(false, true)) return
+        if (!lifecycle.start()) return
         job = scope.launch(Dispatchers.IO) {
+            var reason = "reader stopped"
             try {
                 sendPlain(AaProtocol.CH_CONTROL, AaProtocol.VERSION_REQUEST, AaMessages.versionRequest(), false)
                 DiagLog.i(tag, "version request sent")
-                while (isActive && running.get()) {
+                while (isActive && lifecycle.running) {
                     val frame = AaFraming.readFrame(input)
-                    val msg = assembler.feed(frame) ?: continue
-                    dispatch(msg)
+                    lifecycle.dispatch {
+                        assembler.feed(frame)?.let { dispatch(it) }
+                    }
                 }
             } catch (t: Throwable) {
-                if (running.get()) DiagLog.w(tag, "session ended: ${t.message}")
+                reason = "read ${t.javaClass.simpleName}: ${t.message}"
+                if (lifecycle.running) DiagLog.w(tag, "session ended: $reason")
             } finally {
-                close("session closed")
+                close(reason)
             }
         }
     }
 
     fun close(reason: String) {
-        if (!running.getAndSet(false)) return
-        mic.stop()
-        if (micWanted) {
-            micWanted = false
-            runCatching { AaHeadUnitService.onCarMicWanted?.invoke(false) }
-        }
-        CarAudioBus.end(AaProtocol.CH_SPEECH_AUDIO)
-        CarAudioBus.end(AaProtocol.CH_SYSTEM_AUDIO)
-        runCatching { input.close() }
-        runCatching { output.close() }
-        decoder.stop()
-        job?.cancel()
-        onClosed(reason)
+        lifecycle.close(reason)
     }
 
     private fun sendPlain(channel: Int, id: Int, body: ByteArray, control: Boolean) = send(channel, id, body, false, control)
     private fun sendEnc(channel: Int, id: Int, body: ByteArray, control: Boolean = false) = send(channel, id, body, true, control)
 
     private fun send(channel: Int, id: Int, body: ByteArray, encrypted: Boolean, control: Boolean) {
+        if (!lifecycle.running) return
         if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
             OFF_MAIN.execute { send(channel, id, body, encrypted, control) }
             return
@@ -94,15 +120,21 @@ class AaSession(
         val payload = ByteArray(2 + body.size)
         Bytes.putU16(id, payload, 0)
         System.arraycopy(body, 0, payload, 2, body.size)
-        synchronized(outLock) {
+        val failure = synchronized(outLock) {
+            if (!lifecycle.running) return
             try {
                 val frames = AaFraming.encode(channel, payload, encrypted, control) { if (encrypted) crypto.encrypt(it) else it }
                 frames.forEach { output.write(it) }
                 output.flush()
+                null
             } catch (t: Throwable) {
-                DiagLog.e(tag, "write failed", t)
-                close("write failed")
+                t
             }
+        }
+        // Never wait for dispatch cleanup while holding outLock.
+        if (failure != null) {
+            if (lifecycle.running) DiagLog.e(tag, "write failed", failure)
+            close("write ${failure.javaClass.simpleName}: ${failure.message}")
         }
     }
 
@@ -119,6 +151,14 @@ class AaSession(
             AaProtocol.CH_SENSOR -> handleSensor(id, body)
             AaProtocol.CH_MEDIA_AUDIO, AaProtocol.CH_SPEECH_AUDIO, AaProtocol.CH_SYSTEM_AUDIO -> handleAudioSink(m.channel, id, body)
             AaProtocol.CH_AV_INPUT -> handleAvInput(id, body)
+            AaProtocol.CH_MEDIA_STATUS -> synchronized(music) {
+                if (lifecycle.running) music.accept(id, body)?.let { AaHeadUnitService.publishMusic(it) }
+            }
+            AaProtocol.CH_NAVIGATION -> synchronized(navigation) {
+                if (lifecycle.running) navigation.accept(id, body)?.let {
+                    AaHeadUnitService.onNavigation?.invoke(it)
+                }
+            }
             else -> DiagLog.d(tag, "${AaProtocol.channelName(m.channel)} msg 0x${Integer.toHexString(id)} len=${body.size}")
         }
     }
@@ -146,18 +186,33 @@ class AaSession(
             AaProtocol.SERVICE_DISCOVERY_REQUEST -> {
                 _deviceName.value = AaMessages.deviceName(body)
                 DiagLog.i(tag, "service discovery from '${_deviceName.value}'")
-                DiagLog.i(tag, "video settings ${prefs.aaWidth}x${prefs.aaHeight}@${prefs.aaFps} fps")
+                DiagLog.i(tag, "video settings ${prefs.aaWidth}x${prefs.aaHeight}@${prefs.aaFps} fps; " +
+                    "Android Auto display density requested=${prefs.aaDensity} " +
+                    "effective=${AaUiDensity.effective(prefs.aaDensity, prefs.aaWidth, prefs.aaHeight)} dpi")
                 sendEnc(
                     AaProtocol.CH_CONTROL, AaProtocol.SERVICE_DISCOVERY_RESPONSE,
-                    AaMessages.serviceDiscoveryResponse(prefs.aaWidth, prefs.aaHeight, prefs.aaFps, prefs.aaDensity, true, prefs.carName, prefs.aaControlsLeft)
+                    AaMessages.serviceDiscoveryResponse(prefs.aaWidth, prefs.aaHeight, prefs.aaFps, prefs.aaDensity,
+                        true, prefs.carName, prefs.aaControlsLeft, prefs.carProtocol == CarProtocol.ICCOA)
                 )
                 _phase.value = Phase.DISCOVERED
+                if (prefs.carProtocol == CarProtocol.ICCOA) {
+                    DiagLog.i(tag, "ICCOA car LOCATION advertised to AA; waiting for actual phone subscription")
+                    scope.launch(Dispatchers.IO) {
+                        delay(12_000L)
+                        if (lifecycle.running && !carGpsSubscribed)
+                            DiagLog.w(tag, "AA phone did not request car LOCATION; cannot forward absent subscription")
+                    }
+                }
             }
             AaProtocol.CHANNEL_OPEN_REQUEST -> {
                 val sid = AaMessages.channelOpenServiceId(body)
                 openChannels += channel
                 DiagLog.i(tag, "channel open ${AaProtocol.channelName(channel)} (service $sid)")
                 sendEnc(channel, AaProtocol.CHANNEL_OPEN_RESPONSE, AaMessages.channelOpenResponse(), true)
+                if (channel == AaProtocol.CH_NAVIGATION) {
+                    sendEnc(channel, AaProtocol.NAV_START, ByteArray(0))
+                    DiagLog.i(tag, "instrument cluster navigation requested")
+                }
             }
             AaProtocol.PING_REQUEST -> sendEnc(AaProtocol.CH_CONTROL, AaProtocol.PING_RESPONSE, AaMessages.pingResponse(AaMessages.pingTimestamp(body)))
             AaProtocol.PING_RESPONSE -> Unit
@@ -168,11 +223,25 @@ class AaSession(
             }
             AaProtocol.NAV_FOCUS_REQUEST -> sendEnc(AaProtocol.CH_CONTROL, AaProtocol.NAV_FOCUS_NOTIFICATION, AaMessages.navFocusNotification(AaProtocol.NAV_FOCUS_PROJECTED))
             AaProtocol.BYEBYE_REQUEST -> {
+                remoteBye = true
                 DiagLog.i(tag, "phone bye-bye reason=${AaMessages.byeByeReason(body)}")
                 sendEnc(AaProtocol.CH_CONTROL, AaProtocol.BYEBYE_RESPONSE, AaMessages.byeByeResponse())
                 close("bye-bye")
             }
-            AaProtocol.CHANNEL_CLOSE_NOTIFICATION -> DiagLog.i(tag, "channel close ${AaProtocol.channelName(channel)}")
+            AaProtocol.CHANNEL_CLOSE_NOTIFICATION -> {
+                openChannels -= channel
+                if (channel == AaProtocol.CH_SENSOR) {
+                    carGpsSubscribed = false
+                    carGpsJob?.cancel(); carGpsJob = null
+                }
+                if (channel == AaProtocol.CH_NAVIGATION) synchronized(navigation) {
+                    AaHeadUnitService.onNavigation?.invoke(navigation.reset())
+                }
+                if (channel == AaProtocol.CH_MEDIA_STATUS) synchronized(music) {
+                    AaHeadUnitService.publishMusic(music.reset())
+                }
+                DiagLog.i(tag, "channel close ${AaProtocol.channelName(channel)}")
+            }
             AaProtocol.VOICE_SESSION_NOTIFICATION -> Unit
             else -> DiagLog.w(tag, "unhandled control ${AaProtocol.controlName(id)} on ${AaProtocol.channelName(channel)}")
         }
@@ -193,9 +262,12 @@ class AaSession(
                 sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, false))
             }
             AaProtocol.AV_START_INDICATION -> {
+                hasStreamed = true
                 videoSession = AaMessages.startSession(body)
                 mediaFrames = 0
-                decoder.askForAFreshPicture = { askForAFreshPicture() }
+                // Surface changes can request this while holding the decoder lock.
+                // Never wait for session cleanup from that callback.
+                decoder.askForAFreshPicture = { scope.launch { askForAFreshPicture() } }
                 _phase.value = Phase.STREAMING
                 DiagLog.i(tag, "video start session=$videoSession")
                 sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, false))
@@ -245,12 +317,59 @@ class AaSession(
                 when (type) {
                     AaProtocol.SENSOR_DRIVING_STATUS -> sendEnc(AaProtocol.CH_SENSOR, AaProtocol.SENSOR_EVENT_INDICATION, AaMessages.sensorDrivingStatus(0))
                     AaProtocol.SENSOR_NIGHT_MODE -> sendEnc(AaProtocol.CH_SENSOR, AaProtocol.SENSOR_EVENT_INDICATION, AaMessages.sensorNightMode(false))
+                    AaProtocol.SENSOR_LOCATION -> {
+                        if (prefs.carProtocol == CarProtocol.ICCOA)
+                            startCarGps(ProtoReader(body).long(2, 1_000L))
+                        else sendEnc(AaProtocol.CH_SENSOR, AaProtocol.SENSOR_ERROR,
+                            AaCarGps.sensorError(3))
+                    }
                     else -> Unit
                 }
                 DiagLog.i(tag, "sensor start type=$type")
             }
             else -> DiagLog.d(tag, "sensor msg 0x${Integer.toHexString(id)}")
         }
+    }
+
+    /**
+     * Feed Android Auto only new, still-current ICCOA fixes. If the source disappears,
+     * send a transient SensorError so the phone can revert to its local GNSS.
+     */
+    private fun startCarGps(requestedMs: Long) {
+        carGpsJob?.cancel()
+        carGpsSubscribed = true
+        val interval = requestedMs.coerceIn(100L, 1_000L)
+        carGpsJob = scope.launch(Dispatchers.IO) {
+            val gpsGate = AaGpsGate()
+            var lastPositionAt = Long.MIN_VALUE
+            var lastSeenAt = System.currentTimeMillis()
+            var unavailable = false
+            var sent = 0L
+            while (isActive && lifecycle.running && carGpsSubscribed) {
+                val now = System.currentTimeMillis()
+                val car = VehicleTelemetry.current.value
+                val packet = gpsGate.accept(car, now)
+                if (packet != null && car != null && car.positionAtMs != lastPositionAt) {
+                    if (unavailable) {
+                        sendEnc(AaProtocol.CH_SENSOR, AaProtocol.SENSOR_ERROR, AaCarGps.sensorError(1))
+                        DiagLog.i(tag, "car GPS to AA: recovered")
+                    }
+                    unavailable = false
+                    lastPositionAt = car.positionAtMs
+                    lastSeenAt = now
+                    sendEnc(AaProtocol.CH_SENSOR, AaProtocol.SENSOR_EVENT_INDICATION, packet)
+                    sent++
+                    if (sent == 1L || sent % 100L == 0L)
+                        DiagLog.i(tag, "car GPS to AA: $sent valid fixes sent; source=ICCOA")
+                } else if (!unavailable && now - lastSeenAt >= 3_500L) {
+                    unavailable = true
+                    sendEnc(AaProtocol.CH_SENSOR, AaProtocol.SENSOR_ERROR, AaCarGps.sensorError(2))
+                    DiagLog.w(tag, "car GPS to AA: stale/unavailable, phone fallback requested")
+                }
+                delay(interval)
+            }
+        }
+        DiagLog.i(tag, "AA subscribed to car GPS; interval=${interval}ms, OEM datum requires physical check")
     }
 
     private fun handleAudioSink(channel: Int, id: Int, body: ByteArray) {
@@ -283,7 +402,7 @@ class AaSession(
     }
 
     private fun startMicrophone() {
-        if (mic.active) return
+        if (mic.active || !microphoneInput.phoneAllowed) return
         if (!AaHeadUnitService.micReady) {
             DiagLog.w(tag, "Android Auto asked to listen, but FT was started in the background so android will not give it the microphone; open FT and start Android Auto from there")
         }
@@ -291,21 +410,18 @@ class AaSession(
             DiagLog.i(tag, "using the car's microphone for Android Auto")
             return
         }
-        if (!mic.start()) DiagLog.w(tag, "Android Auto asked to listen but the microphone is not available")
+        val token = microphoneGeneration
+        if (!mic.start { pcm -> lifecycle.dispatch { microphoneInput.phone(token, pcm) } })
+            DiagLog.w(tag, "Android Auto asked to listen but the microphone is not available")
     }
 
     fun feedCarMicrophone(pcm: ByteArray) {
         carMicAt = System.nanoTime()
-        if (!micWanted) return
-        if (mic.active) {
-            DiagLog.i(tag, "the car is sending its own microphone, letting go of the phone's")
-            mic.stop()
-        }
-        sendMicrophone(pcm)
+        lifecycle.dispatch { microphoneInput.car(pcm) }
     }
 
     private fun sendMicrophone(pcm: ByteArray) {
-        if (!running.get()) return
+        if (!lifecycle.running) return
         val payload = ByteArray(8 + pcm.size)
         Bytes.putU64(System.nanoTime() / 1000L, payload, 0)
         System.arraycopy(pcm, 0, payload, 8, pcm.size)
@@ -320,6 +436,7 @@ class AaSession(
                 sendEnc(AaProtocol.CH_AV_INPUT, AaProtocol.AV_INPUT_OPEN_RESPONSE, AaMessages.avInputOpenResponse(if (wanted) 0 else AaMessages.avInputOpenSession(body)))
                 if (wanted != micWanted) DiagLog.i(tag, if (wanted) "Android Auto opened the microphone" else "Android Auto closed the microphone")
                 micWanted = wanted
+                if (wanted) microphoneGeneration = microphoneInput.open() else microphoneInput.close()
                 runCatching { AaHeadUnitService.onCarMicWanted?.invoke(wanted) }
                 if (wanted) startMicrophone() else mic.stop()
             }

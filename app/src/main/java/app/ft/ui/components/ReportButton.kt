@@ -29,7 +29,7 @@ fun ReportButton() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
-    IconButton(enabled = !busy, onClick = {
+    val sendReport: () -> Unit = {
         busy = true
         scope.launch {
             val app = context.applicationContext
@@ -48,7 +48,8 @@ fun ReportButton() {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             runCatching { context.startActivity(Intent.createChooser(send, context.getString(R.string.report_send)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
-    }) {
+    }
+    IconButton(enabled = !busy, onClick = sendReport) {
         if (busy) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
         else Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.report_cd))
     }

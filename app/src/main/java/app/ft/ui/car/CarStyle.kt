@@ -58,7 +58,8 @@ data class CarStyle(
     val dayNight: Boolean = false,
     val nightBackground: String = "",
     val nightAccent: Int = 0,
-    val night: Boolean = false
+    val night: Boolean = false,
+    val aaCompactReturnButton: Boolean = false
 ) {
     private val dark: Boolean get() = dayNight && night
 
@@ -77,8 +78,11 @@ data class CarStyle(
         const val WIDGET_WEATHER = "weather"
         const val WIDGET_BATTERY = "battery"
         const val WIDGET_SPEED = "speed"
+        const val WIDGET_COORDINATES = "coordinates"
+        const val WIDGET_COURSE = "course"
         const val WIDGET_CALENDAR = "calendar"
-        val WIDGETS = listOf(WIDGET_WEATHER, WIDGET_BATTERY, WIDGET_SPEED, WIDGET_CALENDAR)
+        val WIDGETS = listOf(WIDGET_WEATHER, WIDGET_BATTERY, WIDGET_SPEED,
+            WIDGET_COORDINATES, WIDGET_COURSE, WIDGET_CALENDAR)
 
         fun parseWidgets(raw: String): List<String> =
             raw.split(',').map { it.trim() }.filter { it in WIDGETS }.distinct()
@@ -136,6 +140,7 @@ object CarStyles {
             clock24 = p.carClock24,
             showLink = p.carShowLink,
             corner = p.aaCorner.coerceIn(0, 3),
+            aaCompactReturnButton = p.aaCompactReturnButton,
             aaShowReturnButton = p.aaShowReturnButton,
             photoStamp = if (photo.exists()) photo.lastModified() else 0,
             infoRight = p.carInfoRight,

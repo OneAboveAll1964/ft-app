@@ -47,6 +47,11 @@
     <string name="aa_help_4_body">سيتصل به FT تلقائيًا. بعد إعادة تشغيل الهاتف أو تحديث Android Auto، كرّر الخطوات 1 و3 و4.</string>
     <string name="aa_match_car">العرض بمقاس شاشة السيارة نفسها</string>
     <string name="aa_controls_left">ضع أزرار التحكم على اليسار</string>
+    <string name="aa_compact_return_button">زر FT صغير</string>
+    <string name="aa_compact_return_button_body">استخدم زر رجوع دائريًا صغيرًا وداكنًا فوق Android Auto. عند إيقاف الخيار يبقى الزر الأصلي.</string>
+    <string name="aa_return_to_ft">العودة إلى FT</string>
+    <string name="aa_cluster_navigation">إرشادات الطريق على لوحة العدادات</string>
+    <string name="aa_cluster_navigation_body">عرض منعطفات Android Auto على لوحة العدادات أو شاشة العرض الأمامية HUD، إذا كانت السيارة تدعم ذلك. تسري التغييرات فورًا.</string>
     <string name="aa_port">منفذ TCP</string>
     <string name="aa_width">عرض الفيديو</string>
     <string name="aa_height">ارتفاع الفيديو</string>
@@ -81,6 +86,8 @@
     <string name="car_name_label">الاسم الذي يظهر على شاشة السيارة</string>
     <string name="car_p2p_label">اسم WiFi Direct (فارغ = أي CarLife)</string>
     <string name="car_bt_label">اسم البلوتوث للتشغيل التلقائي (فارغ = أي جهاز)</string>
+    <string name="car_bt_reconnect">إعادة توصيل بلوتوث السيارة</string>
+    <string name="car_bt_reconnect_about">أثناء تشغيل FT، حاول إعادة الاتصال حتى ثلاث مرات بعد الانقطاع، فقط عند اكتشاف آخر سيارة مقترنة بالقرب منك. يجب أن تكون السيارة قابلة للاكتشاف عبر البلوتوث. يعتمد توفر الميزة على هاتفك.</string>
     <string name="car_pin_label">رمز PIN لـ WiFi Direct (فارغ = بضغطة زر)</string>
     <string name="car_swap_keys">بدّل زرّي التالي والسابق في المقود</string>
     <string name="sound_bluetooth">استخدم بلوتوث السيارة للصوت بدلًا من ذلك</string>
@@ -96,6 +103,15 @@
     <string name="quiet_on_body">ينقل FT صوت التطبيقات الأخرى إلى السيارة تلقائيًا دون أي سؤال على الهاتف. لإيقاف ذلك، نفّذ:</string>
     <string name="quiet_off_body">يسأل Android على الهاتف قبل أن يتمكن FT من نقل صوت التطبيقات الأخرى إلى السيارة. نفّذ هذا مرة واحدة من كمبيوتر مع تفعيل تصحيح أخطاء USB، ولن يسأل بعدها:</string>
     <string name="picture_defaults_body">يرسل FT إلى السيارة صورة بمقاس شاشتها نفسها، \u20661920×720\u2069 في كورولا، بمعدل 3 ميغابت في الثانية. هذا أعلى ما جُرّب على كورولا، وقد واكبه بسلاسة بـ 30 إطارًا في الثانية. يبدأ FT بـ 20 إطارًا في الثانية ثم يتبع ما تطلبه السيارة.</string>
+    <string name="picture_stream_now">يُرسل إلى السيارة الآن</string>
+    <string name="picture_stream_saved">محفوظ للاتصال التالي</string>
+    <string name="picture_stream_using_saved">الإعدادات المحفوظة قيد الاستخدام</string>
+    <string name="picture_stream_inactive">لا يُرسل فيديو الآن</string>
+    <string name="picture_stream_unsaved">لا توجد إعدادات محفوظة بعد. اتصل بالسيارة لاختيار الإعدادات وحفظها.</string>
+    <string name="picture_stream_summary">%1$d × %2$d · حتى %3$d إطار/ث · %4$s Mbps</string>
+    <string name="picture_stream_mode">المقاس: %1$s · معدل الإطارات: %2$s</string>
+    <string name="picture_stream_manual">يدوي</string>
+    <string name="picture_stream_note">معدل الإطارات حد أقصى ومعدل البيانات هدف. يبدأ FT بالإعدادات المحفوظة للشاشة والإعدادات نفسها، ثم يتبع طلبات السيارة الجديدة. لا تُحفظ القيود المؤقتة بسبب الحرارة. تغيير إعدادات الفيديو أو إعادة الضبط يمسح الإعدادات المحفوظة.</string>
     <string name="picture_changed_body">تُطبّق التغييرات في المرة القادمة التي تتصل فيها السيارة.</string>
     <string name="picture_size_label">المقاس المرسل إلى السيارة</string>
     <string name="picture_size_car">مقاس السيارة</string>
@@ -187,6 +203,21 @@
     <string name="report_failed">تعذّر إنشاء التقرير</string>
     <string name="report_saved">حُفظ التقرير في التنزيلات</string>
     <string name="report_send">إرسال تقرير FT</string>
+    <string name="report_system_help">ينقطع اتصال Android Auto؟ ما الذي يجب التحقق منه</string>
+    <string name="report_disconnect_title">انقطع اتصال Android Auto</string>
+    <string name="report_disconnect_detail">إذا حدث هذا بشكل غير متوقع، فتحقق من إعدادات USB. إذا استمر انقطاع الاتصال، فاجمع تقريرًا عن النظام.</string>
+    <string name="report_system_action">ما الذي يجب التحقق منه</string>
+    <string name="report_system_title">انقطاع اتصال Android Auto</string>
+    <string name="report_system_step_usb">تحقق أولًا من USB، حتى عند الاتصال بالسيارة عبر Wi-Fi. في خيارات المطوّر على الهاتف، افتح إعداد USB التلقائي واختر الشحن فقط / عدم نقل البيانات بدلًا من نقل الملفات / Android Auto. تختلف أسماء الخيارات حسب الهاتف. على هاتف OPPO، أدى ذلك إلى حل مشكلة انقطاع الاتصال عند فتح القفل. جرّب مجددًا في السيارة؛ لا تحتاج إلى تقرير النظام إلا إذا استمرت المشكلة. تنطبق هذه النصيحة على اتصالات FT اللاسلكية.</string>
+    <string name="report_system_intro">إذا استمر انقطاع الاتصال: يحتوي تقرير FT على سجلات FT، لكننا نحتاج أيضًا إلى تقرير نظام Android لمعرفة السبب. فعّل التسجيل قبل إعادة إحداث المشكلة.</string>
+    <string name="report_system_step_aa">1. افتح إعدادات Android Auto. اضغط على ⋮ ← إعدادات المطوّر وفعّل فرض تسجيل تصحيح الأخطاء. إذا لم تظهر إعدادات المطوّر: مرّر إلى الإصدار، واضغط عليه لتوسيعه، ثم اضغط على معلومات الإصدار والأذونات 10 مرات ووافق على الطلب.</string>
+    <string name="report_system_step_reproduce">2. عد إلى FT واتصل بالسيارة. أثناء توقف السيارة، كرّر الإجراء الذي قطع الاتصال. إذا حدث ذلك عند قفل الهاتف، فاقفله وافتح قفله مرة واحدة. دوّن الوقت وأبقِ الاتصال بالسيارة نشطًا حتى يصبح التقرير جاهزًا.</string>
+    <string name="report_system_step_android">3. افتح فورًا خيارات المطوّر على الهاتف باستخدام الزر أدناه. اختر تقرير الأخطاء ← تقرير تفاعلي ← إعداد تقرير. عند انتهاء الجمع، افتح إشعاره واحفظ ملف ZIP أو شاركه مع المطوّر. أرسل أيضًا تقرير FT من شاشة السجل.</string>
+    <string name="report_system_open_android">فتح خيارات المطوّر على الهاتف</string>
+    <string name="report_system_developer_hint">إذا كانت خيارات المطوّر معطّلة، يفتح الزر صفحة حول الهاتف. اضغط هناك على رقم الإصدار 7 مرات (قد يكون داخل الإصدار)، ثم عد إلى FT واضغط على الزر مجددًا. لا يستطيع FT تفعيل تسجيل Android Auto أو جمع تقرير نظام كامل تلقائيًا؛ يجب إتمام الخطوات الأخيرة في تلك الإعدادات.</string>
+    <string name="report_system_enable_developer">فعّل خيارات المطوّر: اضغط على رقم الإصدار 7 مرات، ثم عد إلى FT.</string>
+    <string name="report_system_settings_failed">افتح إعدادات الهاتف يدويًا وابحث عن خيارات المطوّر.</string>
+    <string name="report_system_close">إغلاق</string>
     <string name="root_chip">ROOT</string>
     <string name="root_title">صلاحيات الروت مفعّلة</string>
     <string name="root_body">هاتفك فيه صلاحيات روت وسمحت لـ FT باستخدامها، لذلك يجهّز FT كل شيء بنفسه. ومن دون الروت يعمل FT بالطريقة نفسها، لكنه يطلب منك القيام بهذه الأمور يدويًا.</string>
@@ -304,6 +335,8 @@
     <string name="widget_weather">الطقس</string>
     <string name="widget_battery">بطارية الهاتف</string>
     <string name="widget_speed">السرعة</string>
+    <string name="widget_coordinates">الإحداثيات</string>
+    <string name="widget_course">الاتجاه</string>
     <string name="widget_calendar">الموعد القادم</string>
     <string name="widget_no_event">لا مواعيد قادمة</string>
     <string name="widget_temperature">درجة الحرارة</string>
@@ -426,6 +459,10 @@
     <string name="car_join_timeout">Wi-Fi Direct connection timeout</string>
     <string name="car_join_timeout_about">How long to wait before retrying an unanswered connection attempt. Increase this if the car takes longer to connect. Applies to the next attempt.</string>
     <string name="car_join_timeout_seconds">%1$d s</string>
+    <string name="car_join_timeout_custom">Custom value…</string>
+    <string name="car_join_timeout_custom_value">%1$d s (custom)</string>
+    <string name="car_join_timeout_input">Timeout, seconds</string>
+    <string name="car_join_timeout_range">Enter a whole number from %1$d to %2$d seconds.</string>
     <string name="car_join_timeout_error">Could not connect to the car over Wi-Fi Direct within %1$d s. Retrying automatically. Check that CarLife is open on the car screen, or increase the connection timeout.</string>
     <string name="car_join_timeout_action">Connection settings</string>
     <string name="look_phone_style">App appearance</string>
@@ -435,4 +472,9 @@
     <string name="aa_show_return_button">Show the FT return button in Android Auto</string>
     <string name="aa_show_return_button_about">The button returns to FT. In Alternative, it sits beside Android Auto without covering its controls. If hidden, you can show it again from these settings on your phone.</string>
     <string name="aa_back_to_ft">Back to FT</string>
+    <string name="iccoa_mic_gain">ICCOA microphone gain</string>
+    <string name="iccoa_mic_gain_value">×%1$d</string>
+    <string name="iccoa_mic_gain_about">Amplifies the car microphone for Android Auto. ×1 keeps the original level. Choose a value from ×1 to ×16; high values can distort speech. Applies to the next voice request.</string>
+    <string name="vehicle_coordinate_log">Save GPS coordinates in diagnostic logs</string>
+    <string name="vehicle_coordinate_log_about">Off by default. Enable only for a test you choose: exact vehicle position can reveal where you travel. GPS navigation works regardless. Previously recorded locations and exported reports are not deleted when you switch this off.</string>
 </resources>

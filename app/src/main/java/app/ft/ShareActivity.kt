@@ -7,7 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import app.ft.carlife.CarLifeService
+import app.ft.projection.CarControls
 import app.ft.core.DiagLog
 
 class ShareActivity : ComponentActivity() {
@@ -18,10 +18,10 @@ class ShareActivity : ComponentActivity() {
             app.mirrorData = r.data
             app.mirrorGranted.value = true
             DiagLog.i("App", "screen sharing allowed without asking")
-            CarLifeService.startAudio(this)
+            CarControls.startAudio(this)
         } else {
             DiagLog.w("App", "screen sharing was not allowed")
-            CarLifeService.shareDeclined(this, quiet = true)
+            CarControls.shareDeclined(this, quiet = true)
         }
         finish()
     }
@@ -31,13 +31,16 @@ class ShareActivity : ComponentActivity() {
         if (savedInstanceState != null) return
         val mpm = getSystemService(MediaProjectionManager::class.java)
         if (mpm == null) {
+            CarControls.shareDeclined(this, quiet = true)
             finish()
             return
         }
-        val request = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
-        runCatching { consent.launch(request) }.onFailure {
+        runCatching {
+            val request = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
+            consent.launch(request)
+        }.onFailure {
             DiagLog.w("App", "could not ask for screen sharing: ${it.message}")
-            CarLifeService.shareDeclined(this, quiet = true)
+            CarControls.shareDeclined(this, quiet = true)
             finish()
         }
     }

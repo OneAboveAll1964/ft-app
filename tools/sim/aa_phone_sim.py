@@ -12,10 +12,13 @@ import time
 import queue
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from proto import decode, f_sint32, f_str, f_varint, first, split_nals
+from proto import decode, f_bytes, f_sint32, f_str, f_varint, first, split_nals
 
 CH_CONTROL, CH_INPUT, CH_SENSOR, CH_VIDEO = 0, 1, 2, 3
 CH_MEDIA_AUDIO, CH_SPEECH_AUDIO, CH_SYSTEM_AUDIO = 4, 5, 6
+CH_NAVIGATION = 10
+NAV_START, NAV_STATUS = 0x8001, 0x8003
+NAV_NEXT_TURN, NAV_DISTANCE, NAV_STATE, NAV_POSITION = 0x8004, 0x8005, 0x8006, 0x8007
 VERSION_REQUEST, VERSION_RESPONSE, SSL_HANDSHAKE, AUTH_COMPLETE = 1, 2, 3, 4
 SERVICE_DISCOVERY_REQUEST, SERVICE_DISCOVERY_RESPONSE = 5, 6
 CHANNEL_OPEN_REQUEST, CHANNEL_OPEN_RESPONSE = 7, 8
@@ -170,12 +173,22 @@ class Phone:
         self.peer_sha1 = hashlib.sha1(der).hexdigest().upper()
 
 
+def standard_size(width, height):
+    if width > 1280 or height > 720:
+        return 1920, 1080, 3
+    if width > 800 or height > 480:
+        return 1280, 720, 2
+    return 800, 480, 1
+
+
 def make_h264(path, width, height, fps, seconds):
     if os.path.exists(path):
         return
+    full_w, full_h, _ = standard_size(width, height)
     subprocess.check_call([
         "ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=%dx%d:rate=%d" % (width, height, fps),
-        "-t", str(seconds), "-c:v", "libx264", "-profile:v", "baseline", "-level", "3.1", "-pix_fmt", "yuv420p",
+        "-vf", "pad=%d:%d:(ow-iw)/2:(oh-ih)/2:black" % (full_w, full_h),
+        "-t", str(seconds), "-c:v", "libx264", "-profile:v", "baseline", "-level", "4.2", "-pix_fmt", "yuv420p",
         "-g", str(fps), "-bf", "0", "-bsf:v", "h264_mp4toannexb", "-f", "h264", path,
     ])
 
@@ -289,6 +302,7 @@ def main():
     ap.add_argument("--speech-seconds", type=float, default=2.5)
     ap.add_argument("--duck", type=float, default=0.3)
     ap.add_argument("--music", type=int, default=1)
+    ap.add_argument("--navigation", choices=("legacy", "modern"), help="send cluster turn instructions, overlapping audio if enabled")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     lines = []
@@ -326,9 +340,16 @@ def main():
         sink = decode(first(video, 3, b""))
         vcfg = decode(first(sink, 4, b""))
         result["services"] = sorted(services.keys())
-        result["checks"]["discovery_video_h264_720p"] = first(sink, 1) == 3 and first(vcfg, 1) == 2 and first(vcfg, 2) == 2
+        full_w, full_h, resolution = standard_size(a.width, a.height)
+        result["video_config"] = {"frame": [full_w, full_h], "content": [a.width, a.height],
+                                  "margins": [first(vcfg, 3, 0), first(vcfg, 4, 0)],
+                                  "resolution_enum": first(vcfg, 1), "fps_enum": first(vcfg, 2)}
+        result["checks"]["discovery_video_h264"] = first(sink, 1) == 3 and first(vcfg, 1) == resolution and first(vcfg, 2) == (1 if a.fps >= 60 else 2)
+        result["checks"]["discovery_video_margins"] = first(vcfg, 3, 0) == full_w - a.width and first(vcfg, 4, 0) == full_h - a.height
         result["checks"]["discovery_input_touch"] = CH_INPUT in services and first(decode(first(decode(first(services[CH_INPUT], 4, b"")), 2, b"")), 1) == a.width
         result["checks"]["discovery_sensor"] = CH_SENSOR in services
+        nav_config = decode(first(services.get(CH_NAVIGATION, {}), 8, b""))
+        result["checks"]["discovery_navigation"] = first(nav_config, 1) == 1000 and first(nav_config, 2) == 2
         result["hu_name"] = first(sd, 14, b"").decode(errors="replace")
 
         for c in (CH_SENSOR, CH_INPUT, CH_VIDEO):
@@ -389,18 +410,55 @@ def main():
         body = ph.expect(CH_CONTROL, NAV_FOCUS_NOTIFICATION)
         result["checks"]["nav_focus"] = first(decode(body), 1) == 2
 
+        if a.navigation:
+            ph.send(CH_NAVIGATION, CHANNEL_OPEN_REQUEST,
+                    f_sint32(1, 0) + f_varint(2, CH_NAVIGATION), control=True)
+            ph.expect(CH_NAVIGATION, CHANNEL_OPEN_RESPONSE)
+            ph.expect(CH_NAVIGATION, NAV_START)
+            result["checks"]["navigation_started"] = True
+            ph.send(CH_NAVIGATION, NAV_STATUS, f_varint(1, 1))
+            if a.navigation == "modern":
+                step = f_bytes(1, f_varint(1, 8)) + f_bytes(2, f_str(1, "Sim Road"))
+                ph.send(CH_NAVIGATION, NAV_STATE, f_bytes(1, step))
+                distance = f_bytes(1, f_varint(1, 300)) + f_varint(2, 25)
+                ph.send(CH_NAVIGATION, NAV_POSITION, f_bytes(1, distance))
+            else:
+                ph.send(CH_NAVIGATION, NAV_NEXT_TURN,
+                        f_str(1, "Sim Road") + f_varint(2, 2) + f_varint(3, 4))
+                ph.send(CH_NAVIGATION, NAV_DISTANCE, f_varint(1, 300) + f_varint(2, 25))
+
         if a.audio_seconds > 0:
             play_audio(ph, a, log, result)
+
+        if a.navigation:
+            if a.navigation == "modern":
+                distance = f_bytes(1, f_varint(1, 120)) + f_varint(2, 10)
+                ph.send(CH_NAVIGATION, NAV_POSITION, f_bytes(1, distance))
+            else:
+                ph.send(CH_NAVIGATION, NAV_DISTANCE, f_varint(1, 120) + f_varint(2, 10))
+            ph.send(CH_NAVIGATION, NAV_STATUS, f_varint(1, 2))
 
         if a.wait_touch > 0:
             log("waiting up to %.0fs for a touch from the car..." % a.wait_touch)
             try:
-                body = ph.touches.pop(0) if ph.touches else ph.expect(CH_INPUT, INPUT_EVENT, timeout=a.wait_touch)
-                rep = decode(body)
-                te = decode(first(rep, 3, b""))
-                pt = decode(first(te, 1, b""))
+                deadline = time.time() + a.wait_touch
+                while True:
+                    body = ph.touches.pop(0) if ph.touches else ph.expect(CH_INPUT, INPUT_EVENT, timeout=max(0.05, deadline - time.time()))
+                    rep = decode(body)
+                    te = decode(first(rep, 3, b""))
+                    pt = decode(first(te, 1, b""))
+                    if first(pt, 1) is not None:
+                        break
+                    if time.time() >= deadline:
+                        raise TimeoutError("no touch report received")
                 result["touch"] = {"x": first(pt, 1), "y": first(pt, 2), "action": first(te, 3)}
                 result["checks"]["touch_received"] = first(pt, 1) is not None
+                result["touch_events"] = [result["touch"]]
+                for pending in ph.touches:
+                    event = decode(first(decode(pending), 3, b""))
+                    point = decode(first(event, 1, b""))
+                    if first(point, 1) is not None:
+                        result["touch_events"].append({"x": first(point, 1), "y": first(point, 2), "action": first(event, 3)})
                 log("touch from car: %s" % result["touch"])
             except TimeoutError:
                 result["checks"]["touch_received"] = False

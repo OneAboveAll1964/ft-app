@@ -35,8 +35,17 @@ class CarFinderTest {
     @Test
     fun aMissingGroupBroadcastDoesNotCutShortASixtySecondJoin() = checkTimeout(60)
 
+    @Test
+    fun aCustomSeventeenSecondTimeoutIsUsedForTheWholeAttempt() = checkTimeout(17)
+
+    @Test
+    fun aCustomNinetySecondTimeoutIsUsedForTheWholeAttempt() = checkTimeout(90)
+
+    @Test
+    fun aPeerReturningToAvailableStillGetsTheConfiguredSeventeenSeconds() = checkTimeout(17, availableAfterStart = true)
+
     @Suppress("DEPRECATION")
-    private fun checkTimeout(seconds: Int) = runTest {
+    private fun checkTimeout(seconds: Int, availableAfterStart: Boolean = false) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val context = mock(Context::class.java)
         val prefs = mock(Prefs::class.java)
@@ -77,6 +86,12 @@ class CarFinderTest {
                     `when`(discovered.action).thenReturn(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
                     receiver.value.onReceive(context, discovered)
                     runCurrent()
+
+                    if (availableAfterStart) {
+                        peer.status = WifiP2pDevice.AVAILABLE
+                        receiver.value.onReceive(context, discovered)
+                        runCurrent()
+                    }
 
                     // The preference is snapshotted for this attempt.
                     `when`(prefs.carJoinTimeoutSeconds).thenReturn(5)

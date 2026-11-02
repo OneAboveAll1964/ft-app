@@ -7,6 +7,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
@@ -111,6 +112,11 @@
             android:name=".supercast.SuperCastProvider"
             android:authorities="app.ft.supercast"
             android:exported="true" />
+
+        <service
+            android:name=".iccoa.IccoaService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|mediaProjection" />
 
         <service
             android:name=".carlife.CarLifeService"

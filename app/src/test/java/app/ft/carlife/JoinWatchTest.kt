@@ -28,15 +28,6 @@ class JoinWatchTest {
     }
 
     @Test
-    fun aDeclinedInvitationIsRetriedAfterASecond() {
-        assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(800, carConnected = false, groupInterfaceUp = false, carDeclined = true))
-        assertEquals(JoinWatch.Next.DECLINED, JoinWatch.next(1_000, carConnected = false, groupInterfaceUp = false, carDeclined = true))
-        assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(1_500, carConnected = false, groupInterfaceUp = true, carDeclined = true))
-        assertEquals(1_000L, JoinWatch.retryDelayMs(1, declined = true))
-        assertEquals(1_000L, JoinWatch.retryDelayMs(5, declined = true))
-    }
-
-    @Test
     fun theCarSayingItIsReadyNeverInterruptsAJoinAlreadyInFlight() {
         assertTrue(JoinWatch.actOnCarReady(attempting = false))
         assertFalse(JoinWatch.actOnCarReady(attempting = true))
@@ -68,7 +59,7 @@ class JoinWatchTest {
 
     @Test
     fun configuredTimeoutsAllowTheFullWaitThenRetry() {
-        for (seconds in JoinWatch.TIMEOUT_SECONDS) {
+        for (seconds in JoinWatch.TIMEOUT_SECONDS + listOf(1, 6, 17, 90, 120, 600)) {
             val timeout = seconds * 1_000L
             assertEquals(JoinWatch.Next.WAIT, JoinWatch.next(timeout - 1, false, false, timeoutMs = timeout))
             assertEquals(JoinWatch.Next.RETRY, JoinWatch.next(timeout, false, false, timeoutMs = timeout))
@@ -83,16 +74,16 @@ class JoinWatchTest {
     }
 
     @Test
-    fun aDeclinedInvitationDoesNotWaitForTheConfiguredTimeout() {
-        assertEquals(JoinWatch.Next.DECLINED, JoinWatch.next(1_000, false, false, carDeclined = true, timeoutMs = 60_000))
-    }
-
-    @Test
     fun invalidSavedTimeoutsFallBackToTheOriginalDefault() {
-        for (seconds in listOf(-1, 0, 6, 120, Int.MAX_VALUE)) {
+        for (seconds in listOf(Int.MIN_VALUE, -1, 0, 601, Int.MAX_VALUE)) {
             assertEquals(5, JoinWatch.timeoutSeconds(seconds))
         }
         for (seconds in JoinWatch.TIMEOUT_SECONDS) assertEquals(seconds, JoinWatch.timeoutSeconds(seconds))
+    }
+
+    @Test
+    fun customTimeoutsAreKeptInsteadOfBeingReplacedWithFiveSeconds() {
+        for (seconds in 1..600) assertEquals(seconds, JoinWatch.timeoutSeconds(seconds))
     }
 
     @Test

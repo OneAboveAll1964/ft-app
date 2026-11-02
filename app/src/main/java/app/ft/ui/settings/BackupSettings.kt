@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import app.ft.FTApp
 import app.ft.R
 import app.ft.core.Backup
+import app.ft.core.CarConnection
 import app.ft.core.DiagLog
 import app.ft.core.Lang
 import app.ft.core.Language
@@ -73,7 +74,12 @@ fun BackupSettings() {
         val text = runCatching {
             context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
         }.getOrNull()
+        val previousProtocol = prefs.carProtocol
+        val previousAutoConnect = prefs.autoConnect
         val count = if (text == null) 0 else Backup.restore(prefs, text)
+        if (count > 0 && (prefs.carProtocol != previousProtocol || prefs.autoConnect != previousAutoConnect)) {
+            CarConnection.restart(context)
+        }
         if (count > 0) reloadEverything()
         DiagLog.i("Backup", "restored $count settings from a file")
         Toast.makeText(

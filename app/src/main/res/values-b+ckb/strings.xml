@@ -47,6 +47,11 @@
     <string name="aa_help_4_body">FT خۆی پێیەوە پەیوەست دەبێت. دوای ڕیستارتکردنی مۆبایل یان نوێبوونەوەی Android Auto، هەنگاوەکانی 1 و 3 و 4 دووبارە بکەرەوە.</string>
     <string name="aa_match_car">بە قەبارەی شاشەی ئۆتۆمبێلەکە پیشانی بدە</string>
     <string name="aa_controls_left">کۆنترۆڵەکانی بخە لای چەپ</string>
+    <string name="aa_compact_return_button">دوگمەی بچووکی FT</string>
+    <string name="aa_compact_return_button_body">لەسەر Android Auto دوگمەیەکی گەڕانەوەی بچووک و بازنەیی و تاریک بەکاربهێنە. بە ناچالاککردنی هەڵبژاردەکە دوگمەی سەرەتایی دەمێنێتەوە.</string>
+    <string name="aa_return_to_ft">گەڕانەوە بۆ FT</string>
+    <string name="aa_cluster_navigation">ڕێنمایی ڕێگا لەسەر پانێڵی ئامێرەکان</string>
+    <string name="aa_cluster_navigation_body">سووڕانەوەکانی Android Auto لەسەر پانێڵی ئامێرەکان یان HUD پیشان بدە، ئەگەر ئۆتۆمبێلەکە پشتگیری بکات. گۆڕانکارییەکان دەستبەجێ جێبەجێ دەبن.</string>
     <string name="aa_port">پۆرتی TCP</string>
     <string name="aa_width">پانیی ڤیدیۆ</string>
     <string name="aa_height">بەرزیی ڤیدیۆ</string>
@@ -81,6 +86,8 @@
     <string name="car_name_label">ئەو ناوەی لەسەر شاشەی ئۆتۆمبێل دەردەکەوێت</string>
     <string name="car_p2p_label">ناوی WiFi Direct (بەتاڵ = هەر CarLifeێک)</string>
     <string name="car_bt_label">ناوی بلوتوس بۆ دەستپێکردنی خۆکار (بەتاڵ = هەر ئامێرێک)</string>
+    <string name="car_bt_reconnect">پەیوەستکردنەوەی بلوتوسی ئۆتۆمبێل</string>
+    <string name="car_bt_reconnect_about">کاتێک FT چالاکە، دوای پچڕانی پەیوەندی تا سێ جار هەوڵی پەیوەستکردنەوە بدە، تەنها ئەگەر دوا ئۆتۆمبێلی هاوتاکراو لە نزیکدا بدۆزرێتەوە. پێویستە ئۆتۆمبێلەکە لە گەڕانی بلوتوسدا دەرکەوێت. بەردەستبوونی تایبەتمەندییەکە بە مۆبایلەکەتەوە بەستراوە.</string>
     <string name="car_pin_label">PINی WiFi Direct (بەتاڵ = بە دوگمە)</string>
     <string name="car_swap_keys">شوێنی دوگمەکانی دواتر و پێشووی سەر سوکان بگۆڕەوە</string>
     <string name="sound_bluetooth">لە جیاتی ئەوە بلوتوسی ئۆتۆمبێل بۆ دەنگ بەکاربهێنە</string>
@@ -96,6 +103,15 @@
     <string name="quiet_on_body">FT خۆی دەنگی ئەپەکانی تر دەگەیەنێتە ئۆتۆمبێل، بێ ئەوەی مۆبایلەکە هیچ پرسیارێک بکات. بۆ کوژاندنەوەی، ئەمە جێبەجێ بکە:</string>
     <string name="quiet_off_body">Android لەسەر مۆبایلەکە پرسیار دەکات پێش ئەوەی FT بتوانێت دەنگی ئەپەکانی تر بگەیەنێتە ئۆتۆمبێل. یەک جار ئەمە لە کۆمپیوتەرێکەوە جێبەجێ بکە کە USB debuggingی هەڵکرابێت، ئیتر پرسیار ناکات:</string>
     <string name="picture_defaults_body">FT وێنە بە هەمان قەبارەی شاشەی ئۆتۆمبێلەکە دەنێرێت، کە لە کۆرۆلادا \u20661920×720\u2069ە، بە 3 Mbps داتای وێنە. ئەمە زۆرترینە کە لەسەر کۆرۆلا تاقیکراوەتەوە و بە 30 فرەیم لە چرکەیەکدا بە باشی کاری کرد. FT بە 20 فرەیم لە چرکەیەکدا دەست پێدەکات و شوێن ئەوە دەکەوێت کە ئۆتۆمبێلەکە داوای دەکات.</string>
+    <string name="picture_stream_now">ئێستا بۆ ئۆتۆمبێل دەنێردرێت</string>
+    <string name="picture_stream_saved">پاشەکەوتکراو بۆ پەیوەستبوونی داهاتوو</string>
+    <string name="picture_stream_using_saved">ڕێکخستنە پاشەکەوتکراوەکان بەکاردێن</string>
+    <string name="picture_stream_inactive">ئێستا هیچ ڤیدیۆیەک نانێردرێت</string>
+    <string name="picture_stream_unsaved">هێشتا هیچ ڕێکخستنێک پاشەکەوت نەکراوە. بە ئۆتۆمبێلەکەوە پەیوەست ببە بۆ هەڵبژاردن و پاشەکەوتکردنی ڕێکخستنەکان.</string>
+    <string name="picture_stream_summary">%1$d × %2$d · تا %3$d فرەیم لە چرکەیەکدا · %4$s Mbps</string>
+    <string name="picture_stream_mode">قەبارە: %1$s · ڕێژەی فرەیم: %2$s</string>
+    <string name="picture_stream_manual">دەستی</string>
+    <string name="picture_stream_note">ڕێژەی فرەیم سنووری سەرەوەیە و ڕێژەی داتا ئامانجە. FT بە ڕێکخستنە پاشەکەوتکراوەکان بۆ هەمان شاشە و ڕێکخستن دەست پێدەکات، پاشان داواکارییە نوێکانی ئۆتۆمبێل جێبەجێ دەکات. سنووری کاتی بەهۆی گەرمی پاشەکەوت ناکرێت. گۆڕینی ڕێکخستنەکانی ڤیدیۆ یان ڕێکخستنەوە، ڕێکخستنە پاشەکەوتکراوەکان دەسڕێتەوە.</string>
     <string name="picture_changed_body">گۆڕانکارییەکان لە پەیوەستبوونی داهاتووی ئۆتۆمبێلەکەدا جێبەجێ دەبن.</string>
     <string name="picture_size_label">ئەو قەبارەیەی بۆ ئۆتۆمبێل دەنێردرێت</string>
     <string name="picture_size_car">هی ئۆتۆمبێلەکە</string>
@@ -187,6 +203,21 @@
     <string name="report_failed">نەتوانرا ڕاپۆرتەکە دروست بکرێت</string>
     <string name="report_saved">ڕاپۆرتەکە لە Downloads پاشەکەوت کرا</string>
     <string name="report_send">ناردنی ڕاپۆرتی FT</string>
+    <string name="report_system_help">پەیوەندیی Android Auto دەپچڕێت؟ چی بپشکنیت</string>
+    <string name="report_disconnect_title">پەیوەندیی Android Auto پچڕا</string>
+    <string name="report_disconnect_detail">ئەگەر ئەمە بەبێ چاوەڕوانی ڕوویدا، ڕێکخستنەکانی USB بپشکنە. ئەگەر پچڕانی پەیوەندی بەردەوام بوو، ڕاپۆرتێکی سیستەم کۆ بکەرەوە.</string>
+    <string name="report_system_action">چی بپشکنیت</string>
+    <string name="report_system_title">پچڕانی پەیوەندیی Android Auto</string>
+    <string name="report_system_step_usb">سەرەتا USB بپشکنە، تەنانەت ئەگەر بە Wi-Fi بە ئۆتۆمبێلەکەوە پەیوەست دەبیت. لە هەڵبژاردەکانی گەشەپێدەری مۆبایل، ڕێکخستنی بنەڕەتیی USB بکەرەوە و تەنها شەحنکردن / بێ گواستنەوەی داتا هەڵبژێرە لە جیاتی گواستنەوەی فایل / Android Auto. ناوی هەڵبژاردەکان بەپێی مۆبایل دەگۆڕێت. لە مۆبایلێکی OPPO ئەمە کێشەی پچڕانی پەیوەندی لە کاتی کردنەوەی قفڵدا چارەسەر کرد. لە ئۆتۆمبێلەکەدا دووبارە تاقی بکەرەوە؛ تەنها ئەگەر کێشەکە مایەوە پێویستت بە ڕاپۆرتی سیستەمە. ئەم ئامۆژگارییە بۆ پەیوەندییە بێوایەرەکانی FTیە.</string>
+    <string name="report_system_intro">ئەگەر پچڕانی پەیوەندی بەردەوام بوو: ڕاپۆرتی FT تۆمارەکانی FT لەخۆ دەگرێت، بەڵام بۆ دۆزینەوەی هۆکارەکە پێویستمان بە ڕاپۆرتی سیستەمی Androidیش هەیە. پێش دووبارە دروستکردنەوەی کێشەکە، تۆمارکردن هەڵبکە.</string>
+    <string name="report_system_step_aa">1. ڕێکخستنەکانی Android Auto بکەرەوە. لە ⋮ ← ڕێکخستنەکانی گەشەپێدەر بدە و ناچارکردنی تۆمارکردنی هەڵەدۆزی هەڵبکە. ئەگەر ڕێکخستنەکانی گەشەپێدەر دیار نییە: بچۆ خوارەوە بۆ وەشان، لێی بدە تا وردەکارییەکان بکرێنەوە، پاشان 10 جار لە زانیاریی وەشان و مۆڵەتەکان بدە و داواکارییەکە قبوڵ بکە.</string>
+    <string name="report_system_step_reproduce">2. بگەڕێوە بۆ FT و بە ئۆتۆمبێلەکەوە پەیوەست ببە. کاتێک ئۆتۆمبێلەکە وەستاوە، ئەو کارە دووبارە بکەرەوە کە پەیوەندییەکەی پچڕاند. ئەگەر لە کاتی قفڵکردنی مۆبایل ڕوودەدات، جارێک قفڵی بکە و بیکەرەوە. کاتەکە تۆمار بکە و پەیوەندی بە ئۆتۆمبێلەکەوە چالاک بهێڵەوە تا ڕاپۆرتەکە ئامادە دەبێت.</string>
+    <string name="report_system_step_android">3. دەستبەجێ بە دوگمەکەی خوارەوە هەڵبژاردەکانی گەشەپێدەری مۆبایل بکەرەوە. ڕاپۆرتی هەڵە ← ڕاپۆرتی کارلێکی ← ڕاپۆرت هەڵبژێرە. کاتێک کۆکردنەوە تەواو بوو، ئاگادارکردنەوەکەی بکەرەوە و فایلی ZIP پاشەکەوت بکە یان لەگەڵ گەشەپێدەر هاوبەشی بکە. هەروەها ڕاپۆرتی FT لە شاشەی تۆمارەوە بنێرە.</string>
+    <string name="report_system_open_android">کردنەوەی هەڵبژاردەکانی گەشەپێدەری مۆبایل</string>
+    <string name="report_system_developer_hint">ئەگەر هەڵبژاردەکانی گەشەپێدەر ناچالاک بن، دوگمەکە دەربارەی مۆبایل دەکاتەوە. لەوێ 7 جار لە ژمارەی بیلد بدە (لەوانەیە لە ناو وەشان بێت)، پاشان بگەڕێوە بۆ FT و دووبارە دوگمەکە دابگرە. FT ناتوانێت بە خۆکار تۆمارکردنی Android Auto هەڵبکات یان ڕاپۆرتێکی تەواوی سیستەم کۆ بکاتەوە؛ هەنگاوە کۆتاییەکان دەبێت لەو ڕێکخستنانەدا ئەنجام بدرێن.</string>
+    <string name="report_system_enable_developer">هەڵبژاردەکانی گەشەپێدەر چالاک بکە: 7 جار لە ژمارەی بیلد بدە، پاشان بگەڕێوە بۆ FT.</string>
+    <string name="report_system_settings_failed">بە دەستی خۆت ڕێکخستنەکانی مۆبایل بکەرەوە و بۆ هەڵبژاردەکانی گەشەپێدەر بگەڕێ.</string>
+    <string name="report_system_close">داخستن</string>
     <string name="root_chip">ROOT</string>
     <string name="root_title">ڕووت هەڵکراوە</string>
     <string name="root_body">مۆبایلەکەت ڕووت کراوە و ڕێگەت بە FT داوە بەکاری بهێنێت، بۆیە FT خۆی هەموو شتێک ئامادە دەکات. بەبێ ڕووتیش FT هەر بە هەمان شێوە کار دەکات، تەنها داوات لێدەکات ئەمانە بە دەستی خۆت بکەیت.</string>
@@ -304,6 +335,8 @@
     <string name="widget_weather">کەشوهەوا</string>
     <string name="widget_battery">باتریی مۆبایل</string>
     <string name="widget_speed">خێرایی</string>
+    <string name="widget_coordinates">شوێنەوار</string>
+    <string name="widget_course">ئاڕاستە</string>
     <string name="widget_calendar">چالاکیی داهاتوو</string>
     <string name="widget_no_event">هیچ شتێکی داهاتوو نییە</string>
     <string name="widget_temperature">پلەی گەرمی</string>
@@ -426,6 +459,10 @@
     <string name="car_join_timeout">Wi-Fi Direct connection timeout</string>
     <string name="car_join_timeout_about">How long to wait before retrying an unanswered connection attempt. Increase this if the car takes longer to connect. Applies to the next attempt.</string>
     <string name="car_join_timeout_seconds">%1$d s</string>
+    <string name="car_join_timeout_custom">Custom value…</string>
+    <string name="car_join_timeout_custom_value">%1$d s (custom)</string>
+    <string name="car_join_timeout_input">Timeout, seconds</string>
+    <string name="car_join_timeout_range">Enter a whole number from %1$d to %2$d seconds.</string>
     <string name="car_join_timeout_error">Could not connect to the car over Wi-Fi Direct within %1$d s. Retrying automatically. Check that CarLife is open on the car screen, or increase the connection timeout.</string>
     <string name="car_join_timeout_action">Connection settings</string>
     <string name="look_phone_style">App appearance</string>
@@ -435,4 +472,9 @@
     <string name="aa_show_return_button">Show the FT return button in Android Auto</string>
     <string name="aa_show_return_button_about">The button returns to FT. In Alternative, it sits beside Android Auto without covering its controls. If hidden, you can show it again from these settings on your phone.</string>
     <string name="aa_back_to_ft">Back to FT</string>
+    <string name="iccoa_mic_gain">ICCOA microphone gain</string>
+    <string name="iccoa_mic_gain_value">×%1$d</string>
+    <string name="iccoa_mic_gain_about">Amplifies the car microphone for Android Auto. ×1 keeps the original level. Choose a value from ×1 to ×16; high values can distort speech. Applies to the next voice request.</string>
+    <string name="vehicle_coordinate_log">Save GPS coordinates in diagnostic logs</string>
+    <string name="vehicle_coordinate_log_about">Off by default. Enable only for a test you choose: exact vehicle position can reveal where you travel. GPS navigation works regardless. Previously recorded locations and exported reports are not deleted when you switch this off.</string>
 </resources>

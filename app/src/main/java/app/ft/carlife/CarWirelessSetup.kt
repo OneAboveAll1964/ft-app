@@ -15,25 +15,39 @@ class CarWirelessSetup(
     private val buffer = ArrayList<Byte>(1024)
     @Volatile var carWifiName: String? = null
         private set
-    @Volatile private var ipWanted = false
-    @Volatile private var ipSent = false
-    @Volatile private var phoneIp: String? = null
-    @Volatile private var announcedReady = false
+    private var ipWanted = false
+    private var ipSent = false
+    private var phoneIp: String? = null
+    private var announcedReady = false
+    private var exchange = 0L
 
-    fun reset() {
-        synchronized(buffer) { buffer.clear() }
+    @Synchronized
+    fun reset(keepIp: Boolean = true) {
+        exchange++
+        buffer.clear()
         carWifiName = null
         ipWanted = false
         ipSent = false
         announcedReady = false
+        // A new Bluetooth exchange may reuse a live P2P group. Only discard
+        // its address when the caller has confirmed that group was removed.
+        if (!keepIp) phoneIp = null
     }
 
+    @Synchronized
+    fun restart(keepIp: Boolean = true): Boolean {
+        reset(keepIp)
+        return begin()
+    }
+
+    @Synchronized
     fun begin(): Boolean {
         val ok = send(CarLifeFraming.cmd(MD_WIRELESS_INFO_REQUEST))
         if (ok) progress("Asking the car to turn on WiFi Direct") else DiagLog.d(tag, "no bluetooth link to ask the car on")
         return ok
     }
 
+    @Synchronized
     fun askName(): Boolean {
         carWifiName = null
         val ok = send(CarLifeFraming.cmd(MD_TARGET_INFO_REQUEST))
@@ -41,29 +55,41 @@ class CarWirelessSetup(
         return ok
     }
 
+    @Synchronized
     fun wifiDirectReady(ip: String?) {
+        // The Bluetooth call can outlive a WiFi Direct group. Its next group
+        // needs a new IP announcement, even if Android assigns the same address.
+        if (ip == null || ip != phoneIp) ipSent = false
+        if (ip == null) announcedReady = false
         phoneIp = ip
         if (ip != null && ipWanted) sendIp()
     }
 
+    @Synchronized
     fun feed(chunk: ByteArray) {
+        val currentExchange = exchange
         val frames = ArrayList<Pair<Int, ByteArray>>()
-        synchronized(buffer) {
-            for (b in chunk) buffer.add(b)
-            while (buffer.size >= CarLifeProtocol.HEAD_CMD) {
-                val head = ByteArray(CarLifeProtocol.HEAD_CMD) { buffer[it] }
-                val len = Bytes.u16(head, 0)
-                if (len > MAX_BODY || Bytes.u16(head, 2) != 0) {
-                    buffer.removeAt(0)
-                    continue
-                }
-                if (buffer.size < CarLifeProtocol.HEAD_CMD + len) break
-                val body = ByteArray(len) { buffer[CarLifeProtocol.HEAD_CMD + it] }
-                repeat(CarLifeProtocol.HEAD_CMD + len) { buffer.removeAt(0) }
-                frames += Bytes.u32(head, 4) to body
+        for (b in chunk) buffer.add(b)
+        var at = 0
+        while (buffer.size - at >= CarLifeProtocol.HEAD_CMD) {
+            val head = ByteArray(CarLifeProtocol.HEAD_CMD) { buffer[at + it] }
+            val len = Bytes.u16(head, 0)
+            if (len > MAX_BODY || Bytes.u16(head, 2) != 0) {
+                at++
+                continue
             }
+            if (buffer.size - at < CarLifeProtocol.HEAD_CMD + len) break
+            val body = ByteArray(len) { buffer[at + CarLifeProtocol.HEAD_CMD + it] }
+            at += CarLifeProtocol.HEAD_CMD + len
+            frames += Bytes.u32(head, 4) to body
         }
-        frames.forEach { (id, body) -> handle(id, body) }
+        buffer.subList(0, at).clear()
+        for ((id, body) in frames) {
+            // A callback may start a new exchange on the same thread. Do not
+            // apply the remainder of this old read to the reset state.
+            if (exchange != currentExchange) break
+            handle(id, body)
+        }
     }
 
     private fun handle(serviceId: Int, body: ByteArray) {

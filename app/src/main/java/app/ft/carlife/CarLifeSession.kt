@@ -12,26 +12,21 @@ import app.ft.core.DiagLog
 import app.ft.core.Prefs
 import app.ft.core.ProtoReader
 import app.ft.core.ProtoWriter
+import app.ft.core.VehicleTelemetry
 import app.ft.projection.VideoPlan
 import app.ft.projection.VideoPlans
+import app.ft.projection.VideoProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-data class CarTouch(val action: Int, val x: Int, val y: Int, val x2: Int = -1, val y2: Int = -1, val index: Int = 0) {
-    companion object {
-        const val DOWN = 0
-        const val UP = 1
-        const val MOVE = 2
-        const val POINTER_DOWN = 5
-        const val POINTER_UP = 6
-    }
-}
+typealias CarTouch = app.ft.projection.CarTouch
 
 class CarLifeSession(
     private val context: Context,
@@ -59,10 +54,10 @@ class CarLifeSession(
     var onTouch: ((CarTouch) -> Unit)? = null
     var onHardKey: ((keyCode: Int) -> Unit)? = null
     var onVoiceAudio: ((ByteArray) -> Unit)? = null
-    var onLaunchMode: ((mode: String) -> Unit)? = null
     var onClosed: ((reason: String) -> Unit)? = null
     var onPauseMedia: (() -> Unit)? = null
     var onMusicControl: ((play: Boolean) -> Unit)? = null
+    var onSongInfo: (() -> Unit)? = null
     private var voicePackets = 0L
     private var voiceBytes = 0L
     private var gear = -1
@@ -87,25 +82,75 @@ class CarLifeSession(
     @Volatile private var matched = false
     @Volatile private var initSeen = false
     @Volatile private var videoReady = false
+    private var videoRequest: Triple<Int, Int, Int>? = null
+    @Volatile private var songInfoAllowed = true
     @Volatile private var newVehicle = false
     private var frames = 0L
+    private var carGpsPackets = 0L
+    private var carSpeedPackets = 0L
+    private var videoProfile: VideoProfile? = null
+    private var videoProfileGeneration = 0
     private val feed = VideoFeed(::videoPacket, ::videoEmpty)
     private val media = MediaStream(::mediaPacket, ::moduleUpdate)
+    private var lastAaArt: ByteArray? = null
+    private var lastAaCover: ByteArray? = null
+    private val aaMusic: AaMusicRelay = AaMusicRelay(
+        dispatch = { task -> Dispatchers.IO.asExecutor().execute { task() } },
+        sendInfo = { track ->
+            val art = track.art
+            val cover = if (art != null && art.contentEquals(lastAaArt)) lastAaCover else SongArtwork.jpeg(art)
+            lastAaArt = art
+            lastAaCover = cover
+            if (matched && musicInfoEnabled && aaMusic.allows(track)) {
+                if (cmd(CarLifeProtocol.CMD_MEDIA_INFO, AaMusicRelay.payload(track, cover), quiet = true)) onSongInfo?.invoke()
+                DiagLog.i(tag, "Android Auto song info sent to the car (cover=${cover?.size ?: 0} bytes)")
+            }
+        },
+        sendPosition = { ms -> if (matched && musicInfoEnabled) cmd(CarLifeProtocol.CMD_MEDIA_PROGRESS_BAR,
+            ProtoWriter().int32(1, ms).toByteArray(), quiet = true) },
+        onError = { DiagLog.w(tag, "Android Auto song info write failed: ${it.message}") }
+    )
+    private val navigation = NavigationRelay(
+        { action, info, total ->
+            if (action != 2) DiagLog.i(tag, "instrument cluster navigation action=$action turn=${NavigationRelay.turnCode(info.maneuver)}")
+            if (matched) cmd(CarLifeProtocol.CMD_NAVI_NEXT_TURN_INFO,
+                NavigationRelay.payload(action, info, total, NavigationIcons.png(info.maneuver, info.exit)), quiet = true)
+        },
+        { active -> moduleUpdate(CarLifeProtocol.MODULE_NAVI, if (active) 1 else 0) },
+        // The consumer must still run if the session scope is cancelled before it starts.
+        dispatch = { task -> Dispatchers.IO.asExecutor().execute { task() } },
+        enabled = prefs.aaClusterNavigation,
+        onError = { DiagLog.w(tag, "instrument cluster navigation write failed: ${it.message}") }
+    )
+
+    fun sendNavigation(info: app.ft.core.NavigationInfo) = navigation.update(info)
+    fun refreshNavigationPreference() = navigation.enable(prefs.aaClusterNavigation)
+    fun sendAaMusic(info: app.ft.core.MusicInfo) = aaMusic.update(info)
+    private val musicInfoEnabled: Boolean get() = prefs.carSongInfo && songInfoAllowed
+    fun refreshMusicPreference() = aaMusic.enable(musicInfoEnabled)
+    fun allowSongInfo(allowed: Boolean) {
+        songInfoAllowed = allowed
+        refreshMusicPreference()
+    }
 
     fun start() {
+        refreshMusicPreference()
         DiagLog.i(tag, "session start via ${link.name}")
         link.start(scope, ::onMessage, { DiagLog.i(tag, it) }, ::linked, ::closed)
     }
 
     fun stop() {
-        reset()
         link.stop()
+        reset()
         _state.value = State.Idle
     }
 
     private fun reset() {
+        videoProfile = null
         projecting = false
         gear = -1
+        carGpsPackets = 0L
+        carSpeedPackets = 0L
         videoTimer?.cancel()
         videoTimer = null
         encryptProbe?.cancel()
@@ -114,10 +159,14 @@ class CarLifeSession(
         carMicOn = false
         initSeen = false
         videoReady = false
+        videoRequest = null
         carAskedRate = false
         streamStartedAt = 0L
         feed.close()
         media.forget()
+        navigation.reset()
+        VehicleTelemetry.clear("BAIDU")
+        aaMusic.close()
         unwatchScreen()
     }
 
@@ -157,7 +206,7 @@ class CarLifeSession(
     fun sendVoiceStart(rate: Int, channels: Int) {
         val r = if (rate in 4000..48000) rate else 16000
         link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_INIT, ProtoWriter().int32(1, r).int32(2, channels.coerceIn(1, 2)).int32(3, 16).toByteArray()))
-        moduleUpdate(CarLifeProtocol.MODULE_NAVI, 1)
+        navigation.voiceAndWait(true)
     }
 
     fun sendVoice(pcm: ByteArray) {
@@ -166,7 +215,7 @@ class CarLifeSession(
 
     fun sendVoiceEnd() {
         link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_END, ByteArray(0)))
-        moduleUpdate(CarLifeProtocol.MODULE_NAVI, 0)
+        navigation.voiceAndWait(false)
     }
 
     @Volatile private var carMicOn = false
@@ -199,15 +248,16 @@ class CarLifeSession(
         cmd(CarLifeProtocol.CMD_MODULE_STATUS, ProtoWriter().int32(1, 1).message(2, ProtoWriter().int32(1, module).int32(2, state)).toByteArray())
     }
 
-    private fun cmd(serviceId: Int, payload: ByteArray = ByteArray(0), quiet: Boolean = false) {
+    private fun cmd(serviceId: Int, payload: ByteArray = ByteArray(0), quiet: Boolean = false): Boolean {
         val inner = CarLifeFraming.cmd(serviceId, crypto.encryptOut(payload))
         if (!quiet) DiagLog.tx(tag, CarLifeProtocol.name(serviceId), inner)
-        link.send(CarLifeProtocol.CH_CMD, inner)
+        return link.send(CarLifeProtocol.CH_CMD, inner)
     }
 
-    fun sendSong(title: String, artist: String, album: String, art: ByteArray?, durationMs: Long, index: Int, count: Int, id: String) {
+    fun sendSong(title: String, artist: String, album: String, art: ByteArray?, durationMs: Long, count: Int, id: String) {
+        if (!musicInfoEnabled) return
         if (!projecting && _state.value !is State.Negotiated) return
-        cmd(CarLifeProtocol.CMD_MEDIA_INFO, songPayload(title, artist, album, art, durationMs, count, id), quiet = true)
+        if (cmd(CarLifeProtocol.CMD_MEDIA_INFO, songPayload(title, artist, album, art, durationMs, count, id), quiet = true)) onSongInfo?.invoke()
         DiagLog.i(tag, "told the car the song: '$title'${if (artist.isNotBlank()) " by $artist" else ""}${if (art != null) ", with cover art (${art.size} bytes)" else ""}")
     }
 
@@ -217,7 +267,7 @@ class CarLifeSession(
     }
 
     fun sendSongPosition(ms: Long) {
-        if (!projecting) return
+        if (!projecting || !musicInfoEnabled) return
         cmd(CarLifeProtocol.CMD_MEDIA_PROGRESS_BAR, ProtoWriter().int32(1, ms.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()).toByteArray(), quiet = true)
     }
 
@@ -241,11 +291,12 @@ class CarLifeSession(
         fun subscribeDone(payload: ByteArray): ByteArray {
             val modules = ProtoReader(payload).messages(2).map { it.int(1, 0) }
             val w = ProtoWriter().int32(1, modules.size)
-            for (id in modules) w.message(2, ProtoWriter().int32(1, id).bool(2, id == SUBSCRIBE_MUSIC))
+            for (id in modules) w.message(2, ProtoWriter().int32(1, id).bool(2, id == SUBSCRIBE_MUSIC || id == SUBSCRIBE_NAVIGATION))
             return w.toByteArray()
         }
 
         private const val SUBSCRIBE_MUSIC = 2
+        private const val SUBSCRIBE_NAVIGATION = 0
         private const val DOUBLE_TAP_GAP_MS = 60L
         private const val LONG_PRESS_MS = 800L
         private const val VIDEO_POLL_MS = 50L
@@ -301,7 +352,8 @@ class CarLifeSession(
     }
 
     private fun handleCmd(c: CarLifeFraming.Cmd) {
-        if (c.serviceId != CarLifeProtocol.CMD_HU_GEAR_INFO && c.serviceId != CarLifeProtocol.CMD_MODULE_CONTROL) {
+        if (c.serviceId !in setOf(CarLifeProtocol.CMD_HU_GEAR_INFO, CarLifeProtocol.CMD_MODULE_CONTROL,
+                CarLifeProtocol.CMD_CAR_GPS, CarLifeProtocol.CMD_CAR_VELOCITY)) {
             DiagLog.rx(tag, CarLifeProtocol.name(c.serviceId), c.payload)
         }
         when (c.serviceId) {
@@ -327,20 +379,27 @@ class CarLifeSession(
                 }
             }
             CarLifeProtocol.CMD_HU_RSA_PUBLIC_KEY_RESPONSE -> {
+                if (crypto.active) return
                 val pub = ProtoReader(c.payload).string(1) ?: ""
                 val request = crypto.aesKeyRequest(pub)
                 if (request == null) {
                     DiagLog.e(tag, "head unit RSA key unusable (${pub.length} chars), staying in plaintext")
                 } else {
                     crypto.armIncoming()
-                    cmd(CarLifeProtocol.CMD_MD_AES_KEY_SEND_REQUEST, ProtoWriter().string(1, request).toByteArray())
-                    DiagLog.i(tag, "AES session key sent, wrapped with the head unit RSA key")
+                    if (cmd(CarLifeProtocol.CMD_MD_AES_KEY_SEND_REQUEST, ProtoWriter().string(1, request).toByteArray())) {
+                        DiagLog.i(tag, "AES session key sent, wrapped with the head unit RSA key")
+                    } else {
+                        crypto.reset()
+                    }
                 }
             }
             CarLifeProtocol.CMD_HU_AES_REC_RESPONSE -> {
-                crypto.enableOutgoing()
-                cmd(CarLifeProtocol.CMD_MD_ENCRYPT_READY)
-                DiagLog.i(tag, "content encryption on")
+                if (crypto.enableOutgoing()) {
+                    cmd(CarLifeProtocol.CMD_MD_ENCRYPT_READY)
+                    DiagLog.i(tag, "content encryption on")
+                } else {
+                    DiagLog.w(tag, "ignoring AES acknowledgement without a pending session key")
+                }
             }
             CarLifeProtocol.CMD_HU_BT_PAIR_INFO -> {
                 val r = ProtoReader(c.payload)
@@ -351,6 +410,7 @@ class CarLifeSession(
             CarLifeProtocol.CMD_VIDEO_ENCODER_START -> {
                 val mode = feed.start()
                 projecting = true
+                aaMusic.ready(true)
                 if (streamStartedAt == 0L) streamStartedAt = android.os.SystemClock.elapsedRealtime()
                 frames = 0
                 _state.value = State.Projecting(link.name, width, height, fps, streamWidth, streamHeight)
@@ -403,11 +463,10 @@ class CarLifeSession(
             CarLifeProtocol.CMD_GO_TO_FOREGROUND -> DiagLog.i(tag, "head unit asked FT to come forward, it already draws on the car")
             CarLifeProtocol.CMD_LAUNCH_MODE_NORMAL -> {
                 media.launchedAgain()
-                onLaunchMode?.invoke("normal")
             }
-            CarLifeProtocol.CMD_LAUNCH_MODE_PHONE -> onLaunchMode?.invoke("phone")
-            CarLifeProtocol.CMD_LAUNCH_MODE_MAP -> onLaunchMode?.invoke("map")
-            CarLifeProtocol.CMD_LAUNCH_MODE_MUSIC -> onLaunchMode?.invoke("music")
+            CarLifeProtocol.CMD_LAUNCH_MODE_PHONE,
+            CarLifeProtocol.CMD_LAUNCH_MODE_MAP,
+            CarLifeProtocol.CMD_LAUNCH_MODE_MUSIC -> Unit
             CarLifeProtocol.CMD_PAUSE_MEDIA -> {
                 DiagLog.i(tag, "the car asked to pause the music")
                 onPauseMedia?.invoke()
@@ -416,9 +475,19 @@ class CarLifeSession(
             CarLifeProtocol.CMD_CARLIFE_DATA_SUBSCRIBE -> {
                 val reply = subscribeDone(c.payload)
                 cmd(CarLifeProtocol.CMD_CARLIFE_DATA_SUBSCRIBE_DONE, reply)
-                DiagLog.i(tag, "head unit asked for phone data ${ProtoReader(c.payload).messages(2).map { it.int(1, 0) }}, FT offers song info only")
+                DiagLog.i(tag, "head unit asked for phone data ${ProtoReader(c.payload).messages(2).map { it.int(1, 0) }}, FT offers navigation and song info")
             }
-            CarLifeProtocol.CMD_CARLIFE_DATA_SUBSCRIBE_START, CarLifeProtocol.CMD_CARLIFE_DATA_SUBSCRIBE_STOP -> Unit
+            CarLifeProtocol.CMD_CARLIFE_DATA_SUBSCRIBE_START, CarLifeProtocol.CMD_CARLIFE_DATA_SUBSCRIBE_STOP -> {
+                val on = c.serviceId == CarLifeProtocol.CMD_CARLIFE_DATA_SUBSCRIBE_START
+                if (ProtoReader(c.payload).messages(2).any { it.int(1, -1) == SUBSCRIBE_MUSIC }) {
+                    aaMusic.subscribe(on)
+                    DiagLog.i(tag, "song info subscription: $on")
+                }
+                if (ProtoReader(c.payload).messages(2).any { it.int(1, -1) == SUBSCRIBE_NAVIGATION }) {
+                    navigation.subscribe(on)
+                    DiagLog.i(tag, "instrument cluster navigation subscription: $on")
+                }
+            }
             CarLifeProtocol.CMD_HU_GEAR_INFO -> {
                 val g = ProtoReader(c.payload).int(1, -1)
                 if (g != gear) {
@@ -429,8 +498,19 @@ class CarLifeSession(
             }
             CarLifeProtocol.CMD_VEHICLE_FOREGROUND -> DiagLog.i(tag, "the car shows CarLife")
             CarLifeProtocol.CMD_VEHICLE_BACKGROUND -> DiagLog.i(tag, "the car moved CarLife to the background")
-            CarLifeProtocol.CMD_CAR_VELOCITY,
-            CarLifeProtocol.CMD_CAR_GPS, CarLifeProtocol.CMD_CAR_GYROSCOPE, CarLifeProtocol.CMD_CAR_ACCELERATION,
+            CarLifeProtocol.CMD_CAR_VELOCITY -> {
+                val ok = CarLifeCarSensors.onSpeed(c.payload)
+                carSpeedPackets++
+                if (carSpeedPackets <= 3L || carSpeedPackets and (carSpeedPackets - 1L) == 0L)
+                    DiagLog.d(tag, "BAIDU vehicle speed frames=$carSpeedPackets bytes=${c.payload.size} parsed=$ok")
+            }
+            CarLifeProtocol.CMD_CAR_GPS -> {
+                val ok = CarLifeCarSensors.onGps(c.payload)
+                carGpsPackets++
+                if (carGpsPackets <= 3L || carGpsPackets and (carGpsPackets - 1L) == 0L)
+                    DiagLog.d(tag, "BAIDU vehicle GPS frames=$carGpsPackets bytes=${c.payload.size} parsed=$ok")
+            }
+            CarLifeProtocol.CMD_CAR_GYROSCOPE, CarLifeProtocol.CMD_CAR_ACCELERATION,
             CarLifeProtocol.CMD_CAR_OIL, CarLifeProtocol.CMD_ERROR_CODE, CarLifeProtocol.CMD_BT_HFP_INDICATION,
             CarLifeProtocol.CMD_BT_HFP_CONNECTION, CarLifeProtocol.CMD_BT_HFP_RESPONSE, CarLifeProtocol.CMD_BT_HFP_STATUS_RESPONSE,
             CarLifeProtocol.CMD_BT_START_IDENTIFY_REQ, CarLifeProtocol.CMD_VIDEO_ENCODER_JPEG -> Unit
@@ -473,17 +553,32 @@ class CarLifeSession(
         val carW = r.int(1, 0)
         val carH = r.int(2, 0)
         val asked = r.int(3, 0)
-        if (videoReady) {
+        val request = Triple(carW, carH, asked)
+        if (videoReady && videoRequest == request) {
             DiagLog.i(tag, "head unit set up video again at ${carW}x$carH, keeping ${streamWidth}x$streamHeight")
             cmd(CarLifeProtocol.CMD_VIDEO_ENCODER_INIT_DONE, encoderInfo(streamWidth, streamHeight, fps))
             return
         }
-        val plan = VideoPlans.plan(
+        videoReady = false
+        videoTimer?.cancel()
+        videoTimer = null
+        projecting = false
+        aaMusic.ready(false)
+        carAskedRate = false
+        streamStartedAt = 0L
+        val candidate = VideoPlans.plan(
             carW, carH, asked, newVehicle,
             prefs.videoSize, prefs.videoWidth, prefs.videoHeight,
             prefs.videoFps, prefs.videoMinFps, prefs.videoBitrate, prefs.videoQpFloor,
             if (fullRateStart) VideoPlans.UNASKED_FPS else VideoPlans.START_FPS
         )
+        videoProfileGeneration = prefs.videoProfileGeneration
+        val settingsKey = prefs.videoSettingsKey
+        val carKey = "${prefs.carBtAddress}:${link.name}:$newVehicle"
+        val restored = prefs.savedVideoProfile?.resume(candidate, settingsKey, carKey, asked)
+        val plan = restored ?: candidate
+        // A remembered rate must not be raised again by the first-session timer.
+        if (restored != null) carAskedRate = true
         width = plan.contentWidth
         height = plan.contentHeight
         streamWidth = plan.streamWidth
@@ -491,8 +586,14 @@ class CarLifeSession(
         fps = plan.fps
         DiagLog.i(tag, "car screen ${carW}x$carH, sending ${streamWidth}x$streamHeight at $fps fps, ${plan.bitrate / 1000} kbps" + if (asked > 0) " (head unit asked $asked fps)" else "")
         feed.open()
-        videoReady = true
         onVideoConfig?.invoke(plan)
+        videoRequest = request
+        videoReady = true
+        if (onVideoConfig != null) {
+            videoProfile = VideoProfile(plan, settingsKey, carKey,
+                prefs.videoSize != VideoPlans.SIZE_CUSTOM, prefs.videoFps == 0)
+            prefs.saveVideoProfile(videoProfile!!, videoProfileGeneration)
+        }
         cmd(CarLifeProtocol.CMD_VIDEO_ENCODER_INIT_DONE, encoderInfo(streamWidth, streamHeight, asked))
         cmd(CarLifeProtocol.CMD_FOREGROUND)
         _state.value = State.Negotiated(link.name, width, height, fps, streamWidth, streamHeight)
@@ -624,6 +725,8 @@ class CarLifeSession(
         if (f == fps) return
         fps = f
         onFrameRate?.invoke(f)
+        videoProfile = videoProfile?.let { it.copy(plan = it.plan.copy(fps = f)) }
+        videoProfile?.let { prefs.saveVideoProfile(it, videoProfileGeneration) }
         when (val st = _state.value) {
             is State.Projecting -> _state.value = st.copy(fps = f)
             is State.Negotiated -> _state.value = st.copy(fps = f)
@@ -751,7 +854,7 @@ class CarLifeSession(
     private fun moduleStatus(): ByteArray {
         val modules = listOf(
             CarLifeProtocol.MODULE_PHONE to 0,
-            CarLifeProtocol.MODULE_NAVI to 0,
+            CarLifeProtocol.MODULE_NAVI to if (navigation.active) 1 else 0,
             CarLifeProtocol.MODULE_MUSIC to if (media.open) 1 else 0,
             CarLifeProtocol.MODULE_VR to 0,
             CarLifeProtocol.MODULE_MIC to 0

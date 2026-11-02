@@ -11,6 +11,11 @@ FT runs in English, Arabic, Kurdish Sorani, Kurdish Badini and Russian, on the p
 
 ## How it connects
 
+**Experimental ICCOA:** Settings → Car and connection → Car protocol also offers an independent ICCOA Carlink backend, with its own Bluetooth/Wi-Fi connection, car-code authentication, screen stream and input transport. It currently targets car access-point mode with a fresh six-digit code; physical Toyota XA60 testing is still required. CarLife remains the default. See the [tester instructions in Russian](docs/ICCOA-TESTER-RU.md) and [implementation status](docs/ICCOA-DEVELOPMENT.md).
+
+For the wireless connection sequence, protocol sources and failure diagnosis, see
+[Wireless CarLife and Android Auto in FT](docs/wireless-connection.md).
+
 Three ways, picked on Home:
 
 - **Hotspot** (default). The car joins the phone's hotspot. FT listens on the CarLife ports and sends a discovery beacon on UDP 7999 until the car connects.
@@ -23,7 +28,7 @@ Then the CarLife handshake, as Baidu does it:
 
 1. FT answers the protocol version, tells the car it is in front and whether the phone screen is on, sends its device info and, half a second later, the module list.
 2. The car's statistics are answered with the authentication result and a request for its feature list. If the car wants content encryption, its RSA key wraps a fresh AES session key and everything after that is encrypted.
-3. The car's data subscription is answered: FT offers song info.
+3. The car's data subscription is answered: FT offers navigation and song info.
 4. On `VIDEO_ENCODER_INIT` FT replies with the picture size it really sends, so touches land where they should.
 
 ## Picture
@@ -38,9 +43,16 @@ Then the CarLife handshake, as Baidu does it:
 
 ## Sound
 
+Android Auto can also send song information to the car's display or instrument
+cluster. Enable **Settings → Sound → Show the song on the car's own display**;
+see [Android Auto song information](docs/android-auto-music.md) for behavior and
+vehicle checks.
+
 - Car sound goes out as 48 kHz stereo on the media channel: FT's own player, Android Auto's media and other apps' sound. The phone speaker is silenced while FT streams, and **Use the car's bluetooth for sound** plays it over Bluetooth instead.
 - When sound starts FT tells the car the way Baidu does: `MEDIA_INIT`, `MEDIA_STOP`, `MEDIA_INIT` and the music module switched on. After 750 ms of quiet it sends `MEDIA_PAUSE` and switches the music module off.
-- Spoken directions go to the car's own voice channel and the navigation module is raised around them, so the car decides how the music sits underneath (Baidu's way). **In step** and **On time** in Settings make FT mix or dip the music itself instead.
+- Spoken directions go to the car's own voice channel and the navigation module is raised around them, so the car decides how the music sits underneath (Baidu's way). It stays raised while a subscribed Android Auto route is active. **In step** and **On time** in Settings make FT mix or dip the music itself instead.
+
+Android Auto turn instructions can also reach the instrument cluster or HUD through CarLife. **Settings → Android Auto → Directions on the instrument cluster** switches them on or off (on by default). The choice is saved and takes effect immediately: switching off clears the displayed instruction, and switching back on restores the current turn while a route is active. Spoken directions continue to work independently. FT advertises the navigation channel, accepts both legacy and modern maneuver messages, and sends the next turn, road name and distance when the car subscribes to navigation data. Stopping the route, closing Android Auto, or stopping the subscription clears the instruction. CarLife receives both a turn code and a PNG arrow for different receiver versions. Roundabout arrows are generic; lane guidance is not supplied. Navigation instructions were confirmed working in one vehicle test. Compatibility remains dependent on the car supporting CarLife navigation on its cluster/HUD and the navigation app supplying the data.
 - Sound sockets are marked for the WiFi voice queue and the picture for the video queue, so sound goes first.
 - Starting the sound, screen sharing and opening apps run off the thread that draws the car screen, so the car picture never freezes while they start.
 
@@ -68,11 +80,15 @@ With root, or once from a computer with one adb line, FT starts a small helper f
 
 ## Android Auto
 
+**Settings → Android Auto → Compact FT button** replaces the return button over Android Auto with a small dark circle. It uses the corner you already chose and takes effect immediately. The original button remains the default; other FT screens keep their usual button.
+
 The head unit speaks CarLife, not Android Auto, so FT shows **your own phone's** Android Auto on the car: it runs an Android Auto head unit inside FT, asks Android Auto to project into it, and draws that picture on the car screen with the car's touchscreen driving it. Home starts it, and it can start by itself after the car connects.
 
 Android Auto only takes FT's head unit when its own head unit server is on, and Android Auto switches that server off whenever the phone restarts or Android Auto updates. FT keeps it on: whenever the car wants Android Auto and the server is off, FT opens Android Auto's settings, taps **Start head unit server** in its menu and comes back, usually in under a second. It does this with root, or without root through FT's accessibility service (the same one the car touchscreen uses). If the phone is locked, FT does it as soon as the phone is unlocked. If Android Auto's developer settings are off, FT says so once instead of trying again and again; the help sheet shows how to switch them on.
 
 Android Auto's frame rate is 30 or 60, the only two it takes from a head unit.
+
+**Settings → Android Auto → Compact FT button** replaces the return button over Android Auto with a small dark circle. It uses the corner you already chose and takes effect immediately. The original button remains the default; other FT screens keep their usual button.
 
 When the assistant listens, FT asks the car to record from its own microphone and passes that sound to Android Auto. When the assistant stops, FT ends the recording and turns the car's microphone light off.
 
@@ -93,6 +109,10 @@ Language and look, car screen, picture, sound, car and connection, apps on the c
 ## Diagnostics
 
 Every protocol message is logged with its bytes on the Log tab, so a head unit's behaviour is visible on the first connection. The report button saves a zip to Downloads with the log, the phone's details, the system log and any crashes, ready to share.
+
+For wireless FT connections that drop when the phone unlocks, first check **Phone developer options → Default USB configuration**. Select **Charging only / No data transfer**, rather than **File transfer / Android Auto** (labels vary by phone). This resolved the unlock disconnects during a vehicle test using an OPPO PHY110 (Find X7 Ultra, ColorOS 16), even though the car connection used Wi-Fi. This advice is for wireless connections; USB CarLife uses the cable for data.
+
+The **Android Auto disconnects? What to check** link on the Log tab explains this setting and, if the problem persists, how to enable Android Auto debug logging and collect an Android system bug report. A dismissible suggestion is also shown on Home after a transport failure during an established Android Auto video session, at most once per service run. The Share button still directly creates and shares the FT report.
 
 ## Test harness
 

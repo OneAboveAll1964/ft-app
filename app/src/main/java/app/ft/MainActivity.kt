@@ -67,8 +67,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaInstaller
 import app.ft.carlife.CarLifeService
+import app.ft.projection.CarControls
 import app.ft.projection.VideoPlans
 import app.ft.core.CarAudioBus
+import app.ft.core.CarConnection
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
@@ -108,10 +110,10 @@ class MainActivity : ComponentActivity() {
             app.mirrorData = r.data
             app.mirrorGranted.value = true
             DiagLog.i("App", "screen mirror permitted")
-            CarLifeService.startAudio(this)
+            CarControls.startAudio(this)
         } else {
             DiagLog.w("App", "screen mirror declined")
-            CarLifeService.shareDeclined(this)
+            CarControls.shareDeclined(this)
         }
     }
 
@@ -151,7 +153,7 @@ class MainActivity : ComponentActivity() {
         registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
-        if (app.prefs.autoConnect) CarLifeService.startAuto(this)
+        if (app.prefs.autoConnect) CarConnection.startAuto(this)
         setContent {
             val dark = rememberDark()
             LaunchedEffect(dark) { applyBars(dark) }
@@ -190,8 +192,8 @@ class MainActivity : ComponentActivity() {
         }
         if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
         if (intent.hasExtra("pictureSize")) app.prefs.videoSize = intent.getIntExtra("pictureSize", VideoPlans.SIZE_CAR)
-        if (intent.getBooleanExtra("off", false)) CarLifeService.switchOff(this)
-        if (intent.getBooleanExtra("wifi", false) || intent.getBooleanExtra("auto", false)) CarLifeService.switchOn(this)
+        if (intent.getBooleanExtra("off", false)) CarConnection.switchOff(this)
+        if (intent.getBooleanExtra("wifi", false) || intent.getBooleanExtra("auto", false)) CarConnection.switchOn(this)
         if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)
         if (intent.getBooleanExtra("mirror", false)) requestMirror()
         intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }
@@ -201,8 +203,8 @@ class MainActivity : ComponentActivity() {
             am.mode = if (intent.getBooleanExtra("fakeCall", false)) android.media.AudioManager.MODE_IN_COMMUNICATION else android.media.AudioManager.MODE_NORMAL
         }
         if (intent.getBooleanExtra("aaSetup", false)) pickAndroidAuto()
-        if (intent.getBooleanExtra("startAa", false)) CarLifeService.startAa()
-        if (intent.getBooleanExtra("aaWireless", false)) CarLifeService.startAaWireless()
+        if (intent.getBooleanExtra("startAa", false)) CarControls.startAa()
+        if (intent.getBooleanExtra("aaWireless", false)) CarControls.startAaWireless()
         intent.getStringExtra("btSend")?.let { CarLifeService.btSend(it) }
         if (intent.hasExtra("btEcho")) CarLifeService.btEcho(intent.getBooleanExtra("btEcho", false))
         intent.getStringExtra("pkgMaps")?.let { app.prefs.mapsPackage = it }

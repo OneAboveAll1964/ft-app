@@ -178,7 +178,7 @@ check "bluetooth pair info answered with the complete schema" "python3 -c \"impo
 sim_check(){ python3 -c "import json;d=json.load(open('$OUT/$1/result.json'));assert d['checks']['$2'], d['checks']" 2>/dev/null; }
 check "handshake in Baidu's order: foreground, device info and module list right after the match" "sim_check carlife foreground_after_match && sim_check carlife md_info_before_hu_info && sim_check carlife module_list_like_baidu && sim_check carlife md_info_sent_once"
 check "feature request follows the car's statistics, like Baidu" "sim_check carlife feature_config_after_statistics"
-check "the car's data subscription is answered (song info only)" "sim_check carlife subscribe_answered"
+check "the car's navigation data subscription is answered" "sim_check carlife subscribe_answered"
 check "nothing is sent on the video channel before the car starts it (Baidu)" "sim_check carlife no_video_before_start"
 check "INIT_DONE tells the car the real stream size" "sim_check carlife init_done_stream_size"
 check "the first picture carries the codec header and the header is sent once" "sim_check carlife first_frame_carries_the_header && sim_check carlife header_sent_once"
