@@ -17,14 +17,19 @@ internal class IccoaRememberedCar(context: Context) {
      * The BLE address may rotate; a uniquely discovered, hinted matching name
      * is acceptable only in the already selected/owner-approved car path.
      */
-    fun matches(peer: IccoaPeer?): Boolean {
+    fun matches(peer: IccoaPeer?, discovered: List<IccoaPeer>): Boolean {
         if (peer == null || !peer.connectable) return false
         val savedAddress = prefs.getString("address", "").orEmpty()
         if (savedAddress.isBlank()) return false
         if (peer.address.equals(savedAddress, ignoreCase = true)) return true
         val savedName = prefs.getString("name", "").orEmpty()
+        // BLE MAC rotation is normal, but never silently choose between two
+        // identically named projection receivers: a shared name is not identity.
+        val matches = discovered.filter { it.connectable && it.hint &&
+            it.name.trim().equals(savedName, ignoreCase = true) }
         return peer.hint && savedName.isNotBlank() &&
-            peer.name.trim().equals(savedName, ignoreCase = true)
+            peer.name.trim().equals(savedName, ignoreCase = true) &&
+            matches.size == 1 && matches.single().address.equals(peer.address, ignoreCase = true)
     }
 
     fun select(peers: List<IccoaPeer>, scanComplete: Boolean): IccoaPeer? {

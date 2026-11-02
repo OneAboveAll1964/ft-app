@@ -226,7 +226,7 @@ class IccoaService : Service() {
 
     private fun connectTo(address: String) {
         pendingCar = _state.value.discovery.peers.singleOrNull { it.address.equals(address, ignoreCase = true) }
-        val known = rememberedCar.matches(pendingCar)
+        val known = rememberedCar.matches(pendingCar, _state.value.discovery.peers)
         val trustedCarName = pendingCar?.name?.trim().orEmpty()
         endConnection()
         discovery?.stop()
