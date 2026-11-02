@@ -68,6 +68,17 @@ class AaCarGpsTest {
         assertNotNull(gate.accept(car(55.93005, 37.61735, 5_300), 5_300))
     }
 
+    @Test fun trueSensorGapAllowsReacquisitionAfterThreeFreshFixes() {
+        val gate = AaGpsGate()
+        assertNull(gate.accept(car(55.75580, 37.61720, 1000), 1000))
+        assertNull(gate.accept(car(55.75581, 37.61721, 1100), 1100))
+        assertNotNull(gate.accept(car(55.75582, 37.61722, 1200), 1200))
+        // No fix between 1200 and 6000 ms, e.g. tunnel or reconnection.
+        assertNull(gate.accept(car(55.9300, 37.6173, 6000), 6000))
+        assertNull(gate.accept(car(55.93001, 37.61731, 6100), 6100))
+        assertNotNull(gate.accept(car(55.93002, 37.61732, 6200), 6200))
+    }
+
     @Test fun prolongedFalseCoordinateClusterNeverPassesWithoutActualLoss() {
         val gate = AaGpsGate()
         assertNull(gate.accept(car(55.75580, 37.61720, 1000), 1000))

@@ -66,6 +66,9 @@ internal class AaGpsGate {
             val lon2 = sample.displayLongitude
             if (elapsedMs !in 1L..3_000L || lat1 == null || lon1 == null || lat2 == null || lon2 == null ||
                 unreasonableJump(lat1, lon1, lat2, lon2, elapsedMs)) {
+                // Only a genuine positive stream gap allows a fresh position anchor.
+                // A continuous but erroneous location cluster must not reset it.
+                if (elapsedMs > 3_000L) lastDelivered = null
                 previous = sample
                 consecutive = 1
                 lastObservedAt = nowMs
