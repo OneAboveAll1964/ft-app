@@ -94,13 +94,41 @@ class FTTouchService : AccessibilityService() {
         if (!ok) stroke = null
     }
 
-    /** A complete short press avoids racing DOWN and UP continuation dispatches. */
+    private var atomicTapAccepted = 0L
+    private var atomicTapCompleted = 0L
+    private var atomicTapCancelled = 0L
+    private var atomicTapRejected = 0L
+
+    private fun logAtomicTapSummary(reason: String) {
+        // No x/y, package, activity or other user input is collected.
+        DiagLog.i("MirrorTouch", "$reason requests=$atomicTapAccepted completed=$atomicTapCompleted " +
+            "cancelled=$atomicTapCancelled rejected=$atomicTapRejected")
+    }
+
+    /** A single, completed Accessibility gesture for a mirrored stationary touch. */
     fun tap(x: Float, y: Float, durationMs: Long = 50L) {
-        val path = Path().apply { moveTo(x, y); lineTo(x, y) }
         val duration = durationMs.coerceIn(60L, 1_200L)
-        runCatching {
-            val stroke = GestureDescription.StrokeDescription(path, 0L, duration)
-            dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
+        val path = Path().apply { moveTo(x, y); lineTo(x, y) }
+        val result = runCatching {
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0L, duration)).build()
+            dispatchGesture(gesture, object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription) {
+                    atomicTapCompleted++
+                    if (atomicTapCompleted <= 3L ||
+                        ((atomicTapCompleted and (atomicTapCompleted - 1L)) == 0L))
+                        logAtomicTapSummary("completed")
+                }
+                override fun onCancelled(gestureDescription: GestureDescription) {
+                    atomicTapCancelled++
+                    logAtomicTapSummary("cancelled")
+                }
+            }, null)
+        }
+        if (result.getOrDefault(false)) atomicTapAccepted++
+        else {
+            atomicTapRejected++
+            logAtomicTapSummary("rejected")
         }
     }
 

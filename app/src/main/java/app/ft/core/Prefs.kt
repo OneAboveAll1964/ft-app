@@ -48,7 +48,25 @@ class Prefs(context: Context) {
     var aaWidth: Int get() = int("aaWidth", 1280); set(v) = set("aaWidth", v)
     var aaHeight: Int get() = int("aaHeight", 720); set(v) = set("aaHeight", v)
     var aaFps: Int get() = app.ft.aa.AaProtocol.supportedFps(int("aaFps", 30)); set(v) = set("aaFps", app.ft.aa.AaProtocol.supportedFps(v))
-    var aaDensity: Int get() = int("aaDensity", 160); set(v) = set("aaDensity", v)
+    // FT167: owner requests ~1.5x larger Android Auto targets.
+    // Migrate only the legacy 160 DPI once; preserve intentional custom values.
+    // Storing the marker also lets the user manually revert to 160 without
+    // subsequent sessions silently overriding that choice.
+    var aaDensity: Int
+        get() {
+            if (!bool("aaDensityBoost167", false)) synchronized(sp) {
+                if (!bool("aaDensityBoost167", false)) {
+                    val updated = app.ft.aa.AaUiDensity.migrate(int("aaDensity", 160))
+                    sp.edit().putInt("aaDensity", updated)
+                        .putBoolean("aaDensityBoost167", true).apply()
+                }
+            }
+            return int("aaDensity", 240)
+        }
+        set(v) = synchronized(sp) {
+            sp.edit().putInt("aaDensity", v.coerceIn(120, 480))
+                .putBoolean("aaDensityBoost167", true).apply()
+        }
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
     var aaCompactReturnButton: Boolean get() = bool("aaCompactReturnButton", false); set(v) = set("aaCompactReturnButton", v)
     var aaClusterNavigation: Boolean get() = bool("aaClusterNavigation", true); set(v) = set("aaClusterNavigation", v)

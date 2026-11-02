@@ -307,6 +307,9 @@ private fun PageContent(page: SettingsPage) {
                 if (fps == 60) 1 else 0
             ) { index -> fps = if (index == 1) 60 else 30; p.aaFps = fps }
             IntSetting(stringResource(R.string.aa_density), p.aaDensity) { p.aaDensity = it }
+            Text(stringResource(R.string.aa_density_scale_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         SettingsPage.ADVANCED -> {
             BoolSetting(

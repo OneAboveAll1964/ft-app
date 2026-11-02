@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft.xa60"
         minSdk = 29
         targetSdk = 36
-        versionCode = 166
-        versionName = "3.9.52-xa60-oem-sensor-assist"
+        versionCode = 167
+        versionName = "3.9.53-xa60-aa-large-icons"
     }
 
     signingConfigs {

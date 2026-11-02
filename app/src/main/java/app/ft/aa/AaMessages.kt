@@ -29,6 +29,7 @@ object AaMessages {
         }
         val marginW = (fullW - width).coerceAtLeast(0)
         val marginH = (fullH - height).coerceAtLeast(0)
+        val effectiveDpi = AaUiDensity.effective(density, width, height)
         val video = ProtoWriter()
             .int32(1, AaProtocol.CH_VIDEO)
             .message(
@@ -40,7 +41,7 @@ object AaMessages {
                             .enum(2, if (fps >= 60) AaProtocol.FPS_60 else AaProtocol.FPS_30)
                             .uint32(3, marginW)
                             .uint32(4, marginH)
-                            .uint32(5, density)
+                            .uint32(5, effectiveDpi)
                     )
                     .bool(5, true)
             )

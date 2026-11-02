@@ -56,7 +56,8 @@
     <string name="aa_width">Ширина видео</string>
     <string name="aa_height">Высота видео</string>
     <string name="aa_fps">Частота кадров</string>
-    <string name="aa_density">Плотность интерфейса, dpi</string>
+    <string name="aa_density">Плотность интерфейса Android Auto, DPI</string>
+    <string name="aa_density_scale_hint">По умолчанию 240 DPI — значки примерно в 1,5 раза крупнее прежних. Для возврата установите 160. Чтобы применить, переподключите Android Auto. На небольшом экране DPI ограничивается для сохранения области управления.</string>
     <string name="action_add">Добавить</string>
     <string name="action_allow">Разрешить</string>
     <string name="action_back">Назад</string>
