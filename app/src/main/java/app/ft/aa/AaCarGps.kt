@@ -88,7 +88,10 @@ internal class AaGpsGate {
             val lon2 = sample.displayLongitude ?: return null
             // Guard against a sustained false GPS cluster, not just a single spike.
             // The stream must genuinely go stale before a far-away fix can reacquire.
-            if (elapsedMs !in 1L..3_000L ||
+            // The preceding-sample check already handles a genuine >3s source
+            // gap. Do not permanently freeze AA after >3s of quarantined fixes:
+            // compare distance to the last trusted fix over the real elapsed time.
+            if (elapsedMs <= 0L ||
                 unreasonableJump(lat1, lon1, lat2, lon2, elapsedMs)) return null
         }
         lastDelivered = sample

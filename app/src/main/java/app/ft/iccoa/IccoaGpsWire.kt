@@ -22,7 +22,47 @@ internal object IccoaGpsWire {
     const val GPS_METHOD = 1
     private const val MAX_BYTES = 512
 
+    /**
+     * The OEM ucar.proto defines both direct Gps and SensorIndex.gps (field 1).
+     * Exact on-air nesting is unconfirmed on this HU: accept either *only* when
+     * the corresponding complete protobuf form is strictly valid.
+     */
     fun decode(body: ByteArray): IccoaGpsFix? {
+        if (body.isEmpty() || body.size > MAX_BYTES) return null
+        return decodeDirect(body) ?: nestedGps(body)?.let(::decodeDirect)
+    }
+
+    private fun nestedGps(body: ByteArray): ByteArray? = runCatching {
+        var offset = 0
+        var gps: ByteArray? = null
+        fun varint(): Long {
+            var result = 0L
+            for (index in 0..9) {
+                require(offset < body.size)
+                val octet = body[offset++].toInt() and 255
+                if (index == 9) require(octet <= 1)
+                result = result or ((octet and 127).toLong() shl (index * 7))
+                if (octet and 128 == 0) return result
+            }
+            error("Invalid sensor wrapper integer")
+        }
+        while (offset < body.size) {
+            val tag = varint()
+            val field = (tag ushr 3).toInt()
+            // All eight SensorIndex fields are protobuf messages, not scalars.
+            require(field in 1..8 && (tag and 7) == 2L)
+            val length = varint()
+            require(length >= 0 && length <= (body.size - offset).toLong())
+            if (field == 1) {
+                require(gps == null)
+                gps = body.copyOfRange(offset, offset + length.toInt())
+            }
+            offset += length.toInt()
+        }
+        gps
+    }.getOrNull()
+
+    private fun decodeDirect(body: ByteArray): IccoaGpsFix? {
         if (body.isEmpty() || body.size > MAX_BYTES) return null
         var offset = 0
         var latitude: Double? = null

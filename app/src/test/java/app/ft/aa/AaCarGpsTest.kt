@@ -79,6 +79,20 @@ class AaCarGpsTest {
         assertNotNull(gate.accept(car(55.93002, 37.61732, 6200), 6200))
     }
 
+    @Test fun returnsToTrustedPositionAfterLongQuarantinedStream() {
+        val gate = AaGpsGate()
+        assertNull(gate.accept(car(55.75580, 37.61720, 1000), 1000))
+        assertNull(gate.accept(car(55.75581, 37.61721, 1100), 1100))
+        assertNotNull(gate.accept(car(55.75582, 37.61722, 1200), 1200))
+        // Sustained false cluster for >3 seconds: the trusted anchor must survive.
+        for (t in 1300L..4800L step 100L)
+            assertNull(gate.accept(car(55.9300, 37.6173, t), t))
+        // Three fresh, mutually plausible fixes return near the trusted point.
+        assertNull(gate.accept(car(55.75583, 37.61723, 4900), 4900))
+        assertNull(gate.accept(car(55.75584, 37.61724, 5000), 5000))
+        assertNotNull(gate.accept(car(55.75585, 37.61725, 5100), 5100))
+    }
+
     @Test fun prolongedFalseCoordinateClusterNeverPassesWithoutActualLoss() {
         val gate = AaGpsGate()
         assertNull(gate.accept(car(55.75580, 37.61720, 1000), 1000))

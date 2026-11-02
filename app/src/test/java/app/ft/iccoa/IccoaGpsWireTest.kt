@@ -1,5 +1,6 @@
 package app.ft.iccoa
 
+import app.ft.core.ProtoWriter
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -43,6 +44,25 @@ class IccoaGpsWireTest {
         assertEquals(16L, fix.satellitesVisible)
         assertEquals(1700000000000L, fix.timestampRaw)
     }
+    @Test fun gpsInsideStrictOemSensorIndexIsDecoded() {
+        // OEM ucar.proto: SensorIndex.gps=1 and SensorIndex.gear_info=6.
+        val nested = ProtoWriter().bytes(1, data(55.7522, 37.6156))
+            .bytes(6, ProtoWriter().int32(2, 24).toByteArray()).toByteArray()
+        val fix = IccoaGpsWire.decode(nested)!!
+        assertEquals(55.7522, fix.latitude, 0.000000001)
+        assertEquals(37.6156, fix.longitude, 0.000000001)
+        assertEquals(12L, fix.satellitesUsed)
+    }
+    @Test fun strictOemSensorIndexRejectsMalformedEnvelope() {
+        val raw = data(55.7522, 37.6156)
+        val wrapper = ProtoWriter().bytes(1, raw).toByteArray()
+        assertNull(IccoaGpsWire.decode(wrapper.copyOf(wrapper.size - 1)))
+        assertNull(IccoaGpsWire.decode(
+            ProtoWriter().bytes(1, raw).bytes(1, raw).toByteArray()))
+        assertNull(IccoaGpsWire.decode(ProtoWriter().bytes(6, raw).toByteArray()))
+        assertNull(IccoaGpsWire.decode(ProtoWriter().int32(1, 7).toByteArray()))
+    }
+
     @Test fun rejectsOutOfRangeCoordinates() {
         assertNull(IccoaGpsWire.decode(data(91.0, 37.0)))
         assertNull(IccoaGpsWire.decode(data(55.0, 190.0)))
