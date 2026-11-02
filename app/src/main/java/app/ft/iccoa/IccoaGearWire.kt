@@ -43,9 +43,9 @@ internal object IccoaGearWire {
             require(gear == null || gear in 0L..4L)
             val raw = requireNotNull(speed) { "Missing speed" }
             require(raw in 0L..100_000L)
-            raw
+            raw to gear
         }.getOrNull() ?: return false
-        VehicleTelemetry.updateIccoaSpeed(parsed)
+        VehicleTelemetry.updateIccoaSpeed(parsed.first, parsed.second)
         return true
     }
 }

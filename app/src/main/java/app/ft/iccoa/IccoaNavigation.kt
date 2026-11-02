@@ -18,8 +18,12 @@ internal object IccoaNavigation {
     /** Enable the OEM GPS producer only during a live AA projection or guided route.
      * This is not asserted to be a user-started turn-by-turn navigation session.
      */
-    fun sensorActivation(info: NavigationInfo, aaConnected: Boolean): NavigationInfo =
-        if (aaConnected && !info.active) info.copy(active = true) else info
+    fun sensorActivation(
+        info: NavigationInfo,
+        aaConnected: Boolean,
+        ftProjectionActive: Boolean = false
+    ): NavigationInfo =
+        if ((aaConnected || ftProjectionActive) && !info.active) info.copy(active = true) else info
 
     fun encode(info: NavigationInfo): ByteArray = ProtoWriter()
         .bool(1, info.active)

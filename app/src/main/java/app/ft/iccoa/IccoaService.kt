@@ -60,15 +60,19 @@ class IccoaService : Service() {
     // OEM SensorMgr is enabled only while Android Auto is connected or real navigation runs.
     // This is an experimentally verifiable activation hint, never a fabricated GPS fix.
     private var aaSensorAssist = false
+    // OEM GPS is also needed for FT's own coordinate/course widgets.
+    // Only enabled while an actual ICCOA video projection is established.
+    private var ftProjectionSensorAssist = false
     private val navigationSend = object : Runnable {
         override fun run() {
             val connection = session ?: return
-            val activation = IccoaNavigation.sensorActivation(latestNavigation, aaSensorAssist)
+            val activation = IccoaNavigation.sensorActivation(latestNavigation, aaSensorAssist, ftProjectionSensorAssist)
             if (connection.sendControl(IccoaNavigation.CONTROL_METHOD,
                     IccoaNavigation.encode(activation))) {
                 navigationRetries = 0
                 DiagLog.i("ICCOA", "OEM sensor activation request: active=${activation.active} " +
-                    "guided=${latestNavigation.active} aaConnected=$aaSensorAssist")
+                    "guided=${latestNavigation.active} aaConnected=$aaSensorAssist " +
+                    "ftProjected=$ftProjectionSensorAssist")
             } else if (navigationRetries++ < 8) {
                 main.postDelayed(this, 500)
             }
@@ -95,7 +99,10 @@ class IccoaService : Service() {
             gearSpeedFrames++
             if (IccoaGearWire.accept(body)) gearSpeedValid++
             if (gearSpeedFrames <= 3 || gearSpeedFrames and (gearSpeedFrames - 1) == 0L) {
-                DiagLog.i("ICCOA", "SENSOR GearInfo count=$gearSpeedFrames valid=$gearSpeedValid payloadBytes=${body.size} unit=unconfirmed")
+                DiagLog.i("ICCOA", "SENSOR GearInfo count=$gearSpeedFrames valid=$gearSpeedValid " +
+                    "payloadBytes=${body.size} unit=unconfirmed " +
+                    "rawGear=${VehicleTelemetry.current.value?.gearRaw ?: "NA"} " +
+                    "rawSpeed=${VehicleTelemetry.current.value?.gearSpeedRaw ?: "NA"}")
             }
             return
         }
@@ -312,6 +319,13 @@ class IccoaService : Service() {
         DiagLog.i("ICCOA", "video profile ${plan.streamWidth}x${plan.streamHeight}@${plan.fps} CBR ${plan.bitrate / 1000} kbps; receiver asked ${config.fps} fps")
         projection?.start(plan, output::configure, output::frame)
         if (media !== output) return // A synchronous projection failure has already ended this connection.
+        if (!ftProjectionSensorAssist) {
+            ftProjectionSensorAssist = true
+            navigationRetries = 0
+            main.removeCallbacks(navigationSend)
+            DiagLog.i("ICCOA", "FT projection ready; requesting OEM GPS for coordinate widgets")
+            navigationSend.run()
+        }
         main.removeCallbacks(connectionTimeout)
         output.resume()
         audioPlayerState.play()
@@ -394,6 +408,7 @@ class IccoaService : Service() {
         navigationHook = null
         latestNavigation = NavigationInfo()
         aaSensorAssist = false
+        ftProjectionSensorAssist = false
         navigationRetries = 0
         if (AaHeadUnitService.onCarMicWanted === microphoneHook) AaHeadUnitService.onCarMicWanted = null
         microphoneHook = null

@@ -24,6 +24,14 @@ class IccoaNavigationTest {
         assertFalse(IccoaNavigation.sensorActivation(inactive, aaConnected = false).active)
     }
 
+    @Test fun ftHomeProjectionActivatesGpsWithoutAndroidAuto() {
+        val stopped = NavigationInfo()
+        assertTrue(IccoaNavigation.sensorActivation(stopped,
+            aaConnected = false, ftProjectionActive = true).active)
+        assertFalse(IccoaNavigation.sensorActivation(stopped,
+            aaConnected = false, ftProjectionActive = false).active)
+    }
+
     @Test fun actualGuidedRouteRemainsActiveEvenWhenAaVisibilityChanges() {
         val guided = NavigationInfo(active = true, road = "Route", distanceMeters = 850)
         assertEquals(guided, IccoaNavigation.sensorActivation(guided, aaConnected = true))

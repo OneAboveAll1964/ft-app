@@ -24,7 +24,9 @@ internal object VehicleCoordinateLog {
         } else {
             append("coordinates=OMITTED ")
         }
-        append("speedRaw=${sample.speedRaw ?: "NA"} headingRaw=${sample.headingRaw ?: "NA"} ")
+        append("gpsSpeedRaw=${sample.speedRaw ?: "NA"} gearSpeedRaw=${sample.gearSpeedRaw ?: "NA"} ")
+        append("gearRaw=${sample.gearRaw ?: "NA"} gearAgeMs=${if (sample.gearAtMs == 0L) -1 else now - sample.gearAtMs} ")
+        append("headingRaw=${sample.headingRaw ?: "NA"} ")
         append("satUsed=${sample.satellitesUsed ?: "NA"} satVisible=${sample.satellitesVisible ?: "NA"} ")
         append("carTimestamp=${sample.deviceTimestampRaw ?: "NA"} ")
         append("positionAgeMs=${if (sample.positionAtMs == 0L) -1 else now - sample.positionAtMs} ")

@@ -28,6 +28,15 @@ class VehicleCoordinateLogTest {
         assertFalse(log.contains("rawLat="))
     }
 
+    @Test fun gearDiagnosticsSeparateRawGearFromGpsSpeed() {
+        val record = sample.copy(gearRaw = 2, gearSpeedRaw = 60, gearAtMs = 13_000L)
+        val output = VehicleCoordinateLog.format(record, decision, false)
+        assertTrue(output.contains("gpsSpeedRaw=34"))
+        assertTrue(output.contains("gearSpeedRaw=60"))
+        assertTrue(output.contains("gearRaw=2"))
+        assertTrue(output.contains("coordinates=OMITTED"))
+    }
+
     @Test fun ownerOptInIncludesExactCoordinates() {
         val log = VehicleCoordinateLog.format(sample, decision, true)
         assertTrue(log.contains("latitude=55.7558260"))

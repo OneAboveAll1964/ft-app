@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft.xa60"
         minSdk = 29
         targetSdk = 36
-        versionCode = 167
-        versionName = "3.9.53-xa60-aa-large-icons"
+        versionCode = 168
+        versionName = "3.9.54-xa60-ft-home-gps"
     }
 
     signingConfigs {
