@@ -57,8 +57,7 @@
     <string name="aa_width">Video width</string>
     <string name="aa_height">Video height</string>
     <string name="aa_fps">Frame rate</string>
-    <string name="aa_density">Android Auto density, DPI</string>
-    <string name="aa_density_scale_hint">Default 240 DPI (about 1.5× the former icon size). Set 160 to restore the old layout. Reconnect Android Auto to apply; on smaller screens DPI may be limited to keep controls accessible.</string>
+    <string name="aa_density">Density</string>
     <string name="action_add">Add</string>
     <string name="action_allow">Allow</string>
     <string name="action_back">Back</string>
