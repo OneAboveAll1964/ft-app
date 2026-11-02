@@ -52,11 +52,14 @@ object AaMessages {
                     .packedInts(1, keycodes)
                     .message(2, ProtoWriter().int32(1, width).int32(2, height).int32(3, 1))
             )
+        // FT163 field log: the AA phone opened SENSOR but subscribed only to
+        // DRIVING_STATUS and NIGHT_MODE. Prioritize advertised LOCATION so it
+        // cannot be skipped by clients that enumerate a limited sensor subset.
         val sensorTypes = ProtoWriter()
-            .message(1, ProtoWriter().enum(1, AaProtocol.SENSOR_DRIVING_STATUS))
-            .message(1, ProtoWriter().enum(1, AaProtocol.SENSOR_NIGHT_MODE))
         if (advertiseCarLocation)
             sensorTypes.message(1, ProtoWriter().enum(1, AaProtocol.SENSOR_LOCATION))
+        sensorTypes.message(1, ProtoWriter().enum(1, AaProtocol.SENSOR_DRIVING_STATUS))
+            .message(1, ProtoWriter().enum(1, AaProtocol.SENSOR_NIGHT_MODE))
         val sensor = ProtoWriter()
             .int32(1, AaProtocol.CH_SENSOR)
             .message(2, sensorTypes)

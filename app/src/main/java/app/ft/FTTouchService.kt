@@ -94,9 +94,14 @@ class FTTouchService : AccessibilityService() {
         if (!ok) stroke = null
     }
 
-    fun tap(x: Float, y: Float) {
-        val p = Path().apply { moveTo(x, y); lineTo(x, y) }
-        runCatching { dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(p, 0L, 50L)).build(), null, null) }
+    /** A complete short press avoids racing DOWN and UP continuation dispatches. */
+    fun tap(x: Float, y: Float, durationMs: Long = 50L) {
+        val path = Path().apply { moveTo(x, y); lineTo(x, y) }
+        val duration = durationMs.coerceIn(60L, 1_200L)
+        runCatching {
+            val stroke = GestureDescription.StrokeDescription(path, 0L, duration)
+            dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), null, null)
+        }
     }
 
     fun back() = performGlobalAction(GLOBAL_ACTION_BACK)

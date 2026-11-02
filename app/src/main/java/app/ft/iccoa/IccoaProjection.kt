@@ -31,6 +31,7 @@ import app.ft.projection.CarTouchZones
 import app.ft.projection.CarTouchCalibration
 import app.ft.projection.MirrorSink
 import app.ft.projection.MirrorTouchMap
+import app.ft.projection.MirrorTouchSequence
 import app.ft.projection.PhoneMirror
 import app.ft.projection.VideoPlan
 import app.ft.ui.car.CarScreen
@@ -76,6 +77,7 @@ class IccoaProjection(
     private var pendingLaunch: Pair<Intent, String>? = null
     private var touchFt = false
     private var touchBeside = false
+    private val mirrorTouches = MirrorTouchSequence()
     private var active = false
     private var displayPlan: VideoPlan? = null
     private var closed = false
@@ -203,11 +205,18 @@ class IccoaProjection(
                 )
                 val mapped = viewport.map(mappedX, mappedY, clipToBounds = t.action != CarTouch.DOWN)
                 if (t.action == CarTouch.DOWN) {
+                    mirrorTouches.reset()
                     touchBeside = mapped == null
                     DiagLog.i("Mirror", "touch DOWN car=$mappedX,$mappedY phone=${mapped?.first},${mapped?.second} " +
                         "source=${mirror.width}x${mirror.height} surface=${frame.width}x${frame.height}")
                 }
-                if (!touchBeside && mapped != null) FTTouchService.instance?.inject(t.action, mapped.first, mapped.second)
+                if (!touchBeside && mapped != null) {
+                    val injector = FTTouchService.instance
+                    mirrorTouches.accept(t.action, mapped.first, mapped.second, android.os.SystemClock.uptimeMillis()).forEach { cmd ->
+                        if (cmd.action == MirrorTouchSequence.TAP) injector?.tap(cmd.x, cmd.y, cmd.durationMs)
+                        else injector?.inject(cmd.action, cmd.x, cmd.y)
+                    }
+                }
             }
             else -> display.dispatchTouch(t)
         }
@@ -359,6 +368,7 @@ class IccoaProjection(
 
     override fun stopMirror() = onMain { hideMirror() }
     private fun hideMirror() {
+        mirrorTouches.reset()
         pendingLaunch = null
         mirrorJob?.cancel()
         mirrorJob = null

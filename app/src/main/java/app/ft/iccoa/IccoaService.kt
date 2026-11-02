@@ -275,6 +275,11 @@ class IccoaService : Service() {
                 navigationSend.run()
             } })
         session = connection
+        main.postDelayed({
+            if (generation == token && session === connection && gearSpeedFrames > 0L && gpsFrameCount == 0L)
+                DiagLog.w("ICCOA", "Sensor lane alive (GearInfo=$gearSpeedFrames), but zero OEM GPS frames; " +
+                    "real guided navigation may be required to activate the car's GPS producer")
+        }, 20_000L)
         // Publish only after the captured session has been initialized: AA callbacks
         // arrive on its reader thread and can run as soon as the hook is visible.
         microphoneHook = hook

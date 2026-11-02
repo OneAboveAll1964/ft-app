@@ -193,6 +193,14 @@ class AaSession(
                         true, prefs.carName, prefs.aaControlsLeft, prefs.carProtocol == CarProtocol.ICCOA)
                 )
                 _phase.value = Phase.DISCOVERED
+                if (prefs.carProtocol == CarProtocol.ICCOA) {
+                    DiagLog.i(tag, "ICCOA car LOCATION advertised to AA; waiting for actual phone subscription")
+                    scope.launch(Dispatchers.IO) {
+                        delay(12_000L)
+                        if (lifecycle.running && !carGpsSubscribed)
+                            DiagLog.w(tag, "AA phone did not request car LOCATION; cannot forward absent subscription")
+                    }
+                }
             }
             AaProtocol.CHANNEL_OPEN_REQUEST -> {
                 val sid = AaMessages.channelOpenServiceId(body)
