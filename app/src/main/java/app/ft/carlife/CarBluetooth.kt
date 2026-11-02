@@ -143,10 +143,19 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
                 val winner = CompletableDeferred<Pair<BluetoothSocket, String>?>()
                 val waits = offered.map { (ss, label) ->
                     launch(Dispatchers.IO) {
-                        val s = runCatching { ss.accept() }
-                            .onFailure { if (isActive && !winner.isCompleted) DiagLog.d(tag, "bluetooth $label stopped waiting: ${it.javaClass.simpleName} ${it.message ?: ""}") }
-                            .getOrNull() ?: return@launch
-                        if (owner.accept(s) && !winner.complete(s to label)) owner.release(s)
+                        while (isActive && !winner.isCompleted) {
+                            val s = runCatching { ss.accept() }
+                                .onFailure { if (isActive && !winner.isCompleted) DiagLog.d(tag, "bluetooth $label stopped waiting: ${it.javaClass.simpleName} ${it.message ?: ""}") }
+                                .getOrNull() ?: return@launch
+                            val locked = prefs.carLifeVehicleAddress.orEmpty()
+                            if (locked.isNotBlank() && !s.remoteDevice?.address.equals(locked, true)) {
+                                if (prefs.showOtherDevicesInLogs) DiagLog.d(tag, "ignored bluetooth caller '${s.remoteDevice?.name}' (${s.remoteDevice?.address})")
+                                runCatching { s.close() }
+                                continue
+                            }
+                            if (owner.accept(s) && !winner.complete(s to label)) owner.release(s)
+                            break
+                        }
                     }
                 }
                 launch { waits.joinAll(); winner.complete(null) }
@@ -168,6 +177,12 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     }
 
     private suspend fun talk(owner: Listener, s: BluetoothSocket, label: String) {
+        val address = runCatching { s.remoteDevice?.address }.getOrNull().orEmpty()
+        fun accepted(): Boolean = prefs.carLifeVehicleAddress.orEmpty().let { it.isBlank() || it.equals(address, true) }
+        if (!accepted()) {
+            owner.release(s)
+            return
+        }
         val who = runCatching { s.remoteDevice?.name }.getOrNull() ?: "The car"
         DiagLog.i(tag, "'$who' called this phone over bluetooth on $label")
         runCatching {
@@ -177,7 +192,8 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         if (!owner.connect(s)) return
         try {
             if (!currentCoroutineContext().isActive) return
-            runCatching { s.remoteDevice?.address }.getOrNull()?.let { prefs.carBtAddress = it }
+            carAddress = runCatching { s.remoteDevice?.address }.getOrNull().orEmpty()
+            if (prefs.carLifeVehicleAddress.orEmpty().isBlank() && carAddress.isNotBlank()) prefs.carBtAddress = carAddress
             onCar?.invoke(who)
             val input = runCatching { s.inputStream }.getOrNull()
             val buf = ByteArray(512)
@@ -185,6 +201,7 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             var why = "the link ended"
             while (currentCoroutineContext().isActive) {
                 val n = runCatching { input?.read(buf) ?: -1 }.getOrElse { why = "${it.javaClass.simpleName} ${it.message ?: ""}"; -1 }
+                if (!accepted()) break
                 if (n < 0) break
                 if (n == 0) continue
                 seen++
@@ -192,12 +209,15 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
                 if (seen <= 20 || seen % 30 == 0) DiagLog.rx(tag, "bluetooth #$seen", frame)
                 onFrame?.invoke(frame)
             }
-            DiagLog.i(tag, "bluetooth link to '$who' closed ($why, $seen messages)")
+            if (accepted() || prefs.showOtherDevicesInLogs) DiagLog.i(tag, "bluetooth link to '$who' closed ($why, $seen messages)")
         } finally {
             owner.release(s)
             if (listener === owner) onCar?.invoke(null)
         }
     }
+
+    @Volatile var carAddress: String = ""
+        private set
 
     companion object {
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")

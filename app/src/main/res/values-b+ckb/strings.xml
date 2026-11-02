@@ -47,8 +47,6 @@
     <string name="aa_help_4_body">FT خۆی پێیەوە پەیوەست دەبێت. دوای ڕیستارتکردنی مۆبایل یان نوێبوونەوەی Android Auto، هەنگاوەکانی 1 و 3 و 4 دووبارە بکەرەوە.</string>
     <string name="aa_match_car">بە قەبارەی شاشەی ئۆتۆمبێلەکە پیشانی بدە</string>
     <string name="aa_controls_left">کۆنترۆڵەکانی بخە لای چەپ</string>
-    <string name="aa_compact_return_button">دوگمەی بچووکی FT</string>
-    <string name="aa_compact_return_button_body">لەسەر Android Auto دوگمەیەکی گەڕانەوەی بچووک و بازنەیی و تاریک بەکاربهێنە. بە ناچالاککردنی هەڵبژاردەکە دوگمەی سەرەتایی دەمێنێتەوە.</string>
     <string name="aa_return_to_ft">گەڕانەوە بۆ FT</string>
     <string name="aa_cluster_navigation">ڕێنمایی ڕێگا لەسەر پانێڵی ئامێرەکان</string>
     <string name="aa_cluster_navigation_body">سووڕانەوەکانی Android Auto لەسەر پانێڵی ئامێرەکان یان HUD پیشان بدە، ئەگەر ئۆتۆمبێلەکە پشتگیری بکات. گۆڕانکارییەکان دەستبەجێ جێبەجێ دەبن.</string>
@@ -61,6 +59,12 @@
     <string name="action_allow">ڕێگەدان</string>
     <string name="action_back">گەڕانەوە</string>
     <string name="action_cancel">هەڵوەشاندنەوە</string>
+    <string name="car_remembered">ئۆتۆمبێلی پاشەکەوتکراو بۆ Baidu Connect / CarLife</string>
+    <string name="car_remembered_empty">ئۆتۆمبێلەکە دوای یەکەم دانیشتنی سەرکەوتووی پیشاندانی شاشە بە Wi-Fi Direct پاشەکەوت دەکرێت.</string>
+    <string name="car_change">گۆڕینی ئۆتۆمبێل</string>
+    <string name="car_change_about">ئۆتۆمبێلی پاشەکەوتکراو لەبیر بکرێت و FT بکوژێنرێتەوە؟ بۆ بەکارهێنانی ئۆتۆمبێلێکی تر، FT دووبارە هەڵبکە و بە Baidu Connect / CarLife پەیوەندی پێوە بکە.</string>
+    <string name="show_other_devices_logs">پیشاندانی ئامێرەکانی تر لە تۆمارەکاندا</string>
+    <string name="show_other_devices_logs_about">ئامێرە نزیکەکان و خزمەتگوزارییەکانیان لە تۆمارەکانی دەستنیشانکردنی کێشەی Baidu Connect / CarLife دەخاتە ناوەوە. بە بنەڕەت کوژاوەتەوە: تەنها ئۆتۆمبێلەکە و ڕووداوەکانی پەیوەندی پیشان دەدرێن. دۆزینەوەی ئامێر و هەڵبژاردنی ئۆتۆمبێل ناگۆڕێت.</string>
     <string name="action_close">داخستن</string>
     <string name="action_copy">کۆپی</string>
     <string name="action_next">دواتر</string>
@@ -409,6 +413,8 @@
     <string name="corner_top_right">سەرەوەی ڕاست</string>
     <string name="corner_bottom_left">خوارەوەی چەپ</string>
     <string name="corner_bottom_right">خوارەوەی ڕاست</string>
+    <string name="corner_above_microphone">لە سەرەوەی مایکرۆفۆن</string>
+    <string name="corner_above_microphone_about">بۆ Android Auto بە پانێڵی لایەنی ستوونی. دوگمەی FT لە سەرەوەی مایکرۆفۆن و لیستی ئەپەکان، لە لای پانێڵەکە دەردەکەوێت. لە شاشەکانی تر لە خوارەوەی چەپە.</string>
     <string name="connect_section">کاتێک ئۆتۆمبێلەکە پەیوەست دەبێت</string>
     <string name="look_default_buttons">دوگمە بنەڕەتییەکان بگەڕێنەوە</string>
     <string name="sound_music_section">مۆسیقا</string>

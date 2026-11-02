@@ -47,8 +47,6 @@
     <string name="aa_help_4_body">FT подключится к нему сам. После перезагрузки телефона или обновления Android Auto повторите шаги 1, 3 и 4.</string>
     <string name="aa_match_car">Использовать размер экрана автомобиля</string>
     <string name="aa_controls_left">Разместить элементы управления слева</string>
-    <string name="aa_compact_return_button">Компактная кнопка FT</string>
-    <string name="aa_compact_return_button_body">Небольшая тёмная круглая кнопка возврата поверх Android Auto. При выключении используется прежний вид.</string>
     <string name="aa_return_to_ft">Вернуться в FT</string>
     <string name="aa_cluster_navigation">Подсказки на приборной панели</string>
     <string name="aa_cluster_navigation_body">Показывать манёвры Android Auto на приборной панели или проекционном дисплее HUD, если автомобиль поддерживает эту функцию. Настройка применяется сразу.</string>
@@ -61,6 +59,12 @@
     <string name="action_allow">Разрешить</string>
     <string name="action_back">Назад</string>
     <string name="action_cancel">Отмена</string>
+    <string name="car_remembered">Запомненный автомобиль для Baidu Connect / CarLife</string>
+    <string name="car_remembered_empty">Автомобиль будет запомнен после первого успешного сеанса проекции по Wi-Fi Direct.</string>
+    <string name="car_change">Сменить автомобиль</string>
+    <string name="car_change_about">Забыть запомненный автомобиль и выключить FT? Для подключения другой машины снова включите FT и подключите её через Baidu Connect / CarLife.</string>
+    <string name="show_other_devices_logs">Показывать посторонние устройства в логах</string>
+    <string name="show_other_devices_logs_about">Включает соседние устройства и их сервисы в диагностику Baidu Connect / CarLife. По умолчанию выключено: видны только автомобиль и события подключения. Не меняет поиск устройств и выбор автомобиля.</string>
     <string name="action_close">Закрыть</string>
     <string name="action_copy">Копировать</string>
     <string name="action_next">Далее</string>
@@ -178,7 +182,7 @@
     <string name="step_wifi_on">WiFi включён</string>
     <string name="step_wifi_needs_location">Для WiFi Direct нужно включить геолокацию</string>
     <string name="step_car_found">Автомобиль найден</string>
-    <string name="step_waiting_bt">Ожидание автомобиля по Bluetooth</string>
+    <string name="step_waiting_bt">Ожидание ответа CarLife по Bluetooth</string>
     <string name="step_wifi_direct_connected">WiFi Direct подключён</string>
     <string name="step_joining">Подключение к %1$s</string>
     <string name="step_asking_car">Просим автомобиль включить WiFi Direct</string>
@@ -409,6 +413,8 @@
     <string name="corner_top_right">Вверху справа</string>
     <string name="corner_bottom_left">Внизу слева</string>
     <string name="corner_bottom_right">Внизу справа</string>
+    <string name="corner_above_microphone">Над микрофоном</string>
+    <string name="corner_above_microphone_about">Для Android Auto с вертикальной боковой панелью. Кнопка FT располагается над микрофоном и меню приложений, со стороны панели. На остальных экранах — внизу слева.</string>
     <string name="connect_section">При подключении автомобиля</string>
     <string name="look_default_buttons">Вернуть кнопки по умолчанию</string>
     <string name="sound_music_section">Музыка</string>

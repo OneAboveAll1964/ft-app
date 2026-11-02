@@ -2,12 +2,14 @@ package app.ft.carlife
 
 import app.ft.core.Bytes
 import app.ft.core.DiagLog
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.BindException
 import java.net.Inet4Address
 import java.net.InetAddress
@@ -32,7 +34,9 @@ class WifiChannelLink(
     private val ports: Map<Int, Int>,
     private val refuse: (Socket) -> String? = { null },
     private val onBusy: (Int) -> Unit = {},
-    private val onBound: (Int) -> Unit = {}
+    private val onBound: (Int) -> Unit = {},
+    private val onCommandConnected: () -> Unit = {},
+    private val admissionDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : CarLifeLink {
     override val name = "WiFi"
     private val tag = "Link"
@@ -64,54 +68,61 @@ class WifiChannelLink(
                     onEvent("WIFI ${CarLifeProtocol.channelName(channel)} listening on $port")
                     while (isActive && running.get()) {
                         val s = ss.accept()
-                        if (refuse(s) != null) {
-                            runCatching { s.close() }
-                            continue
-                        }
-                        tune(s, channel)
-                        val stale = synchronized(sockets) { sockets[channel] }
-                        if (stale != null && channel == CarLifeProtocol.CH_CMD) {
-                            DiagLog.w(tag, "WIFI ${CarLifeProtocol.channelName(channel)} connected again while the old one was still open, starting the connection over")
-                            dropAll()
-                            onClosed("head unit connected again")
-                        }
-                        var replaced: Pair<Socket?, CarLifeWriter<ByteArray>?>? = null
-                        val generation = synchronized(sockets) {
-                            if (!running.get()) {
-                                s.close()
-                                return@launch
+                        // Admission and the CMD identity stamp must observe one group.
+                        val generation = withContext(admissionDispatcher) {
+                            if (refuse(s) != null) {
+                                runCatching { s.close() }
+                                return@withContext null
                             }
-                            replaced = sockets.put(channel, s) to writers.remove(channel)
-                            writers[channel] = CarLifeWriter("ft-wifi-send-$channel") { write(channel, s, it) }
-                            if (channel == CarLifeProtocol.CH_CMD) cmdGeneration++
-                            cmdGeneration
-                        }
-                        replaced?.let { (oldSocket, oldWriter) ->
-                            runCatching { oldSocket?.close() }
-                            oldWriter?.close()
-                        }
-                        onEvent("WIFI ${CarLifeProtocol.channelName(channel)} connected from ${s.inetAddress.hostAddress}")
-                        if (channel == CarLifeProtocol.CH_CMD) {
-                            onConnected()
-                            watchCar(scope, s)
-                        }
+                            tune(s, channel)
+                            val stale = synchronized(sockets) { sockets[channel] }
+                            if (stale != null && channel == CarLifeProtocol.CH_CMD) {
+                                DiagLog.w(tag, "WIFI ${CarLifeProtocol.channelName(channel)} connected again while the old one was still open, starting the connection over")
+                                dropAll()
+                                onClosed("head unit connected again")
+                            }
+                            var replaced: Pair<Socket?, CarLifeWriter<ByteArray>?>? = null
+                            val acceptedGeneration = synchronized(sockets) {
+                                if (!running.get()) {
+                                    s.close()
+                                    return@withContext null
+                                }
+                                replaced = sockets.put(channel, s) to writers.remove(channel)
+                                writers[channel] = CarLifeWriter("ft-wifi-send-$channel") { write(channel, s, it) }
+                                if (channel == CarLifeProtocol.CH_CMD) cmdGeneration++
+                                cmdGeneration
+                            }
+                            replaced?.let { (oldSocket, oldWriter) ->
+                                runCatching { oldSocket?.close() }
+                                oldWriter?.close()
+                            }
+                            onEvent("WIFI ${CarLifeProtocol.channelName(channel)} connected from ${s.inetAddress.hostAddress}")
+                            if (channel == CarLifeProtocol.CH_CMD) {
+                                onConnected()
+                                onCommandConnected()
+                                watchCar(scope, s)
+                            }
+                            acceptedGeneration
+                        } ?: continue
                         scope.launch(Dispatchers.IO) {
                             readLoop(channel, s, onMessage)
-                            var writer: CarLifeWriter<ByteArray>? = null
-                            val current = synchronized(sockets) {
-                                val mine = sockets[channel] === s
-                                if (mine) {
-                                    sockets.remove(channel)
-                                    writer = writers.remove(channel)
+                            withContext(admissionDispatcher) {
+                                var writer: CarLifeWriter<ByteArray>? = null
+                                val current = synchronized(sockets) {
+                                    val mine = sockets[channel] === s
+                                    if (mine) {
+                                        sockets.remove(channel)
+                                        writer = writers.remove(channel)
+                                    }
+                                    mine && (channel != CarLifeProtocol.CH_CMD || generation == cmdGeneration)
                                 }
-                                mine && (channel != CarLifeProtocol.CH_CMD || generation == cmdGeneration)
-                            }
-                            writer?.close()
-                            if (!current) return@launch
-                            onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
-                            if (channel == CarLifeProtocol.CH_CMD) {
-                                watch?.cancel()
-                                onClosed("head unit disconnected")
+                                writer?.close()
+                                if (!current) return@withContext
+                                onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
+                                if (channel == CarLifeProtocol.CH_CMD) {
+                                    watch?.cancel()
+                                    onClosed("head unit disconnected")
+                                }
                             }
                         }
                     }
@@ -187,7 +198,9 @@ class WifiChannelLink(
                     misses++
                 }
                 DiagLog.w(tag, "the head unit is gone, closing the connection")
-                if (dropAll(expectedCommand = s)) closedHook?.invoke("head unit stopped answering")
+                withContext(admissionDispatcher) {
+                    if (dropAll(expectedCommand = s)) closedHook?.invoke("head unit stopped answering")
+                }
                 break
             }
         }
@@ -294,8 +307,7 @@ object NetUtil {
 
     fun wifiDirectIpv4(iface: String?): String? = try {
         NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.isUp && (it.name == iface || it.name.startsWith("p2p")) }
-            .sortedByDescending { it.name == iface }
+            .filter { it.isUp && !iface.isNullOrBlank() && it.name == iface }
             .flatMap { it.inetAddresses.toList() }
             .firstOrNull { it is Inet4Address }
             ?.hostAddress

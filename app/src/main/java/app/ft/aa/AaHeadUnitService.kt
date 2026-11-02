@@ -41,7 +41,8 @@ data class AaState(
     val deviceName: String = "",
     val bluetooth: String = "idle",
     val selfServer: Boolean = false,
-    val hotspot: HotspotInfo? = null
+    val hotspot: HotspotInfo? = null,
+    val display: AaDisplayConfig? = null
 )
 
 class AaHeadUnitService : Service() {
@@ -239,7 +240,7 @@ class AaHeadUnitService : Service() {
                         disconnectHelp.closed(session.hasStreamed, reason, enabled && FTApp.instance.prefs.autoConnect, session.remoteBye)
                         lastDisconnect = "${java.util.Date()} $details"
                         current = null
-                        _state.update { it.copy(connected = false, phase = null, deviceName = "", selfServer = false) }
+                        _state.update { it.copy(connected = false, phase = null, deviceName = "", selfServer = false, display = null) }
                         if (enabled) {
                             updateNotification(Lang.str(R.string.note_aa_ready))
                             reconnect.wake()
@@ -249,7 +250,7 @@ class AaHeadUnitService : Service() {
                 sessionScope.launch {
                     session.phase.collect { p ->
                         connections.withCurrent(session) {
-                            _state.update { it.copy(phase = p) }
+                            _state.update { it.copy(phase = p, display = session.displayConfig) }
                             if (p == AaSession.Phase.STREAMING) {
                                 DiagLog.i(tag, "session #$id streaming after ${SystemClock.elapsedRealtime() - since}ms ($source)")
                                 updateNotification(Lang.str(R.string.note_aa_streaming))
@@ -264,7 +265,7 @@ class AaHeadUnitService : Service() {
                 session
             }) { session ->
                 current = session
-                _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED, deviceName = "", selfServer = selfServer) }
+                _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED, deviceName = "", selfServer = selfServer, display = null) }
                 session.start()
             }
         }.getOrElse {

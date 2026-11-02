@@ -55,7 +55,7 @@ class CarBluetoothReconnect(
     private var closed = false
     private var target = ""
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "carBtReconnect" || key == "carBtAddress") scope.launch { refresh() }
+        if (key in setOf("carBtReconnect", "carBtAddress", "carLifeVehicleAddress", "carProtocol")) scope.launch { refresh() }
     }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -100,10 +100,11 @@ class CarBluetoothReconnect(
             disable()
             return
         }
-        if (target != prefs.carBtAddress) {
+        val address = lockedAddress().ifBlank { prefs.carBtAddress }
+        if (target != address) {
             cancelRecovery()
             connected.clear()
-            target = prefs.carBtAddress
+            target = address
         }
         if (!registered) {
             runCatching {
@@ -167,7 +168,10 @@ class CarBluetoothReconnect(
         }
     }
 
+    private fun lockedAddress() = if (prefs.carProtocol == CarProtocol.CARLIFE) prefs.carLifeVehicleAddress.orEmpty() else ""
+
     private fun rememberCar(car: BluetoothDevice) {
+        if (lockedAddress().isNotBlank()) return
         val known = isTarget(car)
         val named = prefs.carBtName.isNotBlank() && car.name?.contains(prefs.carBtName, ignoreCase = true) == true
         val automotive = car.bluetoothClass?.deviceClass == BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO

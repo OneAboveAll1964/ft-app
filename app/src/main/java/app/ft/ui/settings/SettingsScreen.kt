@@ -19,6 +19,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -256,6 +257,7 @@ private fun PageContent(page: SettingsPage) {
                 BluetoothCallsSetting()
                 IccoaMicrophoneGainSetting(p.iccoaMicGain) { p.iccoaMicGain = it }
             } else {
+                RememberedCarSetting()
                 TextSetting(stringResource(R.string.car_name_label), p.carName) { p.carName = it }
                 TextSetting(stringResource(R.string.car_p2p_label), p.carP2pName) { p.carP2pName = it }
                 TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
@@ -283,11 +285,6 @@ private fun PageContent(page: SettingsPage) {
             }
         }
         SettingsPage.ANDROID_AUTO -> {
-            BoolSetting(stringResource(R.string.aa_compact_return_button), p.aaCompactReturnButton,
-                detail = stringResource(R.string.aa_compact_return_button_body)) {
-                p.aaCompactReturnButton = it
-                CarStyles.reload()
-            }
             BoolSetting(stringResource(R.string.aa_cluster_navigation), p.aaClusterNavigation,
                 detail = stringResource(R.string.aa_cluster_navigation_body)) { p.aaClusterNavigation = it }
             BoolSetting(stringResource(R.string.aa_show_return_button), p.aaShowReturnButton) {
@@ -310,6 +307,11 @@ private fun PageContent(page: SettingsPage) {
         }
         SettingsPage.ADVANCED -> {
             BoolSetting(
+                stringResource(R.string.show_other_devices_logs),
+                p.showOtherDevicesInLogs,
+                detail = stringResource(R.string.show_other_devices_logs_about)
+            ) { p.showOtherDevicesInLogs = it }
+            BoolSetting(
                 stringResource(R.string.vehicle_coordinate_log),
                 p.vehicleCoordinateLogging,
                 detail = stringResource(R.string.vehicle_coordinate_log_about)
@@ -325,6 +327,48 @@ private fun PageContent(page: SettingsPage) {
         SettingsPage.SUPERCAST -> SuperCastSettings()
         SettingsPage.BACKUP -> BackupSettings()
     }
+}
+
+@Composable
+private fun RememberedCarSetting() {
+    val p = FTApp.instance.prefs
+    val context = LocalContext.current
+    var savedAddress by remember { mutableStateOf(p.carLifeVehicleAddress) }
+    var savedName by remember { mutableStateOf(p.carLifeVehicleName) }
+    var change by remember { mutableStateOf(false) }
+    DisposableEffect(p) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "carLifeVehicleAddress" || key == "carLifeVehicleName") {
+                savedAddress = p.carLifeVehicleAddress
+                savedName = p.carLifeVehicleName
+            }
+        }
+        p.registerListener(listener)
+        onDispose { p.unregisterListener(listener) }
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.car_remembered), style = MaterialTheme.typography.titleSmall)
+        Text(
+            if (savedAddress.isBlank()) stringResource(R.string.car_remembered_empty)
+            else listOf(savedName, savedAddress).filter { it.isNotBlank() }.joinToString("\n"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(onClick = { change = true }) { Text(stringResource(R.string.car_change)) }
+    }
+    if (change) AlertDialog(
+        onDismissRequest = { change = false },
+        title = { Text(stringResource(R.string.car_change)) },
+        text = { Text(stringResource(R.string.car_change_about)) },
+        confirmButton = {
+            TextButton(onClick = {
+                CarLifeService.switchOff(context)
+                p.forgetCarLifeVehicle()
+                change = false
+            }) { Text(stringResource(R.string.car_change)) }
+        },
+        dismissButton = { TextButton(onClick = { change = false }) { Text(stringResource(R.string.action_cancel)) } }
+    )
 }
 
 private val GUIDANCE = listOf(

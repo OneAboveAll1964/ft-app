@@ -68,7 +68,6 @@ class Prefs(context: Context) {
                 .putBoolean("aaDensityBoost167", true).apply()
         }
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
-    var aaCompactReturnButton: Boolean get() = bool("aaCompactReturnButton", false); set(v) = set("aaCompactReturnButton", v)
     var aaClusterNavigation: Boolean get() = bool("aaClusterNavigation", true); set(v) = set("aaClusterNavigation", v)
     var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)
 
@@ -134,6 +133,31 @@ class Prefs(context: Context) {
     var carBtName: String get() = str("carBtName", ""); set(v) = set("carBtName", v)
     var carBtAddress: String get() = str("carBtAddress", ""); set(v) = set("carBtAddress", v)
     var carBtReconnect: Boolean get() = bool("carBtReconnect", false); set(v) = set("carBtReconnect", v)
+    val carLifeVehicleAddress: String get() = str("carLifeVehicleAddress", "")
+    val carLifeVehicleName: String get() = str("carLifeVehicleName", "")
+    val carLifeWifiAddress: String get() = str("carLifeWifiAddress", "")
+    val carLifeVehicleRevision: Int get() = int("carLifeVehicleRevision", 0)
+    var showOtherDevicesInLogs: Boolean get() = bool("showOtherDevicesInLogs", false); set(v) = set("showOtherDevicesInLogs", v)
+
+    /** Called only after projection succeeded through this Bluetooth/Wi-Fi Direct exchange. */
+    fun confirmCarLifeVehicle(address: String, name: String, wifiAddress: String, revision: Int): Boolean = synchronized(carLifeVehicleLock) {
+        val bluetooth = address.trim()
+        val wifi = wifiAddress.trim()
+        if (bluetooth.isEmpty() || wifi.isEmpty() || revision != carLifeVehicleRevision) return@synchronized false
+        val saved = carLifeVehicleAddress
+        if (saved.isNotEmpty() && !saved.equals(bluetooth, ignoreCase = true)) return@synchronized false
+        sp.edit().putString("carLifeVehicleAddress", bluetooth)
+            .putString("carLifeVehicleName", name.trim())
+            .putString("carLifeWifiAddress", wifi)
+            .putString("carBtAddress", bluetooth).apply()
+        true
+    }
+
+    fun forgetCarLifeVehicle() = synchronized(carLifeVehicleLock) {
+        sp.edit().remove("carLifeVehicleAddress").remove("carLifeVehicleName").remove("carLifeWifiAddress")
+            .remove("carBtAddress").remove("carP2pName")
+            .putInt("carLifeVehicleRevision", carLifeVehicleRevision + 1).apply()
+    }
     /** Consent to save exact vehicle coordinates in FT diagnostic logs; off by default. */
     var vehicleCoordinateLogging: Boolean get() = bool("vehicleCoordinateLogging", false); set(v) = set("vehicleCoordinateLogging", v)
     var iccoaMicGain: Int
@@ -196,3 +220,4 @@ class Prefs(context: Context) {
 
 // Settings and the service each own a Prefs instance, but must invalidate/save atomically.
 private val videoProfileLock = Any()
+private val carLifeVehicleLock = Any()

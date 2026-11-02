@@ -47,8 +47,6 @@
     <string name="aa_help_4_body">سيتصل به FT تلقائيًا. بعد إعادة تشغيل الهاتف أو تحديث Android Auto، كرّر الخطوات 1 و3 و4.</string>
     <string name="aa_match_car">العرض بمقاس شاشة السيارة نفسها</string>
     <string name="aa_controls_left">ضع أزرار التحكم على اليسار</string>
-    <string name="aa_compact_return_button">زر FT صغير</string>
-    <string name="aa_compact_return_button_body">استخدم زر رجوع دائريًا صغيرًا وداكنًا فوق Android Auto. عند إيقاف الخيار يبقى الزر الأصلي.</string>
     <string name="aa_return_to_ft">العودة إلى FT</string>
     <string name="aa_cluster_navigation">إرشادات الطريق على لوحة العدادات</string>
     <string name="aa_cluster_navigation_body">عرض منعطفات Android Auto على لوحة العدادات أو شاشة العرض الأمامية HUD، إذا كانت السيارة تدعم ذلك. تسري التغييرات فورًا.</string>
@@ -61,6 +59,12 @@
     <string name="action_allow">سماح</string>
     <string name="action_back">رجوع</string>
     <string name="action_cancel">إلغاء</string>
+    <string name="car_remembered">السيارة المحفوظة لـ Baidu Connect / CarLife</string>
+    <string name="car_remembered_empty">سيتم حفظ السيارة بعد أول جلسة عرض ناجحة عبر Wi-Fi Direct.</string>
+    <string name="car_change">تغيير السيارة</string>
+    <string name="car_change_about">هل تريد نسيان السيارة المحفوظة وإيقاف FT؟ لاستخدام سيارة أخرى، شغّل FT مجدداً واتصل بها عبر Baidu Connect / CarLife.</string>
+    <string name="show_other_devices_logs">إظهار الأجهزة الأخرى في السجلات</string>
+    <string name="show_other_devices_logs_about">تضمين الأجهزة القريبة وخدماتها في سجلات تشخيص Baidu Connect / CarLife. هذا الخيار معطّل افتراضياً: تظهر السيارة وأحداث الاتصال فقط. لا يغيّر اكتشاف الأجهزة أو اختيار السيارة.</string>
     <string name="action_close">إغلاق</string>
     <string name="action_copy">نسخ</string>
     <string name="action_next">التالي</string>
@@ -409,6 +413,8 @@
     <string name="corner_top_right">أعلى اليمين</string>
     <string name="corner_bottom_left">أسفل اليسار</string>
     <string name="corner_bottom_right">أسفل اليمين</string>
+    <string name="corner_above_microphone">فوق الميكروفون</string>
+    <string name="corner_above_microphone_about">لـ Android Auto مع لوحة جانبية عمودية. يظهر زر FT فوق الميكروفون وقائمة التطبيقات على جانب اللوحة. في الشاشات الأخرى يظهر أسفل اليسار.</string>
     <string name="connect_section">عند اتصال السيارة</string>
     <string name="look_default_buttons">إرجاع الأزرار الافتراضية</string>
     <string name="sound_music_section">الموسيقى</string>

@@ -67,6 +67,8 @@ class AaSession(
     private var mediaFrames = 0L
     private val _phase = MutableStateFlow(Phase.CONNECTED)
     val phase: StateFlow<Phase> = _phase
+    @Volatile var displayConfig: AaDisplayConfig? = null
+        private set
     @Volatile var hasStreamed = false
         private set
     @Volatile var remoteBye = false
@@ -186,13 +188,15 @@ class AaSession(
             AaProtocol.SERVICE_DISCOVERY_REQUEST -> {
                 _deviceName.value = AaMessages.deviceName(body)
                 DiagLog.i(tag, "service discovery from '${_deviceName.value}'")
-                DiagLog.i(tag, "video settings ${prefs.aaWidth}x${prefs.aaHeight}@${prefs.aaFps} fps; " +
-                    "Android Auto display density requested=${prefs.aaDensity} " +
-                    "effective=${AaUiDensity.effective(prefs.aaDensity, prefs.aaWidth, prefs.aaHeight)} dpi")
+                val display = AaDisplayConfig(prefs.aaWidth, prefs.aaHeight, prefs.aaDensity, prefs.aaControlsLeft)
+                displayConfig = display
+                DiagLog.i(tag, "video settings ${display.width}x${display.height}@${prefs.aaFps} fps; " +
+                    "Android Auto display density requested=${display.density} " +
+                    "effective=${display.effectiveDpi} dpi")
                 sendEnc(
                     AaProtocol.CH_CONTROL, AaProtocol.SERVICE_DISCOVERY_RESPONSE,
-                    AaMessages.serviceDiscoveryResponse(prefs.aaWidth, prefs.aaHeight, prefs.aaFps, prefs.aaDensity,
-                        true, prefs.carName, prefs.aaControlsLeft, prefs.carProtocol == CarProtocol.ICCOA)
+                    AaMessages.serviceDiscoveryResponse(display.width, display.height, prefs.aaFps, display.density,
+                        true, prefs.carName, display.controlsLeft, prefs.carProtocol == CarProtocol.ICCOA)
                 )
                 _phase.value = Phase.DISCOVERED
                 if (prefs.carProtocol == CarProtocol.ICCOA) {

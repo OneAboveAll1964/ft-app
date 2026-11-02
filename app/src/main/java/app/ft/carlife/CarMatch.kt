@@ -5,6 +5,13 @@ import kotlin.math.abs
 object CarMatch {
     enum class Why { NAME, ADDRESS, NAMELESS_GROUP }
 
+    /** Only exact observed addresses or a fresh Bluetooth announcement may match a remembered car. */
+    fun known(peers: List<CarFinder.Peer>, announcedName: String, wifiAddress: String): CarFinder.Peer? {
+        if (wifiAddress.isNotBlank()) peers.singleOrNull { it.address.equals(wifiAddress, true) }?.let { return it }
+        val name = announcedName.trim()
+        return if (name.isEmpty()) null else peers.singleOrNull { it.name.equals(name, true) }
+    }
+
     fun pick(peers: List<CarFinder.Peer>, want: String, carBluetooth: String): Pair<CarFinder.Peer, Why>? {
         val w = want.trim()
         val byName = if (w.isNotEmpty()) peers.firstOrNull { it.name.equals(w, true) || (it.name.isNotBlank() && it.name.contains(w, true)) }

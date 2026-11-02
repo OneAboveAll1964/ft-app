@@ -131,10 +131,17 @@ class BluetoothCalls(
                 }
                 profile != null && serviceAvailable -> {
                     val devices = profile!!.connectedDevices
+                    val loggedDevices = runCatching {
+                        val prefs = Prefs(context)
+                        val carAddress = (if (prefs.carProtocol == CarProtocol.CARLIFE) prefs.carLifeVehicleAddress else "")
+                            .ifBlank { prefs.carBtAddress }
+                        devices.filter { prefs.showOtherDevicesInLogs || carAddress.isNotBlank() && it.address.equals(carAddress, true) }
+                            .map { it.name?.takeIf(String::isNotBlank) ?: it.address }.sorted()
+                    }.getOrDefault(emptyList())
                     publish(BluetoothCallsState(
                         if (devices.isEmpty()) BluetoothCallsStatus.DISCONNECTED else BluetoothCallsStatus.CONNECTED,
                         devices.map { it.name?.takeIf(String::isNotBlank) ?: it.address }.sorted()
-                    ))
+                    ), loggedDevices)
                 }
                 listener == null -> requestProfile()
                 mutableState.value.status != BluetoothCallsStatus.CHECKING &&
@@ -149,10 +156,15 @@ class BluetoothCalls(
         }
     }
 
-    private fun publish(value: BluetoothCallsState) {
+    private var lastLog = ""
+    private fun publish(value: BluetoothCallsState, loggedDevices: List<String> = emptyList()) {
         if (mutableState.value != value) {
             mutableState.value = value
-            DiagLog.i("BluetoothCalls", "HFP ${value.status}; devices=${value.devices.joinToString().ifBlank { "none" }}")
+        }
+        val text = "HFP ${value.status}; devices=${loggedDevices.joinToString().ifBlank { "none shown" }}"
+        if (text != lastLog) {
+            lastLog = text
+            DiagLog.i("BluetoothCalls", text)
         }
     }
 

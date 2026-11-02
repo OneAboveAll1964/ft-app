@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Handler
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -40,6 +41,34 @@ class BluetoothCallsTest {
     private fun connectProfile() {
         monitor.refresh()
         listener.onServiceConnected(BluetoothProfile.HEADSET, profile)
+    }
+
+    @Test fun logToggleOnlyChangesDiagnosticsAndKeepsAllHfpDevicesInState() {
+        val sp = mock(SharedPreferences::class.java)
+        `when`(context.getSharedPreferences("ft", Context.MODE_PRIVATE)).thenReturn(sp)
+        `when`(sp.getString("carProtocol", "carlife")).thenReturn("carlife")
+        `when`(sp.getString("carLifeVehicleAddress", "")).thenReturn("64:FE:15:28:C8:E4")
+        val car = mock(BluetoothDevice::class.java)
+        `when`(car.name).thenReturn("RAV4")
+        `when`(car.address).thenReturn("64:FE:15:28:C8:E4")
+        val watch = mock(BluetoothDevice::class.java)
+        `when`(watch.name).thenReturn("Foreign watch")
+        `when`(watch.address).thenReturn("BC:7F:7B:11:22:33")
+        `when`(profile.connectedDevices).thenReturn(listOf(car, watch))
+        DiagLog.clear()
+        connectProfile()
+        assertEquals(listOf("Foreign watch", "RAV4"), monitor.state.value.devices)
+        val normal = DiagLog.entries.value.filter { it.tag == "BluetoothCalls" }.map { it.text }
+        org.junit.Assert.assertTrue(normal.any { it.contains("RAV4") })
+        org.junit.Assert.assertFalse(normal.any { it.contains("Foreign watch") })
+        `when`(watch.name).thenReturn("Another foreign watch")
+        monitor.refresh()
+        assertEquals(normal, DiagLog.entries.value.filter { it.tag == "BluetoothCalls" }.map { it.text })
+        `when`(sp.getBoolean("showOtherDevicesInLogs", false)).thenReturn(true)
+        monitor.refresh()
+        org.junit.Assert.assertTrue(DiagLog.entries.value.any { it.text.contains("Another foreign watch") })
+        assertEquals(listOf("Another foreign watch", "RAV4"), monitor.state.value.devices)
+        monitor.close()
     }
 
     @Test fun pairedCarDoesNotCountAsConnectedForCalls() {

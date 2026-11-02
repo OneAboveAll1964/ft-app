@@ -4,15 +4,88 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.launch
 import org.junit.Assert.*
 import org.junit.Test
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class WifiChannelLinkTest {
+    @Test fun commandAdmissionCannotBeSplitByAQueuedGroupChange() {
+        val port = ServerSocket(0).use { it.localPort }
+        val bound = LinkedBlockingQueue<Int>()
+        val stamps = LinkedBlockingQueue<Int>()
+        val changed = LinkedBlockingQueue<Int>()
+        val group = AtomicInteger(1)
+        val admission = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(mapOf(CarLifeProtocol.CH_CMD to port),
+            refuse = {
+                // Simulate a group callback becoming ready during socket admission.
+                scope.launch(admission) { changed.put(group.incrementAndGet()) }
+                null
+            },
+            onBound = { bound.put(it) },
+            onCommandConnected = { stamps.put(group.get()) },
+            admissionDispatcher = admission)
+        var client: Socket? = null
+        try {
+            link.start(scope, { _, _, _ -> }, {}, {}, {})
+            assertNotNull(bound.poll(5, TimeUnit.SECONDS))
+            client = Socket("127.0.0.1", port)
+            assertEquals(1, stamps.poll(5, TimeUnit.SECONDS))
+            assertEquals(2, changed.poll(5, TimeUnit.SECONDS))
+        } finally {
+            link.stop()
+            client?.close()
+            scope.cancel()
+            admission.close()
+        }
+    }
+
+    @Test fun retiringCommandFinishesBeforeItsReplacementCanBeAnnounced() {
+        val port = ServerSocket(0).use { it.localPort }
+        val bound = LinkedBlockingQueue<Int>()
+        val connected = LinkedBlockingQueue<Boolean>()
+        val closing = CountDownLatch(1)
+        val releaseClose = CountDownLatch(1)
+        val admission = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(mapOf(CarLifeProtocol.CH_CMD to port),
+            onBound = { bound.put(it) }, admissionDispatcher = admission)
+        var first: Socket? = null
+        var second: Socket? = null
+        try {
+            link.start(scope, { _, _, _ -> }, {}, { connected.put(true) }, {
+                closing.countDown()
+                check(releaseClose.await(5, TimeUnit.SECONDS))
+            })
+            assertNotNull(bound.poll(5, TimeUnit.SECONDS))
+            first = Socket("127.0.0.1", port)
+            assertEquals(true, connected.poll(5, TimeUnit.SECONDS))
+            first.close()
+            assertTrue(closing.await(5, TimeUnit.SECONDS))
+            second = Socket("127.0.0.1", port)
+            assertNull(connected.poll(200, TimeUnit.MILLISECONDS))
+            releaseClose.countDown()
+            assertEquals(true, connected.poll(5, TimeUnit.SECONDS))
+            assertTrue(link.connected)
+        } finally {
+            releaseClose.countDown()
+            link.stop()
+            first?.close()
+            second?.close()
+            scope.cancel()
+            admission.close()
+        }
+    }
+
     @Test fun replacingMediaKeepsCommandAndUsesTheNewStream() {
         val cmd = CarLifeProtocol.CH_CMD
         val media = CarLifeProtocol.CH_MEDIA
@@ -23,8 +96,10 @@ class WifiChannelLinkTest {
         val events = LinkedBlockingQueue<String>()
         val closed = LinkedBlockingQueue<String>()
         val connections = AtomicInteger()
+        val commandGroups = LinkedBlockingQueue<Int>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val link = WifiChannelLink(ports, onBound = { bound.put(it) })
+        val link = WifiChannelLink(ports, onBound = { bound.put(it) },
+            onCommandConnected = { commandGroups.put(connections.get()) })
         val clients = mutableListOf<Socket>()
         fun connect(channel: Int): Socket = Socket("127.0.0.1", ports.getValue(channel)).also {
             it.soTimeout = 5000
@@ -40,6 +115,7 @@ class WifiChannelLinkTest {
             link.start(scope, { _, _, _ -> }, { events.put(it) }, { connections.incrementAndGet() }, { closed.put(it) })
             repeat(2) { assertNotNull(bound.poll(5, TimeUnit.SECONDS)) }
             val command = connect(cmd)
+            assertEquals(1, commandGroups.poll(5, TimeUnit.SECONDS))
             val oldMedia = connect(media)
             val newMedia = connect(media)
             assertTrue(link.connected)
@@ -53,6 +129,10 @@ class WifiChannelLinkTest {
             assertEquals(33, newMedia.getInputStream().read())
             assertEquals(1, connections.get())
             assertNull(closed.poll())
+            assertNull(commandGroups.poll())
+            connect(cmd)
+            assertEquals(2, commandGroups.poll(5, TimeUnit.SECONDS))
+            assertEquals("head unit connected again", closed.poll(5, TimeUnit.SECONDS))
         } finally {
             link.stop()
             clients.forEach { runCatching { it.close() } }

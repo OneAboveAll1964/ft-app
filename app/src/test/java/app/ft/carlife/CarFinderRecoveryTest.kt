@@ -12,6 +12,7 @@ import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.SystemClock
+import app.ft.core.DiagLog
 import app.ft.core.Bytes
 import app.ft.core.Prefs
 import app.ft.core.ProtoWriter
@@ -648,6 +649,361 @@ class CarFinderRecoveryTest {
         assertFalse(h.finder.inSight("CarLife"))
     }
 
+    @Test
+    fun existingConnectedGroupRetainsTheBluetoothCallerForFirstConfirmation() = check { h ->
+        h.broadcastEnabled(false)
+        h.car.status = WifiP2pDevice.CONNECTED
+        h.finder.beginBluetoothExchange("64:FE:15:28:C8:E4")
+        h.finder.connectByName("CarLife")
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true))
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        assertEquals(h.car.deviceAddress, h.finder.connectedPeerAddress)
+        assertEquals("64:FE:15:28:C8:E4", h.finder.connectedBluetoothAddress)
+    }
+
+    @Test
+    fun lockedVehicleRejectsAnExistingForeignGroupEvenWithTheSameName() = check { h ->
+        h.broadcastEnabled(false)
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn("64:FE:15:28:C8:E4")
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.broadcastConnection(true)
+        val other = WifiP2pDevice().apply {
+            deviceName = "CarLife"
+            deviceAddress = "02:00:00:00:00:99"
+        }
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(other)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertFalse(h.finder.joined)
+        assertEquals("", h.finder.connectedPeerAddress)
+    }
+
+    @Test
+    fun lockedVehicleStopsTrustingAnInterfaceWhenAndroidReplacesItsGroup() = check { h ->
+        h.broadcastEnabled(false)
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn("64:FE:15:28:C8:E4")
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        h.car.status = WifiP2pDevice.CONNECTED
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        val generation = h.finder.connectionGeneration
+        var left = 0
+        h.finder.onLeft = { left++ }
+        val other = WifiP2pDevice().apply { deviceAddress = "02:00:00:00:00:99" }
+        `when`(group.owner).thenReturn(other)
+        h.broadcastConnection(true)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertFalse(h.finder.joined)
+        assertTrue(h.finder.connectionGeneration > generation)
+        assertEquals("", h.finder.connectedPeerAddress)
+        assertEquals("", h.finder.connectedBluetoothAddress)
+        assertEquals(1, left)
+        verify(h.manager, never()).removeGroup(any(), any())
+    }
+
+    @Test
+    fun lockedVehicleRecoversItsNamelessGroupByTheConfirmedWifiAddress() = check { h ->
+        h.broadcastEnabled(false)
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn("64:FE:15:28:C8:E4")
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        h.car.deviceName = ""
+        h.car.status = WifiP2pDevice.CONNECTED
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        assertEquals(h.car.deviceAddress, h.finder.connectedPeerAddress)
+    }
+
+    @Test
+    fun foreignPeerChangesStayQuietAndTheLogToggleDoesNotChangeTheSelectedCar() = check { h ->
+        h.broadcastEnabled(false)
+        h.car.status = WifiP2pDevice.AVAILABLE
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn("64:FE:15:28:C8:E4")
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        val other = WifiP2pDevice().apply {
+            deviceName = "Foreign printer"
+            deviceAddress = "02:11:22:33:44:99"
+            status = WifiP2pDevice.AVAILABLE
+        }
+        h.visible = listOf(h.car, other)
+        DiagLog.clear()
+        h.broadcastPeers()
+        val ownSnapshot = DiagLog.entries.value.filter { it.tag == "P2P" }.map { it.text }
+        assertTrue(ownSnapshot.any { it.contains("CarLife") })
+        assertFalse(ownSnapshot.any { it.contains("Foreign") || it.contains(other.deviceAddress) })
+        other.deviceName = "Foreign TV"
+        h.broadcastPeers()
+        assertEquals(ownSnapshot, DiagLog.entries.value.filter { it.tag == "P2P" }.map { it.text })
+        `when`(h.prefs.showOtherDevicesInLogs).thenReturn(true)
+        h.broadcastPeers()
+        assertTrue(DiagLog.entries.value.any { it.text.contains("Foreign TV") })
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        assertTrue(h.finder.inSight("CarLife"))
+        assertFalse(h.finder.joined)
+    }
+
+    @Test
+    fun anExistingGroupCanAcquireFreshBluetoothProofAfterItWasAlreadyPublished() = check { h ->
+        var identified = 0
+        var joined = 0
+        h.finder.onVehicleIdentified = { identified++ }
+        h.finder.onJoined = { joined++ }
+        h.broadcastEnabled(false)
+        h.visible = emptyList()
+        h.broadcastPeers()
+        h.broadcastEnabled(true)
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        assertEquals("", h.finder.connectedBluetoothAddress)
+        assertEquals(0, identified)
+        assertEquals(1, joined)
+        val generation = h.finder.connectionGeneration
+
+        h.finder.beginBluetoothExchange("64:FE:15:28:C8:E4")
+        h.visible = listOf(h.car.apply { status = WifiP2pDevice.CONNECTED })
+        h.broadcastPeers()
+        h.finder.connectByName("CarLife")
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true))
+        h.groups.last().onGroupInfoAvailable(group)
+        assertEquals(h.car.deviceAddress, h.finder.connectedPeerAddress)
+        assertEquals("64:FE:15:28:C8:E4", h.finder.connectedBluetoothAddress)
+        assertEquals(1, identified)
+        assertEquals(1, joined)
+        assertEquals(generation, h.finder.connectionGeneration)
+    }
+
+    @Test
+    fun aNewGroupCannotReuseThePreviousConnectionsGeneration() = check { h ->
+        h.broadcastEnabled(false)
+        h.car.status = WifiP2pDevice.CONNECTED
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        h.groups.last().onGroupInfoAvailable(group)
+        val first = h.finder.connectionGeneration
+        assertTrue(h.finder.joined)
+
+        // The replacement can reuse the very same interface and IP.
+        h.broadcastConnection(false)
+        assertFalse(h.finder.joined)
+        h.broadcastPeers()
+        h.broadcastConnection(true)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        assertTrue(h.finder.connectionGeneration > first)
+        val second = h.finder.connectionGeneration
+
+        // Also detect owner changes when Android omitted a disconnected event.
+        val other = WifiP2pDevice().apply { deviceAddress = "02:00:00:00:00:99" }
+        `when`(group.owner).thenReturn(other)
+        h.broadcastConnection(true)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.connectionGeneration > second)
+    }
+
+    @Test
+    fun losingAKnownClientInvalidatesItsCommandEvenWhenThePhoneRemainsGroupOwner() = check { h ->
+        h.broadcastEnabled(false)
+        h.car.status = WifiP2pDevice.CONNECTED
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        fun refresh(group: WifiP2pGroup) {
+            h.broadcastConnection(true)
+            h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
+            h.groups.last().onGroupInfoAvailable(group)
+        }
+        val group = mock(WifiP2pGroup::class.java)
+        val phone = WifiP2pDevice().apply { deviceAddress = "02:00:00:00:00:90" }
+        `when`(group.owner).thenReturn(phone)
+        `when`(group.clientList).thenReturn(listOf(h.car))
+        refresh(group)
+        assertEquals(h.car.deviceAddress, h.finder.connectedPeerAddress)
+        val first = h.finder.connectionGeneration
+        `when`(group.clientList).thenReturn(emptyList())
+        refresh(group)
+        assertEquals("", h.finder.connectedPeerAddress)
+        assertTrue(h.finder.connectionGeneration > first)
+        val other = WifiP2pDevice().apply {
+            deviceName = "CarLife"
+            deviceAddress = "02:00:00:00:00:91"
+            status = WifiP2pDevice.CONNECTED
+        }
+        h.visible = listOf(other)
+        h.broadcastPeers()
+        `when`(group.clientList).thenReturn(listOf(other))
+        refresh(group)
+        assertEquals(other.deviceAddress, h.finder.connectedPeerAddress)
+        assertTrue(h.finder.connectionGeneration > first)
+    }
+
+    @Test
+    fun anUnidentifiedExistingGroupDoesNotPublishItsNetworkName() = check { h ->
+        h.broadcastEnabled(false)
+        h.visible = emptyList()
+        h.broadcastPeers()
+        h.broadcastEnabled(true)
+        var name: String? = null
+        h.finder.onJoined = { name = it.name }
+        DiagLog.clear()
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        `when`(group.networkName).thenReturn("Foreign private network")
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        assertEquals("", name)
+        assertFalse(DiagLog.entries.value.any { it.text.contains("Foreign private network") })
+    }
+
+    @Test
+    fun rememberedWifiNameCannotAttributeTheOldGroupToANewBluetoothCaller() = check { h ->
+        h.broadcastEnabled(false)
+        h.car.status = WifiP2pDevice.CONNECTED
+        h.broadcastEnabled(true)
+        h.finder.beginBluetoothExchange("22:33:44:55:66:77")
+        // prefs.carP2pName still names the earlier car. The new caller has not
+        // announced a group, so it supplies no proof of ownership of this one.
+        h.broadcastPeers()
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        assertEquals("", h.finder.connectedBluetoothAddress)
+        h.finder.connectByName("Other car group")
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true))
+        h.groups.last().onGroupInfoAvailable(group)
+        assertEquals("", h.finder.connectedBluetoothAddress)
+    }
+
+    @Test
+    fun aNewBluetoothCallerCannotSearchUsingThePreviousCallersSavedName() = check { h ->
+        h.broadcastEnabled(false)
+        h.car.status = WifiP2pDevice.AVAILABLE
+        h.broadcastEnabled(true)
+        h.finder.beginBluetoothExchange("22:33:44:55:66:77")
+        h.broadcastPeers()
+        h.finder.carReady()
+        assertFalse(h.finder.inSight("CarLife"))
+        verify(h.manager, never()).connect(any(), any(), any())
+
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.finder.connectByName("CarLife")
+            verify(h.manager).connect(any(), any(), any())
+        }
+    }
+
+    @Test
+    fun pinningTheJoinedCarRejectsAnotherCandidatesEarlierPeerAndServiceAnnouncement() = check { h ->
+        val a = "64:FE:15:28:C8:E4"
+        h.broadcastEnabled(false)
+        h.finder.beginBluetoothExchange(a)
+        h.finder.connectByName("CarLife")
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(h.car)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertEquals(a, h.finder.connectedBluetoothAddress)
+
+        // B was allowed before A's first successful projection pins A.
+        h.finder.beginBluetoothExchange("22:33:44:55:66:77")
+        h.finder.connectByName("_CarB")
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn(a)
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        h.broadcastConnection(false)
+        val b = WifiP2pDevice().apply {
+            deviceName = "_CarB"
+            deviceAddress = "02:00:00:00:00:99"
+            status = WifiP2pDevice.AVAILABLE
+        }
+        h.visible = listOf(b)
+        h.broadcastPeers()
+        assertFalse(h.finder.inSight("_CarB"))
+        verify(h.manager, never()).connect(any(), any(), any())
+
+        // Discovery still runs with no trusted name, but B's old service is rejected.
+        h.finder.search()
+        advanceTimeBy(15_000)
+        runCurrent()
+        h.serviceListener.onDnsSdServiceAvailable("_CarB", "_tcp", b)
+        verify(h.manager, never()).connect(any(), any(), any())
+        assertFalse(h.finder.joined)
+    }
+
+    @Test
+    fun thePinnedBluetoothCallerCanAnnounceAnExactServiceOnANewWifiAddress() = check { h ->
+        val a = "64:FE:15:28:C8:E4"
+        h.broadcastEnabled(false)
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn(a)
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        h.visible = emptyList()
+        h.broadcastEnabled(true)
+        h.finder.beginBluetoothExchange(a)
+        h.finder.connectByName("_CarA")
+        h.finder.search()
+        advanceTimeBy(15_000)
+        runCurrent()
+        val rotated = WifiP2pDevice().apply {
+            deviceName = "Generic head unit"
+            deviceAddress = "02:00:00:00:00:99"
+            status = WifiP2pDevice.AVAILABLE
+        }
+        h.serviceListener.onDnsSdServiceAvailable("_Car", "_tcp", rotated)
+        verify(h.manager, never()).connect(any(), any(), any())
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.serviceListener.onDnsSdServiceAvailable("_CarA", "_tcp", rotated)
+            val config = ArgumentCaptor.forClass(WifiP2pConfig::class.java)
+            verify(h.manager).connect(any(), config.capture(), any())
+            assertEquals(rotated.deviceAddress, config.value.deviceAddress)
+        }
+
+        h.broadcastConnection(true)
+        val group = mock(WifiP2pGroup::class.java)
+        `when`(group.owner).thenReturn(rotated)
+        h.groups.last().onGroupInfoAvailable(group)
+        assertTrue(h.finder.joined)
+        assertEquals(a, h.finder.connectedBluetoothAddress)
+        assertEquals(rotated.deviceAddress, h.finder.connectedPeerAddress)
+    }
+
+    @Test
+    fun aNewBluetoothCallerCannotReuseThePreviousCallersSavedService() = check { h ->
+        h.broadcastEnabled(false)
+        `when`(h.prefs.carP2pName).thenReturn("_CarA")
+        h.visible = emptyList()
+        h.broadcastEnabled(true)
+        h.finder.beginBluetoothExchange("22:33:44:55:66:77")
+        h.finder.search()
+        advanceTimeBy(15_000)
+        runCurrent()
+        h.serviceListener.onDnsSdServiceAvailable("_CarA", "_tcp", h.car)
+        verify(h.manager, never()).connect(any(), any(), any())
+    }
+
     private fun check(block: suspend TestScope.(Harness) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
@@ -674,7 +1030,7 @@ class CarFinderRecoveryTest {
     private class Harness(scope: TestScope) {
         val manager = mock(WifiP2pManager::class.java)
         private val context = mock(Context::class.java)
-        private val prefs = mock(Prefs::class.java)
+        val prefs = mock(Prefs::class.java)
         private val channel = mock(WifiP2pManager.Channel::class.java)
         val cancels = mutableListOf<WifiP2pManager.ActionListener>()
         val removals = mutableListOf<WifiP2pManager.ActionListener>()
@@ -689,6 +1045,7 @@ class CarFinderRecoveryTest {
         var visible: List<WifiP2pDevice> = listOf(car)
         private lateinit var receiver: BroadcastReceiver
         val finder: CarFinder
+        lateinit var serviceListener: WifiP2pManager.DnsSdServiceResponseListener
 
         init {
             `when`(context.getSystemService(Context.WIFI_P2P_SERVICE)).thenReturn(manager)
@@ -713,6 +1070,8 @@ class CarFinderRecoveryTest {
                 .`when`(manager).requestConnectionInfo(any(), any())
             doAnswer { networks += it.getArgument<WifiP2pManager.NetworkInfoListener>(1); null }
                 .`when`(manager).requestNetworkInfo(any(), any())
+            doAnswer { serviceListener = it.getArgument(1); null }
+                .`when`(manager).setDnsSdResponseListeners(any(), any(), any())
             finder = CarFinder(context, prefs, scope.backgroundScope)
         }
 

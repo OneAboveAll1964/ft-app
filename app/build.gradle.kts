@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 169
-        versionName = "3.9.55-xa60-trusted-reconnect"
+        versionCode = 170
+        versionName = "3.9.56-baidu-ft-button"
     }
 
     signingConfigs {

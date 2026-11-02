@@ -47,8 +47,6 @@
     <string name="aa_help_4_body">FT ب خۆ دێ پێڤە گرێ دەت. پشتی ریستارتکرنا مۆبایلی یان نویبوونا Android Auto، پێنگاڤێن 1، 3 و 4 جارەکا دی بکە.</string>
     <string name="aa_match_car">ب قەبارێ شاشەیا ترومبێلێ نیشان بدە</string>
     <string name="aa_controls_left">کونترۆلێن وی بدانە لایێ چەپێ</string>
-    <string name="aa_compact_return_button">دوگمەیا بچووک یا FT</string>
-    <string name="aa_compact_return_button_body">ل سەر Android Auto دوگمەیەکا زڤڕینێ یا بچووک و بازنەیی و تاری بکاربینە. دەمێ ڤەبژاردە دمرینیت، دوگمەیا سەرەتایی دمینیت.</string>
     <string name="aa_return_to_ft">زڤڕین بۆ FT</string>
     <string name="aa_cluster_navigation">رێنیشاندان ل سەر پانێلا ئامیران</string>
     <string name="aa_cluster_navigation_body">زڤڕینێن Android Auto ل سەر پانێلا ئامیران یان HUD نیشان بدە، ئەگەر ترومبێل پشتەڤانیێ بکەت. گوهۆڕین دەستبجێ جێبەجێ دبن.</string>
@@ -61,6 +59,12 @@
     <string name="action_allow">رێ بدە</string>
     <string name="action_back">زڤرین</string>
     <string name="action_cancel">بەتالکرن</string>
+    <string name="car_remembered">ترۆمبێلا هاتیە هەلگرتن بۆ Baidu Connect / CarLife</string>
+    <string name="car_remembered_empty">ترۆمبێل دێ پشتی دانیشتنا ئێکەم یا سەرکەفتی یا نیشاندانا شاشەیێ ب Wi-Fi Direct هێتە هەلگرتن.</string>
+    <string name="car_change">گوهۆڕینا ترۆمبێلێ</string>
+    <string name="car_change_about">ترۆمبێلا هاتیە هەلگرتن ژ بیر بکرێت و FT بهێتە گرتن؟ بۆ بکارئینانا ترۆمبێلەکا دی، FT جارەکا دی ڤەکە و ب Baidu Connect / CarLife پەیوەندیێ پێ بکە.</string>
+    <string name="show_other_devices_logs">نیشاندانا ئامیرێن دی د تۆماران دا</string>
+    <string name="show_other_devices_logs_about">ئامیرێن نێزیک و خزمەتگوزاریێن وان د تۆمارێن دۆزینا کێشەیێن Baidu Connect / CarLife دا تێخە. ب بنەرەت گرتیە: بتنێ ترۆمبێل و روودانێن پەیوەندیێ دهێنە نیشاندان. دۆزینا ئامیران و هەلبژارتنا ترۆمبێلێ ناگوهۆڕیت.</string>
     <string name="action_close">گرتن</string>
     <string name="action_copy">کۆپیکرن</string>
     <string name="action_next">پێشڤە</string>
@@ -409,6 +413,8 @@
     <string name="corner_top_right">سەرێ ڕاستێ</string>
     <string name="corner_bottom_left">بنێ چەپێ</string>
     <string name="corner_bottom_right">بنێ ڕاستێ</string>
+    <string name="corner_above_microphone">ل سەر مایکرۆفۆنێ</string>
+    <string name="corner_above_microphone_about">بۆ Android Auto ب پانێلا تەنشتی یا ستوونی. دوگمەیا FT ل سەر مایکرۆفۆنێ و لیستا ئەپان، ل لایێ پانێلێ دەرکەڤیت. ل شاشێن دی ل بنێ چەپێ دەرکەڤیت.</string>
     <string name="connect_section">دەمێ ترومبێل گرێ ددەت</string>
     <string name="look_default_buttons">دوگمێن بنەڕەتی بزڤڕینە</string>
     <string name="sound_music_section">مۆزیک</string>

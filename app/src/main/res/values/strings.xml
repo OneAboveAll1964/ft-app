@@ -48,8 +48,6 @@
     <string name="aa_help_4_body">FT connects to it by itself. After the phone restarts or Android Auto updates, do steps 1, 3 and 4 again.</string>
     <string name="aa_match_car">Draw at the car\'s own size</string>
     <string name="aa_controls_left">Put its controls on the left</string>
-    <string name="aa_compact_return_button">Compact FT button</string>
-    <string name="aa_compact_return_button_body">Use a small dark round return button over Android Auto. Off keeps the original button.</string>
     <string name="aa_return_to_ft">Return to FT</string>
     <string name="aa_cluster_navigation">Directions on the instrument cluster</string>
     <string name="aa_cluster_navigation_body">Show Android Auto turns on the instrument cluster or HUD, if the car supports it. Changes take effect immediately.</string>
@@ -62,6 +60,12 @@
     <string name="action_allow">Allow</string>
     <string name="action_back">Back</string>
     <string name="action_cancel">Cancel</string>
+    <string name="car_remembered">Remembered car for Baidu Connect / CarLife</string>
+    <string name="car_remembered_empty">The car will be remembered after its first successful Wi-Fi Direct projection session.</string>
+    <string name="car_change">Change car</string>
+    <string name="car_change_about">Forget the remembered car and stop FT? To use another car, switch FT on again and connect it through Baidu Connect / CarLife.</string>
+    <string name="show_other_devices_logs">Show other devices in logs</string>
+    <string name="show_other_devices_logs_about">Include nearby devices and their services in Baidu Connect / CarLife diagnostics. Off by default: only the car and connection events are shown. Does not change device discovery or car selection.</string>
     <string name="action_close">Close</string>
     <string name="action_copy">Copy</string>
     <string name="action_next">Next</string>
@@ -186,7 +190,7 @@
     <string name="step_wifi_on">WiFi on</string>
     <string name="step_wifi_needs_location">WiFi Direct needs location on</string>
     <string name="step_car_found">Car found</string>
-    <string name="step_waiting_bt">Waiting for the car over Bluetooth</string>
+    <string name="step_waiting_bt">Waiting for CarLife to respond over Bluetooth</string>
     <string name="step_wifi_direct_connected">WiFi Direct connected</string>
     <string name="step_joining">Joining %1$s</string>
     <string name="step_asking_car">Asking the car to turn it on</string>
@@ -418,6 +422,8 @@
     <string name="corner_top_right">Top right</string>
     <string name="corner_bottom_left">Bottom left</string>
     <string name="corner_bottom_right">Bottom right</string>
+    <string name="corner_above_microphone">Above microphone</string>
+    <string name="corner_above_microphone_about">For Android Auto with a vertical side panel. Places FT above the microphone and app launcher, following the panel side. Other screens use the bottom left corner.</string>
     <string name="connect_section">When the car connects</string>
     <string name="look_default_buttons">Put the default buttons back</string>
     <string name="sound_music_section">Music</string>

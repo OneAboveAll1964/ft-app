@@ -168,8 +168,11 @@ object DiagSnapshot {
                 else -> "unavailable"
             }
         })
-        val carAddress = runCatching { c.getSharedPreferences("ft", Context.MODE_PRIVATE).getString("carBtAddress", "") }.getOrNull().orEmpty()
-        runCatching { adapter?.bondedDevices?.toList().orEmpty() }.getOrElse { add("paired: error ${it.message}"); emptyList() }.forEach { d ->
+        val prefs = Prefs(c)
+        val carAddress = (if (prefs.carProtocol == CarProtocol.CARLIFE) prefs.carLifeVehicleAddress else "")
+            .ifBlank { prefs.carBtAddress }
+        runCatching { adapter?.bondedDevices?.toList().orEmpty() }.getOrElse { add("paired: error ${it.message}"); emptyList() }
+            .filter { prefs.showOtherDevicesInLogs || carAddress.isNotBlank() && it.address.equals(carAddress, true) }.forEach { d ->
             add(line("paired") {
                 val name = runCatching { d.name }.getOrNull() ?: "?"
                 val address = if (d.address.equals(carAddress, true)) d.address else d.address.substring(0, 8) + ":xx:xx:xx"
@@ -195,7 +198,14 @@ object DiagSnapshot {
     fun audio(c: Context): List<String> = buildList {
         val am = c.getSystemService(AudioManager::class.java)
         add(line("audio") { "mode=${am.mode} music active=${am.isMusicActive} rate=${am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)} frames=${am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)} volume=${am.getStreamVolume(AudioManager.STREAM_MUSIC)}/${am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}" })
-        add(line("outputs") { am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).joinToString { d -> "${d.type}:${d.productName}" + if (d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) "(bt)" else "" } })
+        add(line("outputs") {
+            val prefs = Prefs(c)
+            val known = if (prefs.carProtocol == CarProtocol.CARLIFE) prefs.carLifeVehicleAddress.ifBlank { prefs.carBtAddress } else prefs.carBtAddress
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).joinToString { d ->
+                val name = if (prefs.showOtherDevicesInLogs || known.isNotBlank() && d.address.equals(known, true)) d.productName else "output"
+                "${d.type}:$name" + if (d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) "(bt)" else ""
+            }
+        })
     }
 
     fun codecs(): List<String> = runCatching {

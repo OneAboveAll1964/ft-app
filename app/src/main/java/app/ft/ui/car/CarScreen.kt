@@ -4,6 +4,7 @@ import androidx.compose.ui.unit.sp
 import app.ft.ui.components.FitText
 import app.ft.ui.theme.ownDirection
 import app.ft.ui.components.InkText
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
@@ -14,6 +15,7 @@ import android.content.IntentFilter
 import android.view.SurfaceView
 import android.view.SurfaceHolder
 import app.ft.aa.AaVideoView
+import app.ft.aa.AaDisplayConfig
 import app.ft.aa.AaVideoLayout
 import android.graphics.Rect
 import androidx.compose.animation.AnimatedVisibility
@@ -36,6 +38,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -75,6 +78,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -378,11 +382,16 @@ private fun CarRoot(style: CarStyle) {
             if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || style.aaShowReturnButton)) {
                 // FT163 field log: top-corner taps were intercepted by FT's return pill
                 // rather than reaching small close buttons inside Android Auto.
-                CornerPill(CarOverlayPlacement.corner(style.corner, aa = state.aaOverlay),
-                    compact = state.aaOverlay && style.aaCompactReturnButton) {
+                val returnHome = {
                     view = CarView.LAUNCHER
                     nowPlaying = false
                     CarControls.goHome()
+                }
+                val position = CarOverlayPlacement.corner(style.corner, aa = state.aaOverlay)
+                if (position == CarOverlayPlacement.ABOVE_MICROPHONE) {
+                    AaMicReturnButton(aa, returnHome)
+                } else {
+                    CornerPill(position, onClick = returnHome)
                 }
             }
         }
@@ -421,7 +430,40 @@ private fun ShareWait(pkg: String, forSound: Boolean) {
 }
 
 @Composable
-private fun CornerPill(corner: Int, compact: Boolean = false, onClick: () -> Unit) {
+private fun ReturnButton(
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 48.dp,
+    registerTouchZone: Boolean = true,
+    onClick: () -> Unit
+) {
+    val label = stringResource(R.string.aa_return_to_ft)
+    // The AA picture can be smaller than 48 local dp. Do not expand its touch target
+    // into adjacent AA controls; the registered car touch zone is the exact button.
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        Surface(
+            onClick = onClick,
+            shape = CircleShape,
+            color = Color.Transparent,
+            contentColor = Color(0xFFF1F3F4),
+            modifier = modifier.size(size)
+                .then(if (registerTouchZone) Modifier.touchZone("return-button", slopPx = 0) else Modifier)
+                .semantics {
+                contentDescription = label
+                role = Role.Button
+            }
+        ) {
+            Box(
+                Modifier.fillMaxSize().padding(size / 24).background(Color(0xFF25272A), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("FT", fontSize = (size.value / 3).sp, fontWeight = FontWeight.Medium, modifier = Modifier.clearAndSetSemantics {})
+            }
+        }
+    }
+}
+
+@Composable
+private fun CornerPill(corner: Int, registerTouchZone: Boolean = true, onClick: () -> Unit) {
     val align = when (corner) {
         1 -> AbsoluteAlignment.TopRight
         2 -> AbsoluteAlignment.BottomLeft
@@ -429,39 +471,28 @@ private fun CornerPill(corner: Int, compact: Boolean = false, onClick: () -> Uni
         else -> AbsoluteAlignment.TopLeft
     }
     Box(Modifier.fillMaxSize().padding(CAR_EDGE), contentAlignment = align) {
-        if (compact) {
-            val label = stringResource(R.string.aa_return_to_ft)
-            Surface(
-                onClick = onClick,
-                shape = CircleShape,
-                color = Color.Transparent,
-                contentColor = Color(0xFFF1F3F4),
-                modifier = Modifier.size(48.dp).touchZone("compact-pill", slopPx = 0).semantics {
-                    contentDescription = label
-                    role = Role.Button
-                }
-            ) {
-                Box(
-                    Modifier.fillMaxSize().padding(2.dp).background(Color(0xFF25272A), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("FT", fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clearAndSetSemantics {})
-                }
-            }
-        } else {
-            Surface(
-                onClick = onClick,
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(width = 68.dp, height = CAR_ROW).touchZone("pill")
-            ) {
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = null)
-                    Text("FT", fontWeight = FontWeight.Black)
-                }
-            }
-        }
+        ReturnButton(registerTouchZone = registerTouchZone, onClick = onClick)
+    }
+}
+
+@Composable
+private fun AaMicReturnButton(aa: app.ft.aa.AaState, onClick: () -> Unit) {
+    val display = aa.display
+    if (display == null) {
+        CornerPill(2, onClick = onClick)
+        return
+    }
+    val layout = aaVideoLayout(display)
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = AbsoluteAlignment.TopLeft) {
+        val bounds = CarOverlayPlacement.aboveMicrophone(
+            constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout, display
+        ) ?: return@BoxWithConstraints
+        ReturnButton(
+            modifier = Modifier.absoluteOffset { IntOffset(bounds.left.roundToInt(), bounds.top.roundToInt()) },
+            size = with(density) { bounds.size.toDp() },
+            onClick = onClick
+        )
     }
 }
 
@@ -769,12 +800,17 @@ private fun Tile(modifier: Modifier, spec: TileSpec, onClick: () -> Unit) {
 }
 
 @Composable
+private fun aaVideoLayout(display: AaDisplayConfig): AaVideoLayout {
+    val real by AaVideoSink.frame.collectAsState()
+    val (frameW, frameH) = real ?: app.ft.aa.AaProtocol.standardSize(display.width, display.height)
+    return AaVideoLayout.forFrame(display.width, display.height, frameW, frameH)
+}
+
+@Composable
 private fun AaOverlay(aa: app.ft.aa.AaState, modifier: Modifier = Modifier) {
     val prefs = FTApp.instance.prefs
-    val (fullW, fullH) = app.ft.aa.AaProtocol.standardSize(prefs.aaWidth, prefs.aaHeight)
-    val real by AaVideoSink.frame.collectAsState()
-    val (frameW, frameH) = real ?: (fullW to fullH)
-    val layout = AaVideoLayout.forFrame(prefs.aaWidth, prefs.aaHeight, frameW, frameH)
+    val display = aa.display ?: AaDisplayConfig(prefs.aaWidth, prefs.aaHeight, prefs.aaDensity, prefs.aaControlsLeft)
+    val layout = aaVideoLayout(display)
     DisposableEffect(Unit) { onDispose { AaTouchViewport.bounds = null } }
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
         val ratio = layout.contentWidth.toFloat() / layout.contentHeight
@@ -1000,7 +1036,7 @@ fun CarPreview(style: CarStyle, modifier: Modifier = Modifier, pill: Boolean = f
                 CarBackground(style)
                 Launcher(state, style, preview = true)
                 AnimatedVisibility(visible = pill, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.matchParentSize()) {
-                    CornerPill(style.corner) {}
+                    CornerPill(CarOverlayPlacement.corner(style.corner, aa = false), registerTouchZone = false) {}
                 }
                 Box(
                     Modifier

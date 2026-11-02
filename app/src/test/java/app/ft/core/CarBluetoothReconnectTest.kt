@@ -276,4 +276,39 @@ class CarBluetoothReconnectTest {
         assertEquals(listOf(f.a2dp to f.car), f.requests)
         f.monitor.close()
     }
+
+    @Test fun confirmedCarLifeVehicleCannotBeReplacedByAnotherCarAudioDevice() = runTest {
+        val f = Fixture(this)
+        `when`(f.prefs.carProtocol).thenReturn(CarProtocol.CARLIFE)
+        `when`(f.prefs.carLifeVehicleAddress).thenReturn(f.address)
+        val other = mock(BluetoothDevice::class.java)
+        `when`(other.address).thenReturn("00:11:22:33:44:55")
+        `when`(other.name).thenReturn("Toyota")
+        `when`(other.bondState).thenReturn(BluetoothDevice.BOND_BONDED)
+        val carClass = mock(BluetoothClass::class.java)
+        `when`(carClass.deviceClass).thenReturn(BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO)
+        `when`(other.bluetoothClass).thenReturn(carClass)
+        `when`(f.adapter.bondedDevices).thenReturn(setOf(f.car, other))
+        f.start(); f.connect(); f.connect(device = other)
+        assertEquals("AA:BB:CC:DD:EE:FF", f.address)
+        f.drop(); runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(other); runCurrent()
+        assertEquals(0, f.requests.size)
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.a2dp to f.car), f.requests)
+        f.monitor.close()
+    }
+
+    @Test fun carLifeBindingDoesNotChangeIccoaBluetoothLearning() = runTest {
+        val f = Fixture(this)
+        f.address = ""
+        `when`(f.prefs.carProtocol).thenReturn(CarProtocol.ICCOA)
+        `when`(f.prefs.carLifeVehicleAddress).thenReturn("00:11:22:33:44:55")
+        val carClass = mock(BluetoothClass::class.java)
+        `when`(carClass.deviceClass).thenReturn(BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO)
+        `when`(f.car.bluetoothClass).thenReturn(carClass)
+        f.start(); f.connect()
+        assertEquals("AA:BB:CC:DD:EE:FF", f.address)
+        f.monitor.close()
+    }
 }

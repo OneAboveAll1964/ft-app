@@ -422,7 +422,7 @@ private fun directSteps(
         !radios.location -> StepItem(stringResource(R.string.step_wifi_on), false, hint = stringResource(R.string.step_wifi_needs_location), action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.location()) })
         else -> StepItem(stringResource(R.string.step_wifi_on), true)
     }
-    val carFound = car.btCar != null || car.wifiDirect || connected
+    val carFound = car.carFound
     return listOf(
         bluetooth,
         wifi,

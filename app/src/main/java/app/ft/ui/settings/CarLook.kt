@@ -395,7 +395,7 @@ fun CarCornerSettings(preview: CarPreviewState) {
     val p = FTApp.instance.prefs
     val style by CarStyles.current.collectAsState()
     Section(stringResource(R.string.corner_title), stringResource(R.string.corner_body))
-    val corners = listOf(R.string.corner_top_left, R.string.corner_top_right, R.string.corner_bottom_left, R.string.corner_bottom_right)
+    val corners = listOf(R.string.corner_top_left, R.string.corner_top_right, R.string.corner_bottom_left, R.string.corner_bottom_right, R.string.corner_above_microphone)
     PickSetting(
         stringResource(R.string.corner_place),
         corners.map { Option(stringResource(it)) },
@@ -403,6 +403,9 @@ fun CarCornerSettings(preview: CarPreviewState) {
     ) { index ->
         save { p.aaCorner = index }
         preview.pillTick++
+    }
+    if (style.corner == 4) {
+        Text(stringResource(R.string.corner_above_microphone_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

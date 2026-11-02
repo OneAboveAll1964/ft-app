@@ -58,8 +58,7 @@ data class CarStyle(
     val dayNight: Boolean = false,
     val nightBackground: String = "",
     val nightAccent: Int = 0,
-    val night: Boolean = false,
-    val aaCompactReturnButton: Boolean = false
+    val night: Boolean = false
 ) {
     private val dark: Boolean get() = dayNight && night
 
@@ -139,8 +138,7 @@ object CarStyles {
             tiles = CarStyle.parseTiles(p.carTiles).ifEmpty { CarStyle.parseTiles(CarStyle.DEFAULT_TILES) },
             clock24 = p.carClock24,
             showLink = p.carShowLink,
-            corner = p.aaCorner.coerceIn(0, 3),
-            aaCompactReturnButton = p.aaCompactReturnButton,
+            corner = p.aaCorner.coerceIn(0, CarOverlayPlacement.ABOVE_MICROPHONE),
             aaShowReturnButton = p.aaShowReturnButton,
             photoStamp = if (photo.exists()) photo.lastModified() else 0,
             infoRight = p.carInfoRight,

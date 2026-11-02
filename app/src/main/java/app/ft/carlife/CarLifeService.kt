@@ -91,7 +91,45 @@ data class CarState(
     val usb: Boolean = false,
     val blocked: Int = 0,
     val hotspotClients: List<String>? = null
-)
+) {
+    // Only evidence from this connection attempt counts; saved identity and HFP do not.
+    val carFound: Boolean
+        get() = !btCar.isNullOrBlank() || !carWifi.isNullOrBlank() ||
+            wifiDirect || session !is CarLifeSession.State.Idle
+
+    fun withBluetoothStep(text: String): CarState =
+        if (carFound) this else copy(step = text)
+
+    fun withBluetoothCar(name: String?): CarState = copy(
+        btCar = name,
+        carWifi = if (name != null) null else carWifi,
+        step = if (name != null && !wifiDirect && session is CarLifeSession.State.Idle)
+            "'$name' called over bluetooth" else step
+    )
+
+    // Closing SPP alone is normal during P2P setup. Expire its WiFi announcement
+    // only when the wireless attempt ends. Live BT/group/session evidence remains.
+    fun withWirelessAttemptEnded(): CarState {
+        val current = copy(carWifi = null)
+        return if (!current.carFound) current.copy(step = "Waiting for the car to call over bluetooth") else current
+    }
+
+    fun withSessionState(state: CarLifeSession.State, via: String): CarState = copy(
+        link = via,
+        session = state,
+        refused = if (state !is CarLifeSession.State.Idle) 0 else refused,
+        step = when (state) {
+            is CarLifeSession.State.Linked -> "CarLife connected via $via"
+            is CarLifeSession.State.Negotiated -> "CarLife video configured via $via"
+            is CarLifeSession.State.Projecting -> "CarLife projecting via $via"
+            CarLifeSession.State.Idle -> if (session is CarLifeSession.State.Idle) step else when {
+                wifiDirect -> "WiFi Direct connected"
+                !btCar.isNullOrBlank() || !carWifi.isNullOrBlank() -> "Joining the car WiFi Direct"
+                else -> "Waiting for the car to call over bluetooth"
+            }
+        }
+    )
+}
 
 class CarLifeService : Service() {
     companion object {
@@ -231,6 +269,8 @@ class CarLifeService : Service() {
     private lateinit var carDisplay: CarDisplay
     private val mirror = PhoneMirror()
     private var session: CarLifeSession? = null
+    private var sessionLink: CarLifeLink? = null
+    @Volatile private var wifiCommandGroup: Pair<CarFinder, Long>? = null
     private val navigationPreferenceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "aaClusterNavigation" || key == null) scope.launch { session?.refreshNavigationPreference() }
         if (key == "carSongInfo" || key == null) scope.launch {
@@ -482,7 +522,9 @@ class CarLifeService : Service() {
         CarWirelessSetup(
             send = { bytes -> bt.send(bytes) },
             onCarWifiName = { name -> onCarRaisedWifiDirect(name) },
-            progress = { text -> step(text) },
+            progress = { text ->
+                if (wifiLink?.connected == true) DiagLog.i(tag, text) else step(text)
+            },
             onCarReady = { if (mode == 1 && wifiLink?.connected != true) finder?.carReady() }
         )
     }
@@ -826,7 +868,13 @@ class CarLifeService : Service() {
             ),
             refuse = { socket -> wrongWay(socket) },
             onBusy = { port -> portBusy(port) },
-            onBound = { port -> portBound(port) }
+            onBound = { port -> portBound(port) },
+            onCommandConnected = {
+                // A listener survives group changes. Only a fresh CMD connection
+                // can make a group's projection eligible to confirm its identity.
+                wifiCommandGroup = finder?.takeIf { it.joined }?.let { it to it.connectionGeneration }
+            },
+            admissionDispatcher = Dispatchers.Main.immediate
         )
         wifiLink = l
         _state.update { it.copy(listening = true) }
@@ -879,21 +927,36 @@ class CarLifeService : Service() {
 
     private fun installed(pkg: String): Boolean = runCatching { packageManager.getPackageInfo(pkg, 0); true }.getOrDefault(false)
 
+    private data class VehicleCandidate(val address: String, val name: String, val revision: Int)
+    private val vehicleCandidates = java.util.concurrent.ConcurrentHashMap<String, VehicleCandidate>()
+
     private fun startDirect() {
+        vehicleCandidates.clear()
+        val revision = app.prefs.carLifeVehicleRevision
         wireless.reset()
-        bt.onFrame = { frame -> wireless.feed(frame) }
-        bt.onStep = { text -> step(text) }
-        bt.onCar = { name ->
-            _state.update { it.copy(btCar = name) }
+        bt.onFrame = { frame ->
+            val bound = app.prefs.carLifeVehicleAddress
+            if (bound.isBlank() || bound.equals(bt.carAddress, true)) wireless.feed(frame)
+        }
+        bt.onStep = { text ->
+            DiagLog.i(tag, text)
+            _state.update { it.withBluetoothStep(text) }
+        }
+        bt.onCar = onCar@{ name ->
+            val bound = app.prefs.carLifeVehicleAddress
+            if (name != null && bound.isNotBlank() && !bound.equals(bt.carAddress, true)) return@onCar
+            _state.update { it.withBluetoothCar(name) }
             if (name != null) {
-                step("'$name' called over bluetooth")
+                vehicleCandidates[bt.carAddress.uppercase(java.util.Locale.ROOT)] = VehicleCandidate(bt.carAddress, name, revision)
+                finder?.beginBluetoothExchange(bt.carAddress)
+                DiagLog.i(tag, "'$name' called over bluetooth")
                 wireless.restart()
             }
         }
         step("Waiting for the car to call over bluetooth")
+        startFinder()
         bt.start()
         wakeCarBluetooth()
-        startFinder()
         if (app.prefs.carP2pName.isNotBlank()) finder?.search()
         watchWifiDirect()
     }
@@ -911,11 +974,13 @@ class CarLifeService : Service() {
                 if (wifiLink?.connected == true) continue
                 if (ticks++ % 5 == 0) checkDirectBlockers()
                 askCarAgain()
-                val ip = NetUtil.wifiDirectIpv4(p2pIface)
+                // Only finder may approve a group as the car's transport.
+                // An arbitrary p2p interface can belong to casting or another app.
+                finder?.checkExisting()
+                val ip = if (finder?.joined == true) NetUtil.wifiDirectIpv4(p2pIface) else null
                 val up = _state.value.wifiDirect
                 if (ip != null && !up) {
                     DiagLog.i(tag, "WiFi Direct is up at $ip, picking it up")
-                    finder?.checkExisting()
                     _state.update { it.copy(wifiDirect = true, ip = ip, joinTimedOutSeconds = 0) }
                     wireless.wifiDirectReady(ip)
                     updateBeacon()
@@ -983,11 +1048,14 @@ class CarLifeService : Service() {
         bt.stop()
         bt.onCar = null
         bt.onFrame = null
+        vehicleCandidates.clear()
         wireless.reset()
         p2pIface = null
         carP2pIp = null
         session?.stop()
         session = null
+        sessionLink = null
+        wifiCommandGroup = null
         AaHeadUnitService.onCarMicWanted = null
         AaHeadUnitService.onNavigation = null
         gearForget()
@@ -1018,8 +1086,12 @@ class CarLifeService : Service() {
         if (finder != null) return
         val f = CarFinder(this, app.prefs, scope)
         finder = f
-        f.onJoinTimeout = { seconds -> _state.update { it.copy(joinTimedOutSeconds = seconds) } }
+        f.onJoinTimeout = { seconds ->
+            _state.update { it.copy(joinTimedOutSeconds = seconds).withWirelessAttemptEnded() }
+        }
+        f.onVehicleIdentified = { confirmWirelessVehicle() }
         f.onJoined = { l ->
+            wifiCommandGroup = null
             _state.update { it.copy(joinTimedOutSeconds = 0) }
             DiagLog.i(tag, "on the car's WiFi Direct group ${l.name.ifBlank { l.groupOwnerIp }} (${l.iface ?: "?"}, car ${if (l.weAreOwner) "joined this phone" else "at " + l.groupOwnerIp})")
             step("WiFi Direct connected")
@@ -1047,11 +1119,12 @@ class CarLifeService : Service() {
         f.onRetry = { _, attempt -> step("Still joining the car's WiFi Direct, trying again (try $attempt)") }
         f.onRetryReady = { groupKept -> prepareWirelessRetry(f, groupKept) }
         f.onLeft = {
+            wifiCommandGroup = null
             ipJob?.cancel()
             p2pIface = null
             carP2pIp = null
             wireless.wifiDirectReady(null)
-            _state.update { it.copy(wifiDirect = false) }
+            _state.update { it.copy(wifiDirect = false, ip = null).withWirelessAttemptEnded() }
             updateBeacon()
             step("WiFi Direct dropped, looking for the car again")
             f.search()
@@ -1094,6 +1167,7 @@ class CarLifeService : Service() {
         // never restart the Bluetooth listener after stopLink has closed it.
         currentCoroutineContext().ensureActive()
         if (needsBluetooth && mode == 1 && finder === f && wifiLink?.connected != true) {
+            if (!groupKept) _state.update { it.withWirelessAttemptEnded() }
             bt.start()
             wakeCarBluetooth()
         }
@@ -1111,13 +1185,17 @@ class CarLifeService : Service() {
     private fun onWifiDirectSide(iface: String): Boolean =
         iface.startsWith("p2p") || iface == p2pIface
 
+    private fun carInterface(iface: String): Boolean =
+        finder?.joined == true && !p2pIface.isNullOrBlank() && iface == p2pIface
+
     private fun beaconTargets(): Collection<java.net.InetAddress> {
         if (mode != 1) {
             val out = LinkedHashSet<java.net.InetAddress>(NetUtil.broadcastAddresses { !onWifiDirectSide(it) })
             _state.value.hotspotClients?.forEach { ip -> runCatching { java.net.InetAddress.getByName(ip) }.getOrNull()?.let(out::add) }
             return out
         }
-        val out = LinkedHashSet<java.net.InetAddress>(NetUtil.broadcastAddresses { onWifiDirectSide(it) })
+        if (finder?.joined != true) return emptyList()
+        val out = LinkedHashSet<java.net.InetAddress>(NetUtil.broadcastAddresses { carInterface(it) })
         carP2pIp?.let { ip -> runCatching { java.net.InetAddress.getByName(ip) }.getOrNull()?.let(out::add) }
         return out
     }
@@ -1135,7 +1213,7 @@ class CarLifeService : Service() {
     private fun sameWay(from: java.net.InetAddress): Boolean {
         val iface = NetUtil.interfaceFor(from) ?: return false
         if (iface == "lo") return true
-        return if (mode == 1) onWifiDirectSide(iface) else !onWifiDirectSide(iface)
+        return if (mode == 1) carInterface(iface) else !onWifiDirectSide(iface)
     }
 
     private fun wrongWay(socket: java.net.Socket): String? {
@@ -1144,7 +1222,7 @@ class CarLifeService : Service() {
         val iface = runCatching { java.net.NetworkInterface.getByInetAddress(local)?.name }.getOrNull().orEmpty()
         val side = onWifiDirectSide(iface)
         val why = if (mode == 1) {
-            if (side) null else "The car tried the hotspot, but FT is set to WiFi + BL"
+            if (carInterface(iface)) null else "The connection is outside the car's confirmed WiFi Direct group"
         } else {
             if (!side) null else "The car tried WiFi Direct, but FT is set to Hotspot"
         }
@@ -1168,11 +1246,34 @@ class CarLifeService : Service() {
         _state.update { it.copy(beacon = want) }
     }
 
+    private fun confirmWirelessVehicle() {
+        scope.launch(Dispatchers.Main.immediate) { confirmWirelessVehicleOnMain() }
+    }
+
+    private fun confirmWirelessVehicleOnMain() {
+        if (mode != 1 || wifiLink == null || sessionLink !== wifiLink ||
+            session?.state?.value !is CarLifeSession.State.Projecting) return
+        val found = finder ?: return
+        val commandGroup = wifiCommandGroup ?: return
+        if (!found.joined || commandGroup.first !== found ||
+            commandGroup.second != found.connectionGeneration) return
+        // Group identity may arrive after projection; only its own accepted BT
+        // exchange may confirm it, never a later unrelated caller.
+        val candidate = vehicleCandidates[found.connectedBluetoothAddress.uppercase(java.util.Locale.ROOT)] ?: return
+        val prefs = app.prefs
+        if (candidate.address.equals(prefs.carLifeVehicleAddress, true) &&
+            found.connectedPeerAddress.equals(prefs.carLifeWifiAddress, true)) return
+        if (prefs.confirmCarLifeVehicle(candidate.address, candidate.name, found.connectedPeerAddress, candidate.revision)) {
+            DiagLog.i(tag, "CarLife vehicle confirmed: '${candidate.name}' (${candidate.address})")
+        }
+    }
+
     private fun attachSession(l: CarLifeLink) {
         session?.stop()
         val s = CarLifeSession(this, l, app.prefs, scope)
         s.fullRateStart = mode != 1
         session = s
+        sessionLink = l
         songInfoAt = 0L
         s.allowSongInfo(!songInfoSuspended)
         s.onVideoConfig = { plan -> onVideoConfig(plan) }
@@ -1190,6 +1291,10 @@ class CarLifeService : Service() {
         s.onMusicControl = { play -> carMusic(play) }
         s.onSongInfo = { songInfoAt = android.os.SystemClock.elapsedRealtime() }
         s.onClosed = { reason ->
+            if (l === wifiLink) {
+                wifiCommandGroup = null
+                if (mode == 1) _state.update { it.withWirelessAttemptEnded() }
+            }
             DiagLog.i(tag, "link closed: $reason")
             val sinceSong = android.os.SystemClock.elapsedRealtime() - songInfoAt
             if (songInfoAt > 0 && sinceSong < 3000 && app.prefs.carSongInfo) {
@@ -1214,10 +1319,11 @@ class CarLifeService : Service() {
         stateJob?.cancel()
         stateJob = scope.launch {
             s.state.collect { st ->
-                _state.update { it.copy(link = l.name, session = st, refused = if (st !is CarLifeSession.State.Idle) 0 else it.refused) }
+                _state.update { it.withSessionState(st, l.name) }
                 updateBeacon()
                 if (st is CarLifeSession.State.Projecting && !mediaReady) {
                     mediaReady = true
+                    confirmWirelessVehicle()
                     routePlayer()
                     startSoundWatch()
                     scope.launch {
@@ -1382,19 +1488,21 @@ class CarLifeService : Service() {
     private fun triggerAaWireless() {
         val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
         val bonded = runCatching { adapter?.bondedDevices?.toList() }.getOrNull().orEmpty()
-        val wantAddress = app.prefs.carBtAddress.trim()
+        val locked = app.prefs.carLifeVehicleAddress
+        val wantAddress = locked.ifBlank { app.prefs.carBtAddress }.trim()
         val want = app.prefs.carBtName.trim()
         val byAddress = bonded.firstOrNull { d -> wantAddress.isNotEmpty() && d.address.equals(wantAddress, true) }
-        val byName = bonded.firstOrNull { d -> want.isNotEmpty() && runCatching { d.name }.getOrNull()?.contains(want, true) == true }
-        val byClass = bonded.filter { d -> runCatching { d.bluetoothClass?.deviceClass }.getOrNull() == android.bluetooth.BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO }
+        val byName = bonded.firstOrNull { d -> locked.isBlank() && want.isNotEmpty() && runCatching { d.name }.getOrNull()?.contains(want, true) == true }
+        val byClass = bonded.filter { d -> locked.isBlank() && runCatching { d.bluetoothClass?.deviceClass }.getOrNull() == android.bluetooth.BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO }
         val device = byAddress ?: byName ?: byClass.singleOrNull()
         DiagLog.i(tag, "car for Android Auto over bluetooth: " + when {
             byAddress != null -> "the car that called FT (${byAddress.address})"
+            locked.isNotBlank() -> "none, the confirmed car is not paired"
             byName != null -> "the paired device named like '$want'"
             byClass.size == 1 -> "the only paired device that says it is a car"
             byClass.size > 1 -> "none, ${byClass.size} paired devices say they are cars and FT does not know which one"
             else -> "none, no paired device says it is a car and FT has not heard from one yet"
-        } + " (paired: ${bonded.joinToString { d -> "'${runCatching { d.name }.getOrNull() ?: "?"}' class ${runCatching { Integer.toHexString(d.bluetoothClass?.deviceClass ?: 0) }.getOrNull()}" }})")
+        } + if (app.prefs.showOtherDevicesInLogs) " (paired: ${bonded.joinToString { d -> "'${runCatching { d.name }.getOrNull() ?: "?"}' class ${runCatching { Integer.toHexString(d.bluetoothClass?.deviceClass ?: 0) }.getOrNull()}" }})" else "")
         if (device == null) {
             DiagLog.w(tag, "no bonded bluetooth device to hand Android Auto")
             return
@@ -1523,7 +1631,8 @@ class CarLifeService : Service() {
             val viewport = AaTouchViewport.bounds ?: return
             if (action == CarTouch.DOWN) touchBeside = !viewport.contains(x, y)
             if (touchBeside) return
-            val point = viewport.map(x, y, p.aaWidth, p.aaHeight)
+            val display = aa.displayConfig
+            val point = viewport.map(x, y, display?.width ?: p.aaWidth, display?.height ?: p.aaHeight)
             aa.sendTouch(point.first, point.second, action)
             return
         }
@@ -1556,8 +1665,10 @@ class CarLifeService : Service() {
     private fun carBtDevice(): android.bluetooth.BluetoothDevice? {
         val a = (getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter ?: return null
         val bonded = runCatching { a.bondedDevices?.toList() }.getOrNull().orEmpty()
-        val want = app.prefs.carBtAddress.trim()
+        val locked = app.prefs.carLifeVehicleAddress.orEmpty()
+        val want = locked.ifBlank { app.prefs.carBtAddress }.trim()
         if (want.isNotEmpty()) bonded.firstOrNull { it.address.equals(want, true) }?.let { return it }
+        if (locked.isNotBlank()) return null
         val name = app.prefs.carBtName.trim()
         if (name.isNotEmpty()) {
             bonded.firstOrNull { runCatching { it.name }.getOrNull()?.contains(name, true) == true }?.let { return it }
@@ -1569,7 +1680,7 @@ class CarLifeService : Service() {
         scope.launch {
             btAudio.open()
             delay(1500)
-            val car = btAudio.theCar(app.prefs.carBtName, app.prefs.carBtAddress) ?: carBtDevice()
+            val car = btAudio.theCar(app.prefs.carBtName, app.prefs.carLifeVehicleAddress.orEmpty().ifBlank { app.prefs.carBtAddress }, app.prefs.carLifeVehicleAddress.orEmpty().isNotBlank()) ?: carBtDevice()
             if (car == null) {
                 DiagLog.i(tag, "FT does not know which paired device is the car, so it cannot wake it over bluetooth")
                 return@launch
@@ -1595,6 +1706,8 @@ class CarLifeService : Service() {
         app.prefs.carP2pName = name
         _state.update { it.copy(carWifi = name) }
         if (wifiLink?.connected == true) {
+            // Refresh identity without reconnecting or regressing the projection status.
+            finder?.connectByName(name)
             DiagLog.i(tag, "already connected to the car, leaving WiFi Direct alone")
             return
         }
@@ -1779,7 +1892,11 @@ class CarLifeService : Service() {
         val stream = android.media.AudioManager.STREAM_MUSIC
         val volume = runCatching { "${am.getStreamVolume(stream)}/${am.getStreamMaxVolume(stream)}" }.getOrDefault("?")
         val bluetooth = runCatching {
-            am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }?.productName?.toString()
+            am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }?.let { device ->
+                val known = app.prefs.carLifeVehicleAddress.ifBlank { app.prefs.carBtAddress }
+                if (app.prefs.showOtherDevicesInLogs || known.isNotBlank() && device.address.equals(known, true))
+                    device.productName.toString() else "Bluetooth audio"
+            }
         }.getOrNull()
         val route = if (CarPlayer.toCar || !app.prefs.soundOverBluetooth) "the CarLife sound channel" else "bluetooth"
         return "${CarAudioBus.describe()}, sound goes over $route, phone media volume $volume" +
@@ -2122,7 +2239,8 @@ class CarLifeService : Service() {
         val playing = btAudio.somethingIsPlaying()
         if (playing != null) {
             val who = try {
-                playing.name ?: playing.address
+                if (app.prefs.showOtherDevicesInLogs || playing.address.equals(app.prefs.carLifeVehicleAddress.orEmpty().ifBlank { app.prefs.carBtAddress }, true))
+                    playing.name ?: playing.address else "Bluetooth audio device"
             } catch (_: SecurityException) {
                 "car"
             }
@@ -2131,7 +2249,7 @@ class CarLifeService : Service() {
             DiagLog.i(tag, "'$who' is already playing this phone's sound over bluetooth, so FT will not send it again")
             return true
         }
-        val car = btAudio.theCar(app.prefs.carBtName, app.prefs.carBtAddress)
+        val car = btAudio.theCar(app.prefs.carBtName, app.prefs.carLifeVehicleAddress.orEmpty().ifBlank { app.prefs.carBtAddress }, app.prefs.carLifeVehicleAddress.orEmpty().isNotBlank())
         if (car != null && btAudio.askCarToPlay(car)) {
             restorePhone()
             return true
@@ -2586,6 +2704,8 @@ class CarLifeService : Service() {
                 } else {
                     @Suppress("DEPRECATION") i.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE)
                 }
+                val known = app.prefs.carLifeVehicleAddress.orEmpty().ifBlank { app.prefs.carBtAddress }
+                if (!app.prefs.showOtherDevicesInLogs && (known.isBlank() || device?.address?.equals(known, true) != true)) return
                 val who = runCatching { device?.name }.getOrNull() ?: device?.address ?: "a device"
                 val what = if (i.action == android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED) "audio" else "calls"
                 val state = when (i.getIntExtra(android.bluetooth.BluetoothProfile.EXTRA_STATE, -1)) {
