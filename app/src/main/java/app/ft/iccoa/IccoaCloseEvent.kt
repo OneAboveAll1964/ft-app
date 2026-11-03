@@ -10,14 +10,14 @@ package app.ft.iccoa
  * REQUIRE_NORMAL_PIN: the authenticated OEM Quick reply explicitly requires
  * a new Normal Auth PIN. This is never a transport-recovery request.
  */
-internal enum class IccoaCloseAction {
+enum class IccoaCloseAction {
     STOP,
     RETRY_TRANSPORT,
     REQUIRE_NORMAL_PIN
 }
 
 /** One typed event; message is diagnostic text, never a machine state code. */
-internal data class IccoaCloseEvent(
+data class IccoaCloseEvent(
     val message: String,
     val action: IccoaCloseAction = IccoaCloseAction.STOP
 )
