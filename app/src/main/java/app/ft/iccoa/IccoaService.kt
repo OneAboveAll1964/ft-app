@@ -138,6 +138,10 @@ class IccoaService : Service() {
                 // WGS84 is the Android API contract; confirm actual HU values on-road.
                 coordinatesUnit = "ANDROID_LOCATION_WGS84",
                 speedRaw = fix.speedRaw, headingRaw = fix.headingRaw,
+                speedKmh = IccoaGpsUnits.speedKmh(fix.speedRaw),
+                headingDegrees = IccoaGpsUnits.headingDegrees(fix.headingRaw),
+                speedUnit = "ANDROID_LOCATION_MPS_FLOORED",
+                headingUnit = "ANDROID_LOCATION_DEGREES_FLOORED",
                 satellitesUsed = fix.satellitesUsed, satellitesVisible = fix.satellitesVisible,
                 deviceTimestampRaw = fix.timestampRaw
             ))
