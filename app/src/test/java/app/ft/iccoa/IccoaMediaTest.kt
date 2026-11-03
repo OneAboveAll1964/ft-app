@@ -241,13 +241,34 @@ class IccoaMediaTest {
         }
     }
 
+    @Test fun rtspMalformedMessageStopsWhileSocketEofAllowsRecovery() {
+        for (malformed in listOf(false, true)) {
+            val listener = ServerSocket(0)
+            val car = Socket("127.0.0.1", listener.localPort).apply { soTimeout = 3000 }
+            val phone = listener.accept(); listener.close()
+            val cause = CompletableFuture<IccoaCloseReason>()
+            val rtsp = IccoaRtsp(phone, {}, {}, {}, { _, reason -> cause.complete(reason) })
+            val worker = Thread { rtsp.run() }.apply { start() }
+            try {
+                IccoaRtsp.read(DataInputStream(car.getInputStream()))
+                if (malformed) {
+                    car.getOutputStream().write("OPTIONS * RTSP/1.0\r\nCSeq: 1\r\nCSeq: 2\r\n\r\n".toByteArray())
+                } else car.shutdownOutput()
+                assertEquals(if (malformed) IccoaCloseReason.FAILED else IccoaCloseReason.TRANSPORT_FAILURE,
+                    cause.get(3, TimeUnit.SECONDS))
+                worker.join(3000)
+                assertFalse(worker.isAlive)
+            } finally { rtsp.close(); car.close(); worker.join(3000) }
+        }
+    }
+
     @Test fun fakeCarCompletesWfdNegotiationAndClosesOnce() {
         val listener = ServerSocket(0)
         val car = Socket("127.0.0.1", listener.localPort).apply { soTimeout = 3000 }
         val phone = listener.accept(); listener.close()
         val played = CompletableFuture<IccoaVideoConfig>()
         var closes = 0
-        val rtsp = IccoaRtsp(phone, { played.complete(it) }, {}, {}, { closes++ })
+        val rtsp = IccoaRtsp(phone, { played.complete(it) }, {}, {}, { _, _ -> closes++ })
         val worker = Thread { rtsp.run() }.apply { start() }
         try {
             val input = DataInputStream(car.getInputStream())

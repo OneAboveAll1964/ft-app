@@ -43,23 +43,9 @@ internal class IccoaRememberedCar(context: Context) {
 
     fun select(peers: List<IccoaPeer>, scanComplete: Boolean): IccoaPeer? {
         val address = prefs.getString("address", "").orEmpty()
-        if (address.isBlank()) return null
-        val direct = peers.filter { it.connectable && it.address.equals(address, ignoreCase = true) }
-        if (direct.size == 1 && direct.single().hint) return direct.single()
         val token = prefs.getString("receiverToken", "").orEmpty()
-        if (token.isNotBlank()) {
-            // Scan may still contain several earlier rotating addresses.
-            // Select only the freshest marker from this session; a public
-            // marker never grants access without the pinned OEM ECDSA proof.
-            val recent = IccoaReceiverCandidate.select(peers, token, SystemClock.elapsedRealtime())
-            if (recent != null) return recent
-        }
-        // Legacy fallback for receivers with a stable, non-empty advertised name.
         val name = prefs.getString("name", "").orEmpty()
-        if (!scanComplete || name.isBlank()) return null
-        val matching = peers.filter {
-            it.connectable && it.hint && it.name.trim().equals(name, ignoreCase = true)
-        }
-        return matching.singleOrNull()
+        return IccoaReceiverCandidate.selectRemembered(peers, address, name, token,
+            scanComplete, SystemClock.elapsedRealtime())
     }
 }

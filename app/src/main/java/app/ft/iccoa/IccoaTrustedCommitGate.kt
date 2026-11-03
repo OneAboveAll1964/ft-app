@@ -1,9 +1,9 @@
 package app.ft.iccoa
 
 /**
- * Persist a remembered PIN only when both cryptographic authentication
- * confirmation has been sent AND the car has opened its authenticated CONTROL
- * lane. A transmitted AuthConfirm alone is not evidence of car acceptance.
+ * Persist the OEM car public key only when both cryptographic authentication
+ * confirmation has been sent AND an encrypted frame from the physical CONTROL
+ * lane has passed session-key authentication. A transmitted AuthConfirm alone is not evidence of car acceptance.
  */
 internal class IccoaTrustedCommitGate {
     private var confirmSent = false
@@ -15,7 +15,7 @@ internal class IccoaTrustedCommitGate {
         return takeIfReady()
     }
 
-    @Synchronized fun onControlReady(): Boolean {
+    @Synchronized fun onAuthenticatedControl(): Boolean {
         controlReady = true
         return takeIfReady()
     }

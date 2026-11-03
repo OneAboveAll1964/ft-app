@@ -12,23 +12,23 @@ class IccoaTrustedCommitGateTest {
     @Test fun authenticatedControlMustBeOpenedAfterAuthConfirm() {
         val gate = IccoaTrustedCommitGate()
         assertFalse(gate.onConfirmSent())
-        assertTrue(gate.onControlReady())
-        assertFalse(gate.onControlReady())
+        assertTrue(gate.onAuthenticatedControl())
+        assertFalse(gate.onAuthenticatedControl())
         assertFalse(gate.onConfirmSent())
     }
 
     @Test fun controlCanRaceAheadOfConfirmationWithoutLosingCommit() {
         val gate = IccoaTrustedCommitGate()
-        assertFalse(gate.onControlReady())
+        assertFalse(gate.onAuthenticatedControl())
         assertTrue(gate.onConfirmSent())
         assertFalse(gate.onConfirmSent())
     }
 
-    @Test fun cancellationBeforeBothSignalsCannotStoreAPin() {
+    @Test fun cancellationBeforeBothSignalsCannotStoreAKey() {
         val gate = IccoaTrustedCommitGate()
         assertFalse(gate.onConfirmSent())
         gate.cancel()
-        assertFalse(gate.onControlReady())
+        assertFalse(gate.onAuthenticatedControl())
         assertFalse(gate.onConfirmSent())
     }
 }

@@ -24,7 +24,7 @@ internal class IccoaMediaTransport(
     private val onKeyframe: () -> Unit,
     private val onTouch: (CarTouch) -> Unit,
     private val onKey: (Int) -> Unit,
-    private val onClosed: (String) -> Unit
+    private val onClosed: (String, IccoaCloseReason) -> Unit
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val rtpPacketCount = AtomicLong(0)
@@ -62,14 +62,14 @@ internal class IccoaMediaTransport(
             }
             executor.execute {
                 try { inputServer!!.run() }
-                catch (e: Exception) { if (!closed.get()) fail("UIBC 4321: ${e.javaClass.simpleName}") }
+                catch (e: Exception) { if (!closed.get()) fail("UIBC 4321: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e)) }
             }
             executor.execute { output() }
             watchdog.scheduleAtFixedRate({
                 val started = writingAt
                 if (started > 0 && System.nanoTime() - started > TimeUnit.SECONDS.toNanos(5)) {
                     runCatching { videoSocket?.close() }
-                    fail("RTP write timed out")
+                    fail("RTP write timed out", IccoaCloseReason.TRANSPORT_FAILURE)
                 }
             }, 1, 1, TimeUnit.SECONDS)
         } catch (e: Exception) { close(); throw e }
@@ -85,7 +85,7 @@ internal class IccoaMediaTransport(
                 try { handler(socket) } finally { runCatching { socket.close() } }
                 return
             }
-        } catch (e: Exception) { if (!closed.get()) fail("RTSP listener 7236: ${e.javaClass.simpleName}") }
+        } catch (e: Exception) { if (!closed.get()) fail("RTSP listener 7236: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e)) }
     }
 
     private fun play(config: IccoaVideoConfig) {
@@ -110,7 +110,7 @@ internal class IccoaMediaTransport(
             }
             DiagLog.i("ICCOA", "WFD PLAY ${config.width}x${config.height}@${config.fps}; RTP/TCP ${config.rtpPort}")
             onPlay(config)
-        } catch (e: Exception) { runCatching { socket.close() }; fail("RTP: ${e.javaClass.simpleName}") }
+        } catch (e: Exception) { runCatching { socket.close() }; fail("RTP: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e)) }
     }
 
     fun configure(bytes: ByteArray) {
@@ -199,7 +199,7 @@ internal class IccoaMediaTransport(
             }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-        } catch (e: Exception) { if (!closed.get()) fail("Media output: ${e.javaClass.simpleName}") }
+        } catch (e: Exception) { if (!closed.get()) fail("Media output: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e)) }
     }
 
     private fun input(socket: Socket) {
@@ -232,7 +232,9 @@ internal class IccoaMediaTransport(
         gesture.finish()
     }
 
-    private fun fail(reason: String) { if (!closed.get()) onClosed(reason) }
+    private fun fail(reason: String, cause: IccoaCloseReason = IccoaCloseReason.FAILED) {
+        if (!closed.get()) onClosed(reason, cause)
+    }
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         DiagLog.i("ICCOA", "RTP CLOSE packets=${rtpPacketCount.get()} videoFrames=${rtpVideoFrames.get()} keyFrames=${rtpKeyFrames.get()} audioFrames=${rtpAudioFrames.get()}")

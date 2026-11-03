@@ -44,4 +44,40 @@ class IccoaReceiverCandidateTest {
         val attacker = peer("66:66:66:66:66:66", 20_000L)
         assertTrue(IccoaReceiverCandidate.select(listOf(attacker), token, 20_100L) === attacker)
     }
+
+    @Test fun freshTokenWinsOverRememberedAddressAfterRotation() {
+        val old = peer("OLD", 18_000L)
+        val current = peer("CURRENT", 20_000L)
+        assertEquals(current, IccoaReceiverCandidate.selectRemembered(
+            listOf(old, current), "OLD", "Toyota", token, false, 20_100L))
+    }
+
+    @Test fun equallyRecentTokenCandidatesAreAmbiguous() {
+        val peers = listOf(peer("OLD", 20_000L), peer("CURRENT", 20_000L))
+        assertNull(IccoaReceiverCandidate.select(peers, token, 20_100L))
+        assertNull(IccoaReceiverCandidate.selectRemembered(peers, "OLD", "", token, true, 20_100L))
+    }
+
+    @Test fun knownTokenCannotFallBackToDifferentTokenAtSavedAddress() {
+        assertNull(IccoaReceiverCandidate.selectRemembered(
+            listOf(peer("OLD", 20_000L, "other")), "OLD", "", token, true, 20_100L))
+    }
+
+    @Test fun legacyAddressMustHaveFreshAdvertisement() {
+        assertNull(IccoaReceiverCandidate.selectRemembered(
+            listOf(peer("OLD", 15_000L, "")), "OLD", "", "", true, 20_100L))
+        val fresh = peer("OLD", 20_000L, "")
+        assertEquals(fresh, IccoaReceiverCandidate.selectRemembered(
+            listOf(fresh), "OLD", "", "", false, 20_100L))
+    }
+
+    @Test fun legacyNameRequiresCompletedScanAndUniqueFreshCandidate() {
+        val current = peer("CURRENT", 20_000L, "").copy(name = "Toyota")
+        assertNull(IccoaReceiverCandidate.selectRemembered(
+            listOf(current), "OLD", "Toyota", "", false, 20_100L))
+        assertEquals(current, IccoaReceiverCandidate.selectRemembered(
+            listOf(current), "OLD", " Toyota ", "", true, 20_100L))
+        assertNull(IccoaReceiverCandidate.selectRemembered(
+            listOf(current, current.copy(address = "OTHER")), "OLD", "Toyota", "", true, 20_100L))
+    }
 }

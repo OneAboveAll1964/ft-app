@@ -20,7 +20,7 @@ internal class IccoaRtsp(
     private val onPlay: (IccoaVideoConfig) -> Unit,
     private val onPause: () -> Unit,
     private val onKeyframe: () -> Unit,
-    private val onClosed: (String) -> Unit
+    private val onClosed: (String, IccoaCloseReason) -> Unit
 ) : AutoCloseable {
     private val pending = ConcurrentHashMap<Int, String>()
     private var sequence = 1
@@ -33,8 +33,8 @@ internal class IccoaRtsp(
     @Volatile private var keepaliveDue = Long.MAX_VALUE
     private val notified = java.util.concurrent.atomic.AtomicBoolean(false)
 
-    private fun failed(reason: String) {
-        if (!stopped && notified.compareAndSet(false, true)) onClosed(reason)
+    private fun failed(reason: String, cause: IccoaCloseReason) {
+        if (!stopped && notified.compareAndSet(false, true)) onClosed(reason, cause)
         close()
     }
 
@@ -46,12 +46,13 @@ internal class IccoaRtsp(
             timer.scheduleAtFixedRate({
                 runCatching {
                     val now = System.nanoTime() / 1_000_000
-                    if (keepaliveSent > 0 && now - keepaliveSent > 10000) error("RTSP heartbeat timed out")
+                    if (keepaliveSent > 0 && now - keepaliveSent > 10000)
+                        throw java.net.SocketTimeoutException("RTSP heartbeat timed out")
                     if (now >= keepaliveDue && keepaliveSent == 0L) {
                         keepaliveSent = now
                         request("GET_PARAMETER rtsp://localhost/wfd1.0 RTSP/1.0", "M16", extra = "Session: 1\r\n")
                     }
-                }.onFailure { failed("RTSP: ${it.message ?: it.javaClass.simpleName}") }
+                }.onFailure { failed("RTSP: ${it.javaClass.simpleName}", IccoaFailurePolicy.channel(it)) }
             }, 1, 1, TimeUnit.SECONDS)
             while (!stopped) {
                 val message = read(input)
@@ -113,9 +114,9 @@ internal class IccoaRtsp(
                 }
             }
         } catch (e: Exception) {
-            failed("RTSP: ${e.message ?: e.javaClass.simpleName}")
+            failed("RTSP: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e))
         } finally {
-            failed("RTSP disconnected")
+            failed("RTSP disconnected", IccoaCloseReason.TRANSPORT_FAILURE)
         }
     }
 

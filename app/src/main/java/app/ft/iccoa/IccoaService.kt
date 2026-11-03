@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import app.ft.FTApp
 import app.ft.MainActivity
@@ -47,6 +48,32 @@ class IccoaService : Service() {
     private val rememberedCar by lazy { IccoaRememberedCar(this) }
     private var pendingCar: IccoaPeer? = null
     private var autoConnectAttempted = false
+    private val dropRecovery = IccoaDropRecovery()
+    private val normalFallback = IccoaNormalFallback()
+    private var recoveryScanScheduled = false
+    private val recoveryScan = Runnable {
+        recoveryScanScheduled = false
+        if (dropRecovery.active && _state.value.running &&
+            !_state.value.connecting && !_state.value.connected)
+            discovery?.start()
+    }
+    private fun cancelRecoveryScan() {
+        main.removeCallbacks(recoveryScan)
+        recoveryScanScheduled = false
+    }
+    private fun cancelAutomaticConnection() {
+        autoConnectAttempted = true
+        normalFallback.cancel()
+        cancelRecoveryScan()
+        dropRecovery.onExplicitOwnerRequest()
+    }
+    private fun scheduleRecoveryScan(number: Int) {
+        if (recoveryScanScheduled) return
+        val delayMs = when (number) { 1 -> 0L; 2 -> 3_000L; else -> 6_000L }
+        recoveryScanScheduled = true
+        DiagLog.i("ICCOA", "Remembered-car transport recovery attempt $number/${IccoaDropRecovery.MAX_ATTEMPTS}")
+        main.postDelayed(recoveryScan, delayMs)
+    }
     @Volatile private var generation = 0
     private var discovery: IccoaDiscovery? = null
     @Volatile private var session: IccoaSession? = null
@@ -119,6 +146,10 @@ class IccoaService : Service() {
                 // WGS84 is the Android API contract; confirm actual HU values on-road.
                 coordinatesUnit = "ANDROID_LOCATION_WGS84",
                 speedRaw = fix.speedRaw, headingRaw = fix.headingRaw,
+                speedKmh = IccoaGpsUnits.speedKmh(fix.speedRaw),
+                headingDegrees = IccoaGpsUnits.headingDegrees(fix.headingRaw),
+                speedUnit = "ANDROID_LOCATION_MPS_FLOORED",
+                headingUnit = "ANDROID_LOCATION_DEGREES_FLOORED",
                 satellitesUsed = fix.satellitesUsed, satellitesVisible = fix.satellitesVisible,
                 deviceTimestampRaw = fix.timestampRaw
             ))
@@ -173,17 +204,34 @@ class IccoaService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Forget is an owner action from the foreground UI and needs no Bluetooth
+        // permission, selected protocol, or automatic-connection setting.
+        if (intent?.action == FORGET) {
+            val wasRunning = _state.value.running
+            cancelAutomaticConnection()
+            endConnection()
+            val key = IccoaTrustedCarKey(this).clear()
+            val car = rememberedCar.clear()
+            IccoaTrustedPin(this).clear()
+            DiagLog.i("ICCOA", "Owner explicit trust reset key=$key car=$car")
+            _state.update { it.copy(status = if (key && car) "Pairing removed" else "Could not fully remove pairing; try again") }
+            if (!wasRunning) stopSelf()
+            return START_NOT_STICKY
+        }
         val prefs = FTApp.instance.prefs
         if (intent?.action == STOP || prefs.carProtocol != CarProtocol.ICCOA || !prefs.autoConnect) {
+            cancelAutomaticConnection()
             stopSelf()
             return START_NOT_STICKY
         }
         if (!hasBluetoothPermission()) {
+            cancelAutomaticConnection()
             _state.value = IccoaState(discovery = IccoaDiscoveryState(phase = IccoaPhase.PERMISSION_REQUIRED))
             stopSelf()
             return START_NOT_STICKY
         }
         try { foreground(projecting) } catch (e: SecurityException) {
+            cancelAutomaticConnection()
             _state.value = IccoaState(status = "Android permission required: open FT and allow Nearby devices.",
                 discovery = IccoaDiscoveryState(phase = IccoaPhase.PERMISSION_REQUIRED))
             stopSelf()
@@ -198,18 +246,32 @@ class IccoaService : Service() {
         val wasRunning = _state.value.running
         _state.update { it.copy(running = true) }
         when (intent?.action) {
-            CONNECT -> intent.getStringExtra("address")?.let { connectTo(it) }
-            CONNECT_NORMAL -> intent.getStringExtra("address")?.let { connectTo(it, forceCurrentPin = true) }
+            CONNECT, CONNECT_NORMAL -> intent.getStringExtra("address")?.let { address ->
+                cancelAutomaticConnection()
+                connectTo(address, forceCurrentPin = intent.action == CONNECT_NORMAL)
+            }
             PIN -> intent.getStringExtra("pin")?.let { pin ->
+                cancelAutomaticConnection()
                 if (_state.value.pinRequired && pin.matches(Regex("[0-9]{6}"))) {
                     _state.update { it.copy(pinRequired = false, status = "Confirming the code with the car…") }
                     session?.submitPin(pin)
                 }
             }
-            DISCONNECT -> { endConnection(); _state.update { it.copy(status = "Disconnected") } }
-            INSPECT -> if (!_state.value.connecting && !_state.value.connected) intent.getStringExtra("address")?.let { discovery?.inspect(it) }
-            SCAN -> { endConnection(); autoConnectAttempted = false
-                _state.update { it.copy(status = "") }; discovery?.start() }
+            DISCONNECT -> {
+                cancelAutomaticConnection()
+                endConnection()
+                _state.update { it.copy(status = "Disconnected") }
+            }
+            INSPECT -> if (!_state.value.connecting && !_state.value.connected) intent.getStringExtra("address")?.let {
+                cancelAutomaticConnection()
+                discovery?.inspect(it)
+            }
+            SCAN -> {
+                cancelAutomaticConnection()
+                endConnection()
+                _state.update { it.copy(status = "") }
+                discovery?.start()
+            }
             else -> if (!wasRunning) discovery?.start()
         }
         return START_NOT_STICKY
@@ -217,12 +279,77 @@ class IccoaService : Service() {
 
     private fun maybeAutoConnect(result: IccoaDiscoveryState) {
         val prefs = FTApp.instance.prefs
-        if (!prefs.autoConnect || prefs.carProtocol != CarProtocol.ICCOA ||
-            autoConnectAttempted || _state.value.connecting || _state.value.connected) return
-        val car = rememberedCar.select(result.peers, result.phase == IccoaPhase.SCAN_COMPLETE) ?: return
+        if (!prefs.autoConnect || prefs.carProtocol != CarProtocol.ICCOA || !_state.value.running) {
+            cancelAutomaticConnection()
+            return
+        }
+        if (_state.value.connecting || _state.value.connected) return
+        if (result.phase in setOf(IccoaPhase.PERMISSION_REQUIRED, IccoaPhase.BLUETOOTH_OFF, IccoaPhase.LOCATION_OFF)) {
+            cancelAutomaticConnection()
+            return
+        }
+        if (normalFallback.active) {
+            if (result.phase == IccoaPhase.SCANNING || result.phase == IccoaPhase.SCAN_COMPLETE) {
+                val car = normalFallback.select(result.peers, result.phase == IccoaPhase.SCAN_COMPLETE,
+                    SystemClock.elapsedRealtime())
+                if (car != null) {
+                    connectTo(car.address, forceCurrentPin = true)
+                    return
+                }
+            }
+            if (result.phase == IccoaPhase.FAILED || result.phase == IccoaPhase.SCAN_COMPLETE) {
+                cancelAutomaticConnection()
+                _state.update { it.copy(status = "Select the receiver again and enter the current PIN") }
+            }
+            return
+        }
+        if (autoConnectAttempted) return
+        // Failed discovery consumes only a bounded transport-recovery slot.
+        if (result.phase == IccoaPhase.FAILED) {
+            if (dropRecovery.active && !recoveryScanScheduled) {
+                val next = dropRecovery.onFailure(false, true, true)
+                if (next != null) scheduleRecoveryScan(next)
+                else {
+                    cancelAutomaticConnection()
+                    DiagLog.w("ICCOA", "BLE discovery exhausted transport recovery")
+                }
+            } else if (!dropRecovery.active) {
+                cancelAutomaticConnection()
+            }
+            return
+        }
+        if (result.phase != IccoaPhase.SCANNING &&
+            result.phase != IccoaPhase.SCAN_COMPLETE) return
+        val car = rememberedCar.select(result.peers, result.phase == IccoaPhase.SCAN_COMPLETE)
+        if (car == null) {
+            if (dropRecovery.active && result.phase == IccoaPhase.SCAN_COMPLETE &&
+                !recoveryScanScheduled) {
+                val next = dropRecovery.onFailure(false, true, true)
+                if (next != null) scheduleRecoveryScan(next)
+                else {
+                    cancelAutomaticConnection()
+                    DiagLog.w("ICCOA", "Remembered car not found; retry budget exhausted")
+                }
+            }
+            return
+        }
         autoConnectAttempted = true
-        DiagLog.i("ICCOA", "Auto-select remembered vehicle; encrypted credential will be tried once if available")
+        val attempt = dropRecovery.onInitialRememberedCarAutoSelect()
+        DiagLog.i("ICCOA", "Auto-select remembered vehicle attempt $attempt/${IccoaDropRecovery.MAX_ATTEMPTS}")
         connectTo(car.address)
+    }
+
+    private fun beginNormalFallback() {
+        val previous = pendingCar
+        cancelAutomaticConnection()
+        endConnection()
+        if (!normalFallback.begin(previous, SystemClock.elapsedRealtime())) {
+            _state.update { it.copy(status = "Select the receiver again and enter the current PIN") }
+            return
+        }
+        DiagLog.i("ICCOA", "OEM rejected Quick; discover current receiver address for NORMAL with fresh PIN")
+        _state.update { it.copy(status = "Searching for the car to enter its current PIN…") }
+        discovery?.start()
     }
 
     private fun connectTo(address: String, forceCurrentPin: Boolean = false) {
@@ -231,9 +358,10 @@ class IccoaService : Service() {
         // Toyota BLE name can be blank and its MAC rotates; OEM EC signature authenticates the peer.
         val trustedCarName = IccoaQuickTrustPolicy.PRIMARY_TRUST_SCOPE
         endConnection()
+        // Mark connecting before stopping discovery: stop can publish SCAN_COMPLETE.
+        _state.update { it.copy(connecting = true, status = "Connecting to the car…") }
         discovery?.stop()
         val token = generation
-        _state.update { it.copy(connecting = true, status = "Connecting to the car…") }
         main.postDelayed(connectionTimeout, 180_000)
         fun current(action: () -> Unit) { main.post { if (generation == token) action() } }
         lateinit var connection: IccoaSession
@@ -265,7 +393,10 @@ class IccoaService : Service() {
         }
         connection = IccoaSession(this,
             onStatus = { text -> current { _state.update { it.copy(status = text) } } },
-            onPinRequired = { current { _state.update { it.copy(pinRequired = true, status = "Enter the six-digit code shown by the car") } } },
+            onPinRequired = { current {
+                cancelAutomaticConnection()
+                _state.update { it.copy(pinRequired = true, status = "Enter the six-digit code shown by the car") }
+            } },
             onReady = { network, peer ->
                 // AuthConfirm must only advertise our address after these listeners are bound.
                 synchronized(lifecycle) {
@@ -277,7 +408,9 @@ class IccoaService : Service() {
                         onKeyframe = { current { projection?.requestKeyFrame() } },
                         onTouch = { touch -> current { projection?.touch(touch) } },
                         onKey = { code -> current { projection?.key(code) } },
-                        onClosed = { reason -> current { connectionFailed(reason) } })
+                        onClosed = { reason, cause -> current {
+                            connectionFailed(reason, retryableTransportFailure = cause == IccoaCloseReason.TRANSPORT_FAILURE)
+                        } })
                     transport.start()
                     media = transport
                 }
@@ -295,14 +428,12 @@ class IccoaService : Service() {
                     else control(category, method, body)
                 }
             },
-            onClosed = { reason, normalRequired -> current {
-                if (normalRequired) {
-                    val selected = pendingCar?.address
-                    DiagLog.i("ICCOA", "OEM rejected Quick; switch to NORMAL with fresh PIN")
-                    endConnection()
-                    if (selected == null) connectionFailed("Select receiver and enter current PIN")
-                    else connectTo(selected, forceCurrentPin = true)
-                } else connectionFailed(reason)
+            onClosed = { reason, cause -> current {
+                when (cause) {
+                    IccoaCloseReason.NORMAL_REQUIRED -> beginNormalFallback()
+                    IccoaCloseReason.TRANSPORT_FAILURE -> connectionFailed(reason, retryableTransportFailure = true)
+                    IccoaCloseReason.FAILED -> connectionFailed(reason)
+                }
             } },
             onControlReady = { current {
                 navigationRetries = 0
@@ -352,6 +483,8 @@ class IccoaService : Service() {
         pendingCar?.let { car ->
             if (rememberedCar.remember(car)) DiagLog.i("ICCOA", "Authenticated vehicle selection remembered for next connection")
         }
+        cancelRecoveryScan()
+        dropRecovery.onConnected()
         _state.update { it.copy(connecting = false, connected = true, pinRequired = false,
             status = "ICCOA linked · awaiting H.264 video · ${plan.streamWidth}×${plan.streamHeight} · ${plan.fps} fps") }
     }
@@ -380,7 +513,6 @@ class IccoaService : Service() {
             4 -> lastVideoConfig?.let(::play)
             5, 41 -> pauseProjection()
             16 -> projection?.key(84) // Same AA voice/search key as the CarLife voice button.
-            23 -> connectionFailed("The car disconnected")
             25 -> runCatching { IccoaCarConfig.describe(body) }
                 .onSuccess { DiagLog.i("ICCOA", "Car config: $it") }
                 .onFailure { DiagLog.w("ICCOA", "Car config unreadable: bytes=${body.size} ${it.javaClass.simpleName}") }
@@ -404,13 +536,25 @@ class IccoaService : Service() {
         if (audioPlayerState.pending && session != null) main.postDelayed(audioStateRetry, 500)
     }
 
-    private fun connectionFailed(reason: String) {
+    private fun connectionFailed(reason: String, retryableTransportFailure: Boolean = false) {
         DiagLog.w("ICCOA", reason)
+        val number = dropRecovery.onFailure(
+            _state.value.connected, FTApp.instance.prefs.autoConnect, retryableTransportFailure
+        )
+        cancelRecoveryScan()
+        normalFallback.cancel()
         endConnection()
-        _state.update { it.copy(status = "$reason. Обновляю список устройств для новой попытки") }
-        // XA60 changes its private BLE address after a failed handshake. Reusing the old
-        // card times out without GATT callbacks. Clear stale peers and discover afresh.
-        if (_state.value.running) discovery?.start()
+        if (number != null) {
+            // A new scan is mandatory: Toyota can rotate its BLE address.
+            autoConnectAttempted = false
+            _state.update { it.copy(status = "$reason. Переподключение $number/${IccoaDropRecovery.MAX_ATTEMPTS}") }
+            scheduleRecoveryScan(number)
+        } else {
+            autoConnectAttempted = true
+            _state.update { it.copy(status = "$reason. Автоматические попытки остановлены") }
+            // A manual receiver selection is still possible after any failure.
+            if (_state.value.running) discovery?.start()
+        }
     }
 
     private fun endConnection() {
@@ -439,6 +583,10 @@ class IccoaService : Service() {
         projection?.stop()
         lastVideoConfig = null
         lastCarGps = null
+        gpsFrameCount = 0L
+        gpsFixCount = 0L
+        gearSpeedFrames = 0L
+        gearSpeedValid = 0L
         VehicleTelemetry.clear("ICCOA")
         _state.update { it.copy(pinRequired = false, connecting = false, connected = false) }
     }
@@ -463,6 +611,7 @@ class IccoaService : Service() {
         }
 
     override fun onDestroy() {
+        cancelAutomaticConnection()
         bluetoothReconnect?.close(); bluetoothReconnect = null
         bluetoothCalls?.close(); bluetoothCalls = null
         discovery?.stop(); discovery = null
@@ -488,6 +637,7 @@ class IccoaService : Service() {
         private const val CONNECT_NORMAL = "app.ft.iccoa.CONNECT_NORMAL"
         private const val PIN = "app.ft.iccoa.PIN"
         private const val DISCONNECT = "app.ft.iccoa.DISCONNECT"
+        private const val FORGET = "app.ft.iccoa.FORGET"
         private val _state = MutableStateFlow(IccoaState())
         val state: StateFlow<IccoaState> = _state
         private var instance: IccoaService? = null
@@ -498,6 +648,7 @@ class IccoaService : Service() {
         fun connectNormal(context: Context, address: String) = send(context, CONNECT_NORMAL, address = address)
         fun submitPin(context: Context, pin: String) = send(context, PIN, pin = pin)
         fun disconnect(context: Context) = send(context, DISCONNECT)
+        fun forget(context: Context) = send(context, FORGET)
         fun calibrateTouch() { if (_state.value.connected) instance?.projection?.startTouchCalibration() }
         fun resetTouchCalibration() { if (_state.value.connected) instance?.projection?.resetTouchCalibration() }
         fun stop(context: Context) { if (instance != null) send(context, STOP) }
@@ -505,7 +656,7 @@ class IccoaService : Service() {
             val intent = Intent(context, IccoaService::class.java).setAction(action)
                 .putExtra("address", address).putExtra("pin", pin)
             runCatching {
-                if (action == STOP) context.startService(intent) else context.startForegroundService(intent)
+                if (action == STOP || action == FORGET) context.startService(intent) else context.startForegroundService(intent)
             }.onFailure { DiagLog.w("ICCOA", "Android refused $action: ${it.javaClass.simpleName}; open FT and try again") }
         }
     }

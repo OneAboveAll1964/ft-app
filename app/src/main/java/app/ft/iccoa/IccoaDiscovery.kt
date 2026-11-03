@@ -106,6 +106,13 @@ class IccoaDiscovery(private val context: Context, private val onState: (IccoaDi
     private fun record(result: ScanResult) {
         runCatching {
             val address = result.device.address
+            val now = SystemClock.elapsedRealtime()
+            // Batch delivery can be delayed. Freshness starts at radio observation,
+            // not when a queued callback happens to reach the main looper.
+            val observedAt = result.timestampNanos / 1_000_000L
+            val old = peers[address]
+            if (observedAt <= 0L || observedAt > now ||
+                (old != null && observedAt < old.lastSeenElapsedMs)) return
             if (address !in devices && devices.size >= 128) return
             devices[address] = result.device
             val record = result.scanRecord
@@ -121,14 +128,12 @@ class IccoaDiscovery(private val context: Context, private val onState: (IccoaDi
                 it.key.toString().equals(IccoaEvidence.RECEIVER_TOKEN_SERVICE_DATA, ignoreCase = true)
             }?.value
             val receiverToken = IccoaEvidence.receiverToken(tokenBytes)
-            val old = peers[address]
             peers[address] = IccoaPeer(address, name.ifBlank { old?.name.orEmpty() }, result.rssi,
                 result.isConnectable, hint || old?.hint == true,
-                receiverToken.ifBlank { old?.receiverToken.orEmpty() }, SystemClock.elapsedRealtime())
+                receiverToken.ifBlank { old?.receiverToken.orEmpty() }, observedAt)
             if (samples.record(address, raw)) {
                 DiagLog.i(TAG, "ADV address=$address name='$name' rssi=${result.rssi} connectable=${result.isConnectable} hint=$hint timestampNanos=${result.timestampNanos} services=$services serviceData=[$serviceData] manufacturer=[$manufacturer] raw=$raw")
             }
-            val now = SystemClock.elapsedRealtime()
             if (old == null || now - lastPublish >= 1_000) {
                 lastPublish = now
                 publish()

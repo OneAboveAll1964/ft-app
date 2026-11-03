@@ -45,6 +45,50 @@ class IccoaLaneServerTest {
     private fun failure(future: Future<*>): Throwable =
         assertThrows(ExecutionException::class.java) { future.get(3, TimeUnit.SECONDS) }.cause!!
 
+    @Test fun trustRequiresEncryptedControlOnItsPhysicalLane() {
+        for (port in listOf(IccoaLaneServer.CONTROL_PORT, 57249)) Harness().use { h ->
+            val gate = IccoaTrustedCommitGate()
+            val cipher = IccoaControl.Cipher(ByteArray(16))
+            val accepted = CountDownLatch(1)
+            val commits = LinkedBlockingQueue<Boolean>()
+            assertFalse(gate.onConfirmSent())
+            val (lane, _) = h.lane(port, connected = { accepted.countDown() }, onFrame = { frame ->
+                val decoded = IccoaInboundFrame.decode(port, frame, cipher)
+                commits.add(decoded.authenticatedControl && gate.onAuthenticatedControl())
+            })
+            val socket = h.connect(lane)
+            assertTrue(accepted.await(3, TimeUnit.SECONDS))
+            assertTrue("TCP accept cannot save the key", commits.isEmpty())
+            socket.getOutputStream().write(IccoaControl.frame(1, 1, 0, byteArrayOf(), 1))
+            assertEquals(false, commits.poll(3, TimeUnit.SECONDS))
+            socket.getOutputStream().write(IccoaControl.frame(1, 1, 0, cipher.encrypt(byteArrayOf(7)), 2))
+            assertEquals(port == IccoaLaneServer.CONTROL_PORT, commits.poll(3, TimeUnit.SECONDS))
+            socket.getOutputStream().write(IccoaControl.frame(1, 1, 0, cipher.encrypt(byteArrayOf(8)), 3))
+            assertEquals("Trust is committed once", false, commits.poll(3, TimeUnit.SECONDS))
+        }
+    }
+
+    @Test fun invalidCiphertextRemainsTerminalAfterSocketCleanupAndCannotCommitTrust() {
+        Harness().use { h ->
+            val gate = IccoaTrustedCommitGate()
+            val cipher = IccoaControl.Cipher(ByteArray(16))
+            val commits = java.util.concurrent.atomic.AtomicInteger()
+            val disconnected = CountDownLatch(1)
+            assertFalse(gate.onConfirmSent())
+            val (lane, worker) = h.lane(IccoaLaneServer.CONTROL_PORT,
+                disconnected = { disconnected.countDown() }, onFrame = { frame ->
+                    val decoded = IccoaInboundFrame.decode(IccoaLaneServer.CONTROL_PORT, frame, cipher)
+                    if (decoded.authenticatedControl && gate.onAuthenticatedControl()) commits.incrementAndGet()
+                })
+            val damaged = cipher.encrypt(byteArrayOf(7)).also { it[it.lastIndex] = (it.last().toInt() xor 1).toByte() }
+            h.connect(lane).getOutputStream().write(IccoaControl.frame(1, 1, 0, damaged, 1))
+            val error = failure(worker)
+            assertTrue(disconnected.await(3, TimeUnit.SECONDS))
+            assertEquals(IccoaCloseReason.FAILED, IccoaFailurePolicy.channel(error))
+            assertEquals(0, commits.get())
+        }
+    }
+
     @Test fun lateControlEventsRemainVisibleAfterAudioAndRepeatedMethodsWithoutPayloads() {
         Harness().use { h ->
             val logs = LinkedBlockingQueue<String>()

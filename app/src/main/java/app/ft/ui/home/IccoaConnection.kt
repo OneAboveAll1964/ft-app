@@ -142,10 +142,7 @@ internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnection
                     "Для следующего подключения потребуется новый код с экрана автомобиля.")
                 Row {
                     TextButton(onClick = {
-                        val key = app.ft.iccoa.IccoaTrustedCarKey(context).clear()
-                        val car = app.ft.iccoa.IccoaRememberedCar(context).clear()
-                        app.ft.iccoa.IccoaTrustedPin(context).clear()
-                        app.ft.core.DiagLog.i("ICCOA", "Owner explicit trust reset key=$key car=$car")
+                        IccoaService.forget(context)
                         forgetConfirmation = false
                     }) { Text("Удалить сопряжение") }
                     TextButton(onClick = { forgetConfirmation = false }) { Text("Отмена") }
