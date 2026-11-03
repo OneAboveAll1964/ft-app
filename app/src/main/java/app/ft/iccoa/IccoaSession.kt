@@ -156,19 +156,20 @@ class IccoaSession(
                 }
                 payload.fill(0)
                 if (!accepted) {
-                    if (fromCache) trustedPin.clear()
-                    return@post requestPin(attempt, "Не удалось отправить код. Введите текущий PIN")
+                    // A local GATT queue failure cannot invalidate a previously verified PIN.
+                    if (fromCache) fail(attempt, "Сохранённый код не поставлен в очередь Bluetooth",
+                        transportFailure = true)
+                    else requestPin(attempt, "Не удалось отправить код. Введите текущий PIN")
+                    return@post
                 }
                 later(attempt, 12_000) {
                     if (!attempt.wifiRequested && revision == attempt.pinAttempt) {
-                        if (attempt.reusingPin) {
-                            trustedPin.clear()
-                            DiagLog.w("ICCOA", "Remembered-car PIN rejected during BLE bootstrap, manual PIN required")
-                        }
-                        requestPin(attempt, "Автомобиль не принял код. Введите новый код с его экрана")
+                        // A silent BLE response is ambiguous: no automatic replay or key removal.
+                        requestPin(attempt, "Автомобиль не ответил. Введите текущий код с его экрана")
                     }
                 }
-            } catch (e: Exception) { fail(attempt, "Ошибка отправки кода ICCOA (${e.javaClass.simpleName})") }
+            } catch (e: Exception) { fail(attempt, "Ошибка отправки кода ICCOA (${e.javaClass.simpleName})",
+                transportFailure = fromCache && (e is java.io.IOException || e is IllegalStateException)) }
         }
     }
 
@@ -268,10 +269,9 @@ class IccoaSession(
             DiagLog.i("ICCOA", "GATT characteristic write uuid=${characteristic.uuid} status=$status")
             if (gatt === attempt.gatt && characteristic.uuid == CLIENT_INFO && status != BluetoothGatt.GATT_SUCCESS && !attempt.wifiRequested) {
                 if (attempt.reusingPin) {
-                    trustedPin.clear()
-                    DiagLog.w("ICCOA", "Remembered-car BLE PIN rejected; requesting fresh PIN")
-                }
-                requestPin(attempt, "Автомобиль отклонил запись кода (status=$status)")
+                    fail(attempt, "Ошибка записи сохранённого кода Bluetooth (status=$status)",
+                        transportFailure = true)
+                } else requestPin(attempt, "Ошибка записи кода ICCOA (status=$status)")
             }
         }
 
@@ -457,8 +457,12 @@ class IccoaSession(
         } catch (e: Exception) {
             if (!active(attempt)) return
             if (attempt.reusingPin) {
-                trustedPin.clear()
-                DiagLog.w("ICCOA", "Remembered-car authentication rejected. Fresh PIN needed on next connection")
+                if (IccoaPinCachePolicy.shouldClearAfterAuthFailure(e)) {
+                    trustedPin.clear()
+                    DiagLog.w("ICCOA", "Remembered-car PIN invalidated by authenticated protocol")
+                } else {
+                    DiagLog.w("ICCOA", "Unknown/transport failure: trusted PIN retained, no automatic replay")
+                }
             }
             // Exception messages may contain peer data. Log only our fixed codes and stack locations.
             val reason = (e as? IccoaHandshakeException)?.diagnostic ?: e.javaClass.simpleName
@@ -476,7 +480,9 @@ class IccoaSession(
                 }
                 else -> "Отправьте отчёт из FT"
             }
-            fail(attempt, "Сбой ICCOA на этапе $stage ($reason). $hint")
+            fail(attempt, "Сбой ICCOA на этапе $stage ($reason). $hint",
+                transportFailure = (stage == "tcp-bind" || stage == "tcp-connect") &&
+                    e !is IccoaHandshakeException)
         }
     }
 
@@ -500,10 +506,16 @@ class IccoaSession(
                 if (port == IccoaLaneServer.CONTROL_PORT && active(attempt)) onControlReady()
             },
             onDisconnected = { socket ->
+                var lostControl = false
                 synchronized(attempt) {
-                    if (attempt.control === socket) attempt.control = null
+                    if (attempt.control === socket) {
+                        attempt.control = null
+                        lostControl = true
+                    }
                     if (attempt.audio === socket) attempt.audio = null
                 }
+                if (lostControl && active(attempt))
+                    fail(attempt, "ICCOA CONTROL channel disconnected", transportFailure = true)
             },
             onFrame = { frame -> handleFrame(attempt, frame) },
             log = { message -> if (active(attempt)) DiagLog.i("ICCOA", message) })
