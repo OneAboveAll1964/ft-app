@@ -1,16 +1,16 @@
-name: Mykolay ICCOA transport recovery source-only tests
+name: Mykolay ICCOA GPS and transport recovery source-only tests
 
 on:
   push:
     branches:
-      - contrib/mykolay-iccoa-transport-recovery-20261103
+      - contrib/mykolay-iccoa-gps-recovery-20261103
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mykolay-iccoa-recovery-unit-${{ github.ref }}
+  group: mykolay-iccoa-gps-recovery-unit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
