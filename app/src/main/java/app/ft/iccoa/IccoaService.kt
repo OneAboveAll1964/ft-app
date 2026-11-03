@@ -198,7 +198,8 @@ class IccoaService : Service() {
         val wasRunning = _state.value.running
         _state.update { it.copy(running = true) }
         when (intent?.action) {
-            CONNECT -> intent.getStringExtra("address")?.let(::connectTo)
+            CONNECT -> intent.getStringExtra("address")?.let { connectTo(it) }
+            CONNECT_NORMAL -> intent.getStringExtra("address")?.let { connectTo(it, forceCurrentPin = true) }
             PIN -> intent.getStringExtra("pin")?.let { pin ->
                 if (_state.value.pinRequired && pin.matches(Regex("[0-9]{6}"))) {
                     _state.update { it.copy(pinRequired = false, status = "Confirming the code with the car…") }
@@ -224,10 +225,11 @@ class IccoaService : Service() {
         connectTo(car.address)
     }
 
-    private fun connectTo(address: String) {
+    private fun connectTo(address: String, forceCurrentPin: Boolean = false) {
         pendingCar = _state.value.discovery.peers.singleOrNull { it.address.equals(address, ignoreCase = true) }
         val known = rememberedCar.matches(pendingCar, _state.value.discovery.peers)
-        val trustedCarName = pendingCar?.name?.trim().orEmpty()
+        // Toyota BLE name can be blank and its MAC rotates; OEM EC signature authenticates the peer.
+        val trustedCarName = IccoaQuickTrustPolicy.PRIMARY_TRUST_SCOPE
         endConnection()
         discovery?.stop()
         val token = generation
@@ -293,14 +295,23 @@ class IccoaService : Service() {
                     else control(category, method, body)
                 }
             },
-            onClosed = { reason -> current { connectionFailed(reason) } },
+            onClosed = { reason, normalRequired -> current {
+                if (normalRequired) {
+                    val selected = pendingCar?.address
+                    DiagLog.i("ICCOA", "OEM rejected Quick; switch to NORMAL with fresh PIN")
+                    endConnection()
+                    if (selected == null) connectionFailed("Select receiver and enter current PIN")
+                    else connectTo(selected, forceCurrentPin = true)
+                } else connectionFailed(reason)
+            } },
             onControlReady = { current {
                 navigationRetries = 0
                 main.removeCallbacks(navigationSend)
                 navigationSend.run()
             } },
             trustedCarName = trustedCarName,
-            tryRememberedPin = known)
+            tryRememberedPin = IccoaQuickTrustPolicy.mayAttemptQuick(known, true, forceCurrentPin),
+            forceCurrentPin = forceCurrentPin)
         session = connection
         main.postDelayed({
             if (generation == token && session === connection && gearSpeedFrames > 0L && gpsFrameCount == 0L)
@@ -474,6 +485,7 @@ class IccoaService : Service() {
         private const val SCAN = "app.ft.iccoa.SCAN"
         private const val INSPECT = "app.ft.iccoa.INSPECT"
         private const val CONNECT = "app.ft.iccoa.CONNECT"
+        private const val CONNECT_NORMAL = "app.ft.iccoa.CONNECT_NORMAL"
         private const val PIN = "app.ft.iccoa.PIN"
         private const val DISCONNECT = "app.ft.iccoa.DISCONNECT"
         private val _state = MutableStateFlow(IccoaState())
@@ -483,6 +495,7 @@ class IccoaService : Service() {
         fun scanAgain(context: Context) = send(context, SCAN)
         fun inspect(context: Context, address: String) = send(context, INSPECT, address = address)
         fun connect(context: Context, address: String) = send(context, CONNECT, address = address)
+        fun connectNormal(context: Context, address: String) = send(context, CONNECT_NORMAL, address = address)
         fun submitPin(context: Context, pin: String) = send(context, PIN, pin = pin)
         fun disconnect(context: Context) = send(context, DISCONNECT)
         fun calibrateTouch() { if (_state.value.connected) instance?.projection?.startTouchCalibration() }
