@@ -19,12 +19,22 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /** Normal (PIN) ICCOA SignIn. Keys and PIN are scoped to one connection. */
-class IccoaAuth(private val pin: String, private val clientId: String, private val model: String,
-    private val identity: KeyPair = newKeyPair()) {
+class IccoaAuth(private val pin: String?, private val clientId: String, private val model: String,
+    private val identity: KeyPair = newKeyPair(), private val pinnedCarIdentity: ByteArray? = null) {
     private val agreement = newKeyPair()
     private val nonce = ByteArray(32).also(SecureRandom()::nextBytes)
 
-    init { require(pin.matches(Regex("[0-9]{6}"))) { "PIN must contain six digits" } }
+    /** The verified identity is only eligible for persistence after CONTROL is authenticated. */
+    var verifiedCarIdentity: ByteArray? = null
+        private set
+
+    val quick: Boolean get() = pinnedCarIdentity != null
+
+    init {
+        require((pin == null) == (pinnedCarIdentity != null)) { "Exactly one ICCOA authentication method is required" }
+        if (pin != null) require(pin.matches(Regex("[0-9]{6}"))) { "PIN must contain six digits" }
+        if (pinnedCarIdentity != null) require(pinnedCarIdentity.size == 64) { "Invalid pinned car key" }
+    }
 
     fun request(): ByteArray {
         val identityBytes = publicBytes(identity.public as ECPublicKey)
@@ -34,10 +44,13 @@ class IccoaAuth(private val pin: String, private val clientId: String, private v
             update(agreementBytes + nonce)
             sign()
         }
-        return ProtoWriter().int32(1, 1793).bytes(2, identityBytes)
-            .bytes(3, pinMac(pin, identityBytes, nonce)).bytes(4, agreementBytes)
-            .bytes(5, signature).bytes(6, nonce).string(7, clientId).string(8, model)
-            .int32(9, 1).int32(10, 769).string(11, model).toByteArray()
+        val request = ProtoWriter().int32(1, 1793)
+        // OEM QUICK intentionally omits authPk, authPkHmac and userConfirmed.
+        if (pin != null) request.bytes(2, identityBytes).bytes(3, pinMac(pin, identityBytes, nonce))
+        request.bytes(4, agreementBytes).bytes(5, signature).bytes(6, nonce)
+            .string(7, clientId).string(8, model)
+        if (pin != null) request.int32(9, 1)
+        return request.int32(10, 769).string(11, model).toByteArray()
     }
 
     fun accept(response: ByteArray, onProgress: (String) -> Unit = {}): IccoaControl.Cipher {
@@ -47,12 +60,26 @@ class IccoaAuth(private val pin: String, private val clientId: String, private v
         val result = fields.number(7)
         onProgress("receiver-result=$result")
         if (result != 0L) throw IccoaHandshakeException(IccoaHandshakeException.Reason.RESPONSE_RESULT, result)
-        val carIdentity = fields.bytes(2).also { if (it.size != 64) throw IccoaHandshakeException(IccoaHandshakeException.Reason.IDENTITY_LENGTH) }
+        // QUICK may omit authPk: only the previously pinned car identity is trusted.
+        // NORMAL must still supply the server identity in the wire response.
+        val responseIdentity = if (quick) fields.optionalBytes(2) ?: ByteArray(0) else fields.bytes(2)
+        val carIdentity = if (quick) {
+            val known = pinnedCarIdentity ?: error("No pinned car key")
+            // Some OEM builds omit authPk during QUICK; if present it must match.
+            if (responseIdentity.isNotEmpty() && !MessageDigest.isEqual(responseIdentity, known))
+                throw IccoaHandshakeException(IccoaHandshakeException.Reason.TRUSTED_IDENTITY_MISMATCH)
+            known
+        } else responseIdentity.also {
+            if (it.size != 64) throw IccoaHandshakeException(IccoaHandshakeException.Reason.IDENTITY_LENGTH)
+        }
         val carAgreement = fields.bytes(4).also { if (it.size != 64) throw IccoaHandshakeException(IccoaHandshakeException.Reason.AGREEMENT_LENGTH) }
         val carNonce = fields.bytes(6).also { if (it.size != 32) throw IccoaHandshakeException(IccoaHandshakeException.Reason.NONCE_LENGTH) }
         onProgress("verify-pin-mac")
-        val expectedMac = pinMac(pin, carIdentity + publicBytes(identity.public as ECPublicKey), carNonce + nonce)
-        if (!MessageDigest.isEqual(expectedMac, fields.bytes(3))) throw IccoaHandshakeException(IccoaHandshakeException.Reason.PIN_MAC)
+        if (pin != null) {
+            val expectedMac = pinMac(pin, carIdentity + publicBytes(identity.public as ECPublicKey), carNonce + nonce)
+            if (!MessageDigest.isEqual(expectedMac, fields.bytes(3)))
+                throw IccoaHandshakeException(IccoaHandshakeException.Reason.PIN_MAC)
+        }
         onProgress("verify-agreement-signature")
         val verified = Signature.getInstance("SHA256withECDSA").run {
             initVerify(publicKey(carIdentity))
@@ -60,6 +87,8 @@ class IccoaAuth(private val pin: String, private val clientId: String, private v
             verify(fields.bytes(5))
         }
         if (!verified) throw IccoaHandshakeException(IccoaHandshakeException.Reason.AGREEMENT_SIGNATURE)
+        // Authentication is proven cryptographically; the CONTROL lane must still open before persistence.
+        verifiedCarIdentity = carIdentity.copyOf()
         onProgress("derive-session-key")
         val shared = KeyAgreement.getInstance("ECDH").run {
             init(agreement.private)

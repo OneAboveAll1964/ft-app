@@ -156,6 +156,13 @@ object IccoaControl {
         }
         fun bytes(field: Int): ByteArray = fields[field] as? ByteArray ?: error("Missing handshake field $field")
 
+        /** Optional OEM Quick Auth server identity. Malformed types are not treated as absent. */
+        fun optionalBytes(field: Int): ByteArray? {
+            val value = fields[field] ?: return null
+            require(value is ByteArray) { "Invalid handshake binary field $field" }
+            return value
+        }
+
         /** Field numbers/types/lengths, with all values deliberately omitted. */
         fun shape(): String = fields.entries.joinToString(",") { (field, value) ->
             "$field:" + if (value is ByteArray) "bytes(${value.size})" else "number"

@@ -14,6 +14,13 @@ internal data class IccoaClientProfile(val id: String, val mac: String) {
         .put("type", 1002).put("manufactures", "Xiaomi").put("channel", channel)
         .toString().toByteArray(Charsets.UTF_8)
 
+    /** QUICK GATT advertises a trusted client without replaying an obsolete six-digit PIN. */
+    fun clientInfoQuick(model: String, channel: Int): ByteArray = JSONObject()
+        .put("id", id).put("model", model).put("name", "F-Tap")
+        .put("band", 1).put("mac", mac).put("type", 1002)
+        .put("manufactures", "Xiaomi").put("channel", channel)
+        .toString().toByteArray(Charsets.UTF_8)
+
     companion object {
         fun load(context: Context): IccoaClientProfile {
             // Separate from settings backups: an installation must keep its own identity.

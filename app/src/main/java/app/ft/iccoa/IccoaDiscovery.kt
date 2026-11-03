@@ -20,7 +20,8 @@ import android.os.Looper
 import android.os.SystemClock
 import app.ft.core.DiagLog
 
-data class IccoaPeer(val address: String, val name: String, val rssi: Int, val connectable: Boolean, val hint: Boolean)
+data class IccoaPeer(val address: String, val name: String, val rssi: Int, val connectable: Boolean,
+                     val hint: Boolean, val receiverToken: String = "", val lastSeenElapsedMs: Long = 0L)
 
 enum class IccoaPhase { IDLE, SCANNING, SCAN_COMPLETE, INSPECTING, GATT_COMPLETE, BLUETOOTH_OFF, PERMISSION_REQUIRED, LOCATION_OFF, FAILED }
 
@@ -49,7 +50,13 @@ class IccoaDiscovery(private val context: Context, private val onState: (IccoaDi
     private val gattTimeout = Runnable { failGatt("GATT discovery timed out") }
 
     fun start() {
-        stop()
+        // Starting a NEW scan must not advertise the interrupted old scan as
+        // SCAN_COMPLETE. In recovery mode that false terminal event consumes
+        // another retry slot and can exhaust all three attempts immediately.
+        // Invalidate callbacks and release the old scan without publishing.
+        generation++
+        endScan()
+        closeGatt()
         samples = AdvertisementSamples()
         devices.clear()
         peers.clear()
@@ -110,8 +117,14 @@ class IccoaDiscovery(private val context: Context, private val onState: (IccoaDi
             }.orEmpty()
             val raw = hex(record?.bytes ?: byteArrayOf())
             val hint = IccoaEvidence.hint(name, services + record?.serviceData.orEmpty().keys.map { it.toString() })
+            val tokenBytes = record?.serviceData.orEmpty().entries.firstOrNull {
+                it.key.toString().equals(IccoaEvidence.RECEIVER_TOKEN_SERVICE_DATA, ignoreCase = true)
+            }?.value
+            val receiverToken = IccoaEvidence.receiverToken(tokenBytes)
             val old = peers[address]
-            peers[address] = IccoaPeer(address, name.ifBlank { old?.name.orEmpty() }, result.rssi, result.isConnectable, hint || old?.hint == true)
+            peers[address] = IccoaPeer(address, name.ifBlank { old?.name.orEmpty() }, result.rssi,
+                result.isConnectable, hint || old?.hint == true,
+                receiverToken.ifBlank { old?.receiverToken.orEmpty() }, SystemClock.elapsedRealtime())
             if (samples.record(address, raw)) {
                 DiagLog.i(TAG, "ADV address=$address name='$name' rssi=${result.rssi} connectable=${result.isConnectable} hint=$hint timestampNanos=${result.timestampNanos} services=$services serviceData=[$serviceData] manufacturer=[$manufacturer] raw=$raw")
             }
