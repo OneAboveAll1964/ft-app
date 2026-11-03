@@ -90,7 +90,9 @@ object VehicleTelemetry {
     @Synchronized fun updateIccoaSpeed(rawSpeed: Long, gearRaw: Long? = null) {
         if (rawSpeed < 0L || rawSpeed > 100_000L || (gearRaw != null && gearRaw !in 0L..4L)) return
         val now = System.currentTimeMillis()
-        val old = _current.value?.takeIf { it.source == "ICCOA" && it.fresh(now) }
+        // Keep the last GPS fix even after a long GearInfo gap. Its positionAtMs
+        // remains unchanged: stale data is display-only and never eligible for AA.
+        val old = _current.value?.takeIf { it.source == "ICCOA" }
         _current.value = (old ?: VehicleLocation("ICCOA", now, positionAtMs = 0L)).copy(
             receivedAtMs = now,
             gearSpeedRaw = rawSpeed,
