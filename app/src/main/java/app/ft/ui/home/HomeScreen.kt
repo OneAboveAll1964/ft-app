@@ -114,6 +114,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val app = FTApp.instance
     val iccoa = rememberCarProtocol() == CarProtocol.ICCOA
     val iccoaActions = if (iccoa) rememberIccoaConnectionActions() else null
+    var iccoaShowAll by rememberSaveable { mutableStateOf(false) }
     val iccoaState by IccoaService.state.collectAsState()
     val screenState by CarControls.state.collectAsState()
     val touchCalibration by CarTouchCalibration.state.collectAsState()
@@ -310,7 +311,14 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             }
         }
 
-        if (iccoa) iccoaDevices(iccoaState)
+        if (iccoa) {
+            item {
+                androidx.compose.material3.TextButton(onClick = { iccoaShowAll = !iccoaShowAll }) {
+                    Text(if (iccoaShowAll) "Только CarLink / ICCOA" else "Показать все Bluetooth-устройства")
+                }
+            }
+            iccoaDevices(iccoaState, showAll = iccoaShowAll)
+        }
 
         if (!modern && (!touchOn || !overlayOn || !backgroundOn)) {
             item {

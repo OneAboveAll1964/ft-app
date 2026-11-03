@@ -5,7 +5,8 @@ internal class IccoaHandshakeException(val reason: Reason, val result: Long? = n
     IllegalArgumentException(reason.name) {
     enum class Reason {
         FRAME_LENGTH, HEADER_CRC, RESPONSE_LANE, RESPONSE_RESULT,
-        IDENTITY_LENGTH, AGREEMENT_LENGTH, NONCE_LENGTH, PIN_MAC, AGREEMENT_SIGNATURE
+        IDENTITY_LENGTH, AGREEMENT_LENGTH, NONCE_LENGTH, PIN_MAC, AGREEMENT_SIGNATURE,
+        TRUSTED_IDENTITY_MISMATCH
     }
 
     val diagnostic: String get() = reason.name + (result?.let { " result=$it" } ?: "")

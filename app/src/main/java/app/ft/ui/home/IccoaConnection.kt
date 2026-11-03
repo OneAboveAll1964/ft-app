@@ -86,6 +86,7 @@ internal fun rememberIccoaConnectionActions(): IccoaConnectionActions {
 internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnectionActions) {
     val context = LocalContext.current
     var pin by remember { mutableStateOf("") }
+    var forgetConfirmation by remember { mutableStateOf(false) }
     LaunchedEffect(state.pinRequired) { pin = "" }
     val scan = state.discovery
     val scanning = state.running && scan.phase in listOf(IccoaPhase.SCANNING, IccoaPhase.INSPECTING)
@@ -134,7 +135,27 @@ internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnection
         } else {
             FilledTonalButton(onClick = { actions.start(true) }, enabled = !busy) { Text(stringResource(R.string.iccoa_scan_again)) }
         }
-        if (!state.connected && !state.connecting) Text(stringResource(R.string.iccoa_device_count, scan.peers.size))
+        if (!state.connected && !state.connecting) {
+            Text(stringResource(R.string.iccoa_device_count, scan.peers.size))
+            if (forgetConfirmation) {
+                Text("Удалить сохранённый ключ автомобиля, старый PIN и выбранное устройство? " +
+                    "Для следующего подключения потребуется новый код с экрана автомобиля.")
+                Row {
+                    TextButton(onClick = {
+                        val key = app.ft.iccoa.IccoaTrustedCarKey(context).clear()
+                        val car = app.ft.iccoa.IccoaRememberedCar(context).clear()
+                        app.ft.iccoa.IccoaTrustedPin(context).clear()
+                        app.ft.core.DiagLog.i("ICCOA", "Owner explicit trust reset key=$key car=$car")
+                        forgetConfirmation = false
+                    }) { Text("Удалить сопряжение") }
+                    TextButton(onClick = { forgetConfirmation = false }) { Text("Отмена") }
+                }
+            } else {
+                TextButton(onClick = { forgetConfirmation = true }) {
+                    Text("Забыть доверенный автомобиль")
+                }
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.iccoa_report), Modifier.weight(1f))
             ReportButton()
@@ -142,12 +163,18 @@ internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnection
     }
 }
 
-internal fun LazyListScope.iccoaDevices(state: IccoaState) {
+internal fun LazyListScope.iccoaDevices(state: IccoaState, showAll: Boolean) {
     val scan = state.discovery
     val busy = scan.phase in listOf(IccoaPhase.SCANNING, IccoaPhase.INSPECTING)
     if (!state.connected && !state.connecting && !state.pinRequired) {
         item { Text(stringResource(R.string.iccoa_device_help), style = MaterialTheme.typography.bodySmall) }
-        items(scan.peers, key = { it.address }) { peer ->
+        // Keep unfiltered BLE evidence, filter only presentation. Never hide a car
+        // when it is the sole non-advertising candidate.
+        val remembered = app.ft.iccoa.IccoaRememberedCar(FTApp.instance)
+            .select(scan.peers, scan.phase == IccoaPhase.SCAN_COMPLETE)
+        val carlink = scan.peers.filter { it.hint || it.address == remembered?.address }
+        val peers = if (showAll || carlink.isEmpty()) scan.peers else carlink
+        items(peers, key = { it.address }) { peer ->
             val context = LocalContext.current
             Card {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -162,6 +189,10 @@ internal fun LazyListScope.iccoaDevices(state: IccoaState) {
                         TextButton(onClick = { IccoaService.inspect(context, peer.address) }, enabled = state.running && !busy && peer.connectable) {
                             Text(stringResource(R.string.iccoa_inspect))
                         }
+                    }
+                    TextButton(onClick = { IccoaService.connectNormal(context, peer.address) },
+                        enabled = state.running && scan.phase != IccoaPhase.INSPECTING && peer.connectable) {
+                        Text("Normal · новый PIN")
                     }
                 }
             }
