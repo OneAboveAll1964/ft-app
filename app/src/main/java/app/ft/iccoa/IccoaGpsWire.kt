@@ -124,3 +124,18 @@ internal object IccoaGpsWire {
         }.getOrNull()
     }
 }
+
+/**
+ * OEM CarLinkSensorMgr.updateLocationInfo reads Android Location.getSpeed()
+ * and getBearing(), then floors both before UCarProto.Gps serialisation.
+ * Android Location speed is m/s; bearing is clockwise degrees from north.
+ * Keep the raw fields independently for diagnostics and never derive a
+ * more precise value than the OEM integer transmitted.
+ */
+internal object IccoaGpsUnits {
+    fun speedKmh(speedRaw: Long): Float? =
+        speedRaw.takeIf { it in 0L..125L }?.let { it * 3.6f }
+
+    fun headingDegrees(headingRaw: Long): Float? =
+        headingRaw.takeIf { it in 0L..359L }?.toFloat()
+}
