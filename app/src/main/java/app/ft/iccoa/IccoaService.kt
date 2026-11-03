@@ -252,9 +252,30 @@ class IccoaService : Service() {
         val prefs = FTApp.instance.prefs
         if (!prefs.autoConnect || prefs.carProtocol != CarProtocol.ICCOA ||
             autoConnectAttempted || _state.value.connecting || _state.value.connected) return
-        val car = rememberedCar.select(result.peers, result.phase == IccoaPhase.SCAN_COMPLETE) ?: return
+        // Failed discovery consumes only a bounded transport-recovery slot.
+        if (result.phase == IccoaPhase.FAILED) {
+            if (dropRecovery.active && !recoveryScanScheduled) {
+                val next = dropRecovery.onFailure(false, true, true)
+                if (next != null) scheduleRecoveryScan(next)
+                else DiagLog.w("ICCOA", "BLE discovery exhausted transport recovery")
+            }
+            return
+        }
+        if (result.phase != IccoaPhase.SCANNING &&
+            result.phase != IccoaPhase.SCAN_COMPLETE) return
+        val car = rememberedCar.select(result.peers, result.phase == IccoaPhase.SCAN_COMPLETE)
+        if (car == null) {
+            if (dropRecovery.active && result.phase == IccoaPhase.SCAN_COMPLETE &&
+                !recoveryScanScheduled) {
+                val next = dropRecovery.onFailure(false, true, true)
+                if (next != null) scheduleRecoveryScan(next)
+                else DiagLog.w("ICCOA", "Remembered car not found; retry budget exhausted")
+            }
+            return
+        }
         autoConnectAttempted = true
-        DiagLog.i("ICCOA", "Auto-select remembered vehicle; encrypted credential will be tried once if available")
+        val attempt = dropRecovery.onInitialRememberedCarAutoSelect()
+        DiagLog.i("ICCOA", "Auto-select remembered vehicle attempt $attempt/${IccoaDropRecovery.MAX_ATTEMPTS}")
         connectTo(car.address)
     }
 
@@ -263,9 +284,10 @@ class IccoaService : Service() {
         val known = rememberedCar.matches(pendingCar, _state.value.discovery.peers)
         val trustedCarName = pendingCar?.name?.trim().orEmpty()
         endConnection()
+        // Mark connecting before stopping discovery: stop can publish SCAN_COMPLETE.
+        _state.update { it.copy(connecting = true, status = "Connecting to the car…") }
         discovery?.stop()
         val token = generation
-        _state.update { it.copy(connecting = true, status = "Connecting to the car…") }
         main.postDelayed(connectionTimeout, 180_000)
         fun current(action: () -> Unit) { main.post { if (generation == token) action() } }
         lateinit var connection: IccoaSession
