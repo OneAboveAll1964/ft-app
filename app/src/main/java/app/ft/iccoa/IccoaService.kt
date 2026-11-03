@@ -47,6 +47,25 @@ class IccoaService : Service() {
     private val rememberedCar by lazy { IccoaRememberedCar(this) }
     private var pendingCar: IccoaPeer? = null
     private var autoConnectAttempted = false
+    private val dropRecovery = IccoaDropRecovery()
+    private var recoveryScanScheduled = false
+    private val recoveryScan = Runnable {
+        recoveryScanScheduled = false
+        if (dropRecovery.active && _state.value.running &&
+            !_state.value.connecting && !_state.value.connected)
+            discovery?.start()
+    }
+    private fun cancelRecoveryScan() {
+        main.removeCallbacks(recoveryScan)
+        recoveryScanScheduled = false
+    }
+    private fun scheduleRecoveryScan(number: Int) {
+        if (recoveryScanScheduled) return
+        val delayMs = when (number) { 1 -> 0L; 2 -> 3_000L; else -> 6_000L }
+        recoveryScanScheduled = true
+        DiagLog.i("ICCOA", "Remembered-car transport recovery attempt $number/${IccoaDropRecovery.MAX_ATTEMPTS}")
+        main.postDelayed(recoveryScan, delayMs)
+    }
     @Volatile private var generation = 0
     private var discovery: IccoaDiscovery? = null
     @Volatile private var session: IccoaSession? = null
