@@ -217,17 +217,32 @@ class IccoaService : Service() {
         val wasRunning = _state.value.running
         _state.update { it.copy(running = true) }
         when (intent?.action) {
-            CONNECT -> intent.getStringExtra("address")?.let(::connectTo)
+            CONNECT -> intent.getStringExtra("address")?.let { address ->
+                cancelRecoveryScan()
+                dropRecovery.onExplicitOwnerRequest()
+                connectTo(address)
+            }
             PIN -> intent.getStringExtra("pin")?.let { pin ->
                 if (_state.value.pinRequired && pin.matches(Regex("[0-9]{6}"))) {
                     _state.update { it.copy(pinRequired = false, status = "Confirming the code with the car…") }
                     session?.submitPin(pin)
                 }
             }
-            DISCONNECT -> { endConnection(); _state.update { it.copy(status = "Disconnected") } }
+            DISCONNECT -> {
+                cancelRecoveryScan()
+                dropRecovery.onExplicitOwnerRequest()
+                endConnection()
+                _state.update { it.copy(status = "Disconnected") }
+            }
             INSPECT -> if (!_state.value.connecting && !_state.value.connected) intent.getStringExtra("address")?.let { discovery?.inspect(it) }
-            SCAN -> { endConnection(); autoConnectAttempted = false
-                _state.update { it.copy(status = "") }; discovery?.start() }
+            SCAN -> {
+                cancelRecoveryScan()
+                dropRecovery.onExplicitOwnerRequest()
+                endConnection()
+                autoConnectAttempted = false
+                _state.update { it.copy(status = "") }
+                discovery?.start()
+            }
             else -> if (!wasRunning) discovery?.start()
         }
         return START_NOT_STICKY
