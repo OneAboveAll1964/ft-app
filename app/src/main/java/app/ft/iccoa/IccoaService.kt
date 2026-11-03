@@ -19,6 +19,9 @@ import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import app.ft.FTApp
+import app.ft.core.Prefs
+import app.ft.core.CarConnection
+import app.ft.core.ServiceLaunches
 import app.ft.MainActivity
 import app.ft.R
 import app.ft.aa.AaHeadUnitService
@@ -45,7 +48,8 @@ data class IccoaState(
 class IccoaService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private val lifecycle = Any()
-    private val rememberedCar by lazy { IccoaRememberedCar(this) }
+    private lateinit var prefs: Prefs
+    private val rememberedCar by lazy { IccoaRememberedCar(this, prefs.profileId) }
     private var pendingCar: IccoaPeer? = null
     private var autoConnectAttempted = false
     private val dropRecovery = IccoaDropRecovery()
@@ -179,7 +183,9 @@ class IccoaService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        prefs = FTApp.instance.prefs
         instance = this
+        CarConnection.lifecycleChanged()
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "ICCOA Carlink", NotificationManager.IMPORTANCE_LOW)
         )
@@ -200,25 +206,25 @@ class IccoaService : Service() {
                         navigationSend.run()
                     }
                 }
-            })
+            }, prefs = prefs)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        launches.received(intent)
         // Forget is an owner action from the foreground UI and needs no Bluetooth
         // permission, selected protocol, or automatic-connection setting.
         if (intent?.action == FORGET) {
             val wasRunning = _state.value.running
             cancelAutomaticConnection()
             endConnection()
-            val key = IccoaTrustedCarKey(this).clear()
+            val key = IccoaTrustedCarKey(this, prefs.profileId).clear()
             val car = rememberedCar.clear()
-            IccoaTrustedPin(this).clear()
+            IccoaTrustedPin(this, prefs.profileId).clear()
             DiagLog.i("ICCOA", "Owner explicit trust reset key=$key car=$car")
             _state.update { it.copy(status = if (key && car) "Pairing removed" else "Could not fully remove pairing; try again") }
             if (!wasRunning) stopSelf()
             return START_NOT_STICKY
         }
-        val prefs = FTApp.instance.prefs
         if (intent?.action == STOP || prefs.carProtocol != CarProtocol.ICCOA || !prefs.autoConnect) {
             cancelAutomaticConnection()
             stopSelf()
@@ -278,7 +284,6 @@ class IccoaService : Service() {
     }
 
     private fun maybeAutoConnect(result: IccoaDiscoveryState) {
-        val prefs = FTApp.instance.prefs
         if (!prefs.autoConnect || prefs.carProtocol != CarProtocol.ICCOA || !_state.value.running) {
             cancelAutomaticConnection()
             return
@@ -370,7 +375,7 @@ class IccoaService : Service() {
             onPcm = { pcm -> if (generation == token) AaHeadUnitService.feedCarMicrophone(pcm) },
             log = { DiagLog.i("ICCOA", it) },
             phoneStateBody = ::phoneState,
-            gain = { FTApp.instance.prefs.iccoaMicGain })
+            gain = { prefs.iccoaMicGain })
         microphone = carMicrophone
         val hook: (Boolean) -> Unit = { wanted ->
             carMicrophone.setWanted(wanted)
@@ -442,7 +447,7 @@ class IccoaService : Service() {
             } },
             trustedCarName = trustedCarName,
             tryRememberedPin = IccoaQuickTrustPolicy.mayAttemptQuick(known, true, forceCurrentPin),
-            forceCurrentPin = forceCurrentPin)
+            forceCurrentPin = forceCurrentPin, vehicleProfileId = prefs.profileId)
         session = connection
         main.postDelayed({
             if (generation == token && session === connection && gearSpeedFrames > 0L && gpsFrameCount == 0L)
@@ -539,7 +544,7 @@ class IccoaService : Service() {
     private fun connectionFailed(reason: String, retryableTransportFailure: Boolean = false) {
         DiagLog.w("ICCOA", reason)
         val number = dropRecovery.onFailure(
-            _state.value.connected, FTApp.instance.prefs.autoConnect, retryableTransportFailure
+            _state.value.connected, prefs.autoConnect, retryableTransportFailure
         )
         cancelRecoveryScan()
         normalFallback.cancel()
@@ -617,10 +622,11 @@ class IccoaService : Service() {
         discovery?.stop(); discovery = null
         endConnection()
         projection?.close(); projection = null
-        _state.update { it.copy(running = false) }
         stopForeground(STOP_FOREGROUND_REMOVE)
         foregroundMode = null
         instance = null
+        _state.update { it.copy(running = false) }
+        CarConnection.lifecycleChanged()
         super.onDestroy()
     }
 
@@ -640,7 +646,9 @@ class IccoaService : Service() {
         private const val FORGET = "app.ft.iccoa.FORGET"
         private val _state = MutableStateFlow(IccoaState())
         val state: StateFlow<IccoaState> = _state
-        private var instance: IccoaService? = null
+        @Volatile private var instance: IccoaService? = null
+        private val launches = ServiceLaunches()
+        val isBusy: Boolean get() = instance != null || launches.hasPending
         fun start(context: Context) = send(context, START)
         fun scanAgain(context: Context) = send(context, SCAN)
         fun inspect(context: Context, address: String) = send(context, INSPECT, address = address)
@@ -651,13 +659,14 @@ class IccoaService : Service() {
         fun forget(context: Context) = send(context, FORGET)
         fun calibrateTouch() { if (_state.value.connected) instance?.projection?.startTouchCalibration() }
         fun resetTouchCalibration() { if (_state.value.connected) instance?.projection?.resetTouchCalibration() }
-        fun stop(context: Context) { if (instance != null) send(context, STOP) }
+        fun stop(context: Context) { if (isBusy) send(context, STOP) }
         private fun send(context: Context, action: String, address: String? = null, pin: String? = null) {
             val intent = Intent(context, IccoaService::class.java).setAction(action)
                 .putExtra("address", address).putExtra("pin", pin)
+            launches.dispatch(intent)
             runCatching {
                 if (action == STOP || action == FORGET) context.startService(intent) else context.startForegroundService(intent)
-            }.onFailure { DiagLog.w("ICCOA", "Android refused $action: ${it.javaClass.simpleName}; open FT and try again") }
+            }.onFailure { launches.finished(); DiagLog.w("ICCOA", "Android refused $action: ${it.javaClass.simpleName}; open FT and try again") }
         }
     }
 }

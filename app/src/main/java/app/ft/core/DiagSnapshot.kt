@@ -113,9 +113,10 @@ object DiagSnapshot {
     }
 
     fun settings(c: Context): List<String> = runCatching {
-        val recordCoordinates = Prefs(c).vehicleCoordinateLogging
+        val prefs = Prefs(c)
+        val recordCoordinates = prefs.vehicleCoordinateLogging
         listOf("(only settings that were changed are listed, the rest are at their defaults)") +
-            c.getSharedPreferences("ft", Context.MODE_PRIVATE).all.toSortedMap().map { (k, v) ->
+            prefs.all.toSortedMap().map { (k, v) ->
                 val privateLocation = !recordCoordinates &&
                     (k.contains("latitude", ignoreCase = true) ||
                      k.contains("longitude", ignoreCase = true) ||
@@ -184,8 +185,9 @@ object DiagSnapshot {
     }
 
     fun androidAuto(c: Context): List<String> = buildList {
+        val selfPort = runCatching { Prefs(c).aaSelfPort }.getOrDefault(5277)
         add(line("android auto") { pkg(c, GEARHEAD)?.let { "${it.versionName} (code ${if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else 0}) enabled=${it.applicationInfo?.enabled}" } ?: "not installed" })
-        add(line("head unit server ${prefsInt(c, "aaSelfPort", 5277)}") { if (app.ft.aa.AaInstaller.serverRunning(prefsInt(c, "aaSelfPort", 5277))) "running" else "off" })
+        add(line("head unit server $selfPort") { if (app.ft.aa.AaInstaller.serverRunning(selfPort)) "running" else "off" })
         add(line("ft head unit listener") { AaHeadUnitService.state.value.listening })
         add(line("last android auto transport close") { AaHeadUnitService.lastDisconnect })
         add(line("android auto battery optimization ignored") { c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(GEARHEAD) })
@@ -254,6 +256,4 @@ object DiagSnapshot {
         }
     }.getOrElse { "error ${it.message}" }
 
-    private fun prefsInt(c: Context, key: String, default: Int): Int =
-        runCatching { c.getSharedPreferences("ft", Context.MODE_PRIVATE).getInt(key, default) }.getOrDefault(default)
 }

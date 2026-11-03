@@ -1,6 +1,7 @@
 package app.ft.iccoa
 
 import android.content.Context
+import app.ft.core.Prefs
 import android.os.SystemClock
 
 /**
@@ -9,8 +10,8 @@ import android.os.SystemClock
  * serviceData marker is stable in live reports, but is untrusted/public; the
  * peer must still pass ICCOA Quick with the pinned OEM server EC public key.
  */
-internal class IccoaRememberedCar(context: Context) {
-    private val prefs = context.getSharedPreferences("iccoa-remembered-car", Context.MODE_PRIVATE)
+internal class IccoaRememberedCar(context: Context, vehicleProfileId: String = Prefs(context).profileId) {
+    private val prefs = context.getSharedPreferences(IccoaVehicleStores.name("iccoa-remembered-car", vehicleProfileId), Context.MODE_PRIVATE)
 
     fun remember(peer: IccoaPeer): Boolean {
         if (!peer.connectable || peer.address.isBlank()) return false

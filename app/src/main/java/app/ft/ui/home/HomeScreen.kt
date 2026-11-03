@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.ft.FTApp
+import app.ft.core.CarProfiles
 import app.ft.FTTouchService
 import app.ft.aa.AaInstaller
 import app.ft.aa.AaHeadUnitService
@@ -108,12 +109,14 @@ import app.ft.R
 private data class Status(val title: String, val detail: String, val level: Int)
 
 @Composable
-fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onOpenAaSetup: () -> Unit, onOpenConnectionSettings: () -> Unit) {
+fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onOpenAaSetup: () -> Unit, onOpenConnectionSettings: () -> Unit, onOpenCars: () -> Unit = {}, iccoaConnectionActions: IccoaConnectionActions? = null) {
     val modern = LocalModernPhoneUi.current
     val context = LocalContext.current
     val app = FTApp.instance
+    val profiles by app.cars.state.collectAsState()
+    val activeCar = profiles.profiles.firstOrNull { it.id == profiles.activeId }
     val iccoa = rememberCarProtocol() == CarProtocol.ICCOA
-    val iccoaActions = if (iccoa) rememberIccoaConnectionActions() else null
+    val iccoaActions = if (iccoa) iccoaConnectionActions ?: rememberIccoaConnectionActions() else null
     var iccoaShowAll by rememberSaveable { mutableStateOf(false) }
     val iccoaState by IccoaService.state.collectAsState()
     val screenState by CarControls.state.collectAsState()
@@ -197,6 +200,15 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = pad.calculateTopPadding() + 12.dp, bottom = pad.calculateBottomPadding() + 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            Card(onClick = onOpenCars, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(stringResource(R.string.cars_selected), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(if (activeCar?.id == CarProfiles.LEGACY_ID && activeCar.name == CarProfiles.DEFAULT_NAME)
+                        stringResource(R.string.cars_my_car) else activeCar?.name.orEmpty(), style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
         item {
             StatusCard(status, on) { want ->
                 if (!want) CarConnection.switchOff(context)

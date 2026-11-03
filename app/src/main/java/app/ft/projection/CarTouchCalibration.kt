@@ -2,6 +2,8 @@ package app.ft.projection
 
 import android.content.Context
 import app.ft.core.DiagLog
+import app.ft.core.CarProfiles
+import app.ft.iccoa.IccoaVehicleStores
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
@@ -127,16 +129,16 @@ internal object CarTouchCalibration {
         _state.value = TouchCalibrationState()
     }
 
-    fun reset(context: Context, width: Int, height: Int) {
+    fun reset(context: Context, width: Int, height: Int, vehicleProfileId: String = CarProfiles.selectedId(context)) {
         cancel()
         val key = "${width}x${height}"
-        context.getSharedPreferences("ft-iccoa-touch", Context.MODE_PRIVATE).edit()
+        context.getSharedPreferences(IccoaVehicleStores.name("ft-iccoa-touch", vehicleProfileId), Context.MODE_PRIVATE).edit()
             .remove("${key}_quad4").remove("${key}_gain").remove("${key}_offset").apply()
         DiagLog.i("ICCOA", "FT touch calibration reset for $key")
     }
 
     /** Receive uncorrected incoming touches; preserve whole DOWN..UP gesture. */
-    fun consume(context: Context, action: Int, x: Int, y: Int): Boolean {
+    fun consume(context: Context, action: Int, x: Int, y: Int, vehicleProfileId: String = CarProfiles.selectedId(context)): Boolean {
         val c = _state.value
         if (c.step !in 1..4) {
             if (!swallowUntilUp) return false
@@ -160,7 +162,7 @@ internal object CarTouchCalibration {
             _state.value = c.copy(step = 1)
         } else {
             val key = "${c.width}x${c.height}"
-            context.getSharedPreferences("ft-iccoa-touch", Context.MODE_PRIVATE).edit()
+            context.getSharedPreferences(IccoaVehicleStores.name("ft-iccoa-touch", vehicleProfileId), Context.MODE_PRIVATE).edit()
                 .putString("${key}_quad4", model.serialize()).apply()
             DiagLog.i("ICCOA", "FT four-point X/Y touch calibration saved for $key")
             cancel()
@@ -168,8 +170,9 @@ internal object CarTouchCalibration {
         return true
     }
 
-    fun correct(context: Context, x: Int, y: Int, width: Int, height: Int): Pair<Int, Int> {
-        val prefs = context.getSharedPreferences("ft-iccoa-touch", Context.MODE_PRIVATE)
+    fun correct(context: Context, x: Int, y: Int, width: Int, height: Int,
+                vehicleProfileId: String = CarProfiles.selectedId(context)): Pair<Int, Int> {
+        val prefs = context.getSharedPreferences(IccoaVehicleStores.name("ft-iccoa-touch", vehicleProfileId), Context.MODE_PRIVATE)
         val key = "${width}x${height}"
         val saved = prefs.getString("${key}_quad4", null)
         if (saved != null) {

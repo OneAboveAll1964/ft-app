@@ -21,6 +21,7 @@ import app.ft.aa.AaSession
 import app.ft.aa.AaTouchViewport
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
+import app.ft.core.Prefs
 import app.ft.core.Root
 import app.ft.media.CarPlayer
 import app.ft.projection.AudioCapture
@@ -32,6 +33,7 @@ import app.ft.projection.CarTouchCalibration
 import app.ft.projection.MirrorSink
 import app.ft.projection.MirrorTouchMap
 import app.ft.projection.MirrorTouchSequence
+import app.ft.projection.MirrorTouchCalibration
 import app.ft.projection.PhoneMirror
 import app.ft.projection.VideoPlan
 import app.ft.ui.car.CarScreen
@@ -57,7 +59,8 @@ class IccoaProjection(
     private val onCarHome: () -> Unit,
     private val onAudio: (ByteArray) -> Unit,
     private val onFailure: (String) -> Unit = {},
-    private val onAaConnectionChanged: (Boolean) -> Unit = {}
+    private val onAaConnectionChanged: (Boolean) -> Unit = {},
+    private val prefs: Prefs = FTApp.instance.prefs
 ) : CarControls.Backend {
     private val app get() = FTApp.instance
     private val main = Handler(Looper.getMainLooper())
@@ -134,7 +137,7 @@ class IccoaProjection(
                 width = plan.streamWidth, height = plan.streamHeight, fps = plan.fps
             ) }
             startCapturedAudio()
-            if (firstStart && app.prefs.aaAutoStart) startAa()
+            if (firstStart && prefs.aaAutoStart) startAa()
         } catch (t: Throwable) {
             projectionFailed(t)
         }
@@ -159,7 +162,7 @@ class IccoaProjection(
     }
     fun resetTouchCalibration() = onMain {
         if (!active) return@onMain
-        CarTouchCalibration.reset(context, display.width, display.height)
+        CarTouchCalibration.reset(context, display.width, display.height, prefs.profileId)
     }
     fun touch(action: Int, x: Int, y: Int) = touch(CarTouch(action, x, y))
     fun touch(raw: CarTouch) = onMain {
@@ -168,13 +171,13 @@ class IccoaProjection(
         val second = if (raw.x2 >= 0 && raw.y2 >= 0) display.toContent(raw.x2, raw.y2) else -1 to -1
         // FT owns its UI hit testing. AA and phone mirror have independent touch mapping.
         val isFtUi = !state.value.aaOverlay && !state.value.mirroring
-        if (isFtUi && CarTouchCalibration.consume(context, raw.action, initialX, y)) return@onMain
+        if (isFtUi && CarTouchCalibration.consume(context, raw.action, initialX, y, prefs.profileId)) return@onMain
         // Apply the stored HU X/Y calibration before routing FT, mirror and AA touch.
         val applyCalibration = true
         val (mappedX, mappedY) = if (applyCalibration)
-            CarTouchCalibration.correct(context, initialX, y, display.width, display.height) else initialX to y
+            CarTouchCalibration.correct(context, initialX, y, display.width, display.height, prefs.profileId) else initialX to y
         val (mappedX2, mappedY2) = if (applyCalibration && second.first >= 0 && second.second >= 0)
-            CarTouchCalibration.correct(context, second.first, second.second, display.width, display.height) else second
+            CarTouchCalibration.correct(context, second.first, second.second, display.width, display.height, prefs.profileId) else second
         val t = raw.copy(x = mappedX, y = mappedY, x2 = mappedX2, y2 = mappedY2)
         if (t.action == CarTouch.DOWN) touchFt = CarTouchZones.hit(mappedX, mappedY)
         if (touchFt) {
@@ -193,8 +196,8 @@ class IccoaProjection(
                     return@onMain
                 }
                 val display = aa.displayConfig
-                val targetWidth = display?.width ?: app.prefs.aaWidth
-                val targetHeight = display?.height ?: app.prefs.aaHeight
+                val targetWidth = display?.width ?: prefs.aaWidth
+                val targetHeight = display?.height ?: prefs.aaHeight
                 val point = viewport.map(mappedX, mappedY, targetWidth, targetHeight)
                 if (t.action == CarTouch.DOWN) DiagLog.i("ICCOA",
                     "touch route=AA content=$mappedX,$mappedY viewport=$viewport target=${targetWidth}x${targetHeight} mapped=${point.first},${point.second}")
@@ -383,18 +386,18 @@ class IccoaProjection(
 
     override fun startAa() = onMain {
         if (!active) return@onMain
-        if (runCatching { context.packageManager.getPackageInfo(app.prefs.aaPackage, 0) }.isFailure) return@onMain
+        if (runCatching { context.packageManager.getPackageInfo(prefs.aaPackage, 0) }.isFailure) return@onMain
         hideMirror()
-        if (app.prefs.aaMatchCar) {
+        if (prefs.aaMatchCar) {
             val (width, height) = IccoaAaSize.fit(display.width, display.height)
-            app.prefs.aaWidth = width
-            app.prefs.aaHeight = height
-            app.prefs.aaFps = state.value.fps
+            prefs.aaWidth = width
+            prefs.aaHeight = height
+            prefs.aaFps = state.value.fps
             DiagLog.i("ICCOA", "AA active size=${width}x$height for car=${display.width}x${display.height}")
         }
         ownsAa = true
         if (AaHeadUnitService.current == null && !AaHeadUnitService.state.value.listening) {
-            AaHeadUnitService.start(context, app.prefs.aaBluetooth)
+            AaHeadUnitService.start(context, prefs.aaBluetooth)
         }
         aaJob?.cancel()
         aaJob = scope.launch {
@@ -420,7 +423,7 @@ class IccoaProjection(
                 .setComponent(ComponentName("com.google.android.projection.gearhead",
                     "com.google.android.apps.auto.wireless.setup.receiver.WirelessStartupReceiver"))
                 .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES or Intent.FLAG_RECEIVER_FOREGROUND)
-                .putExtra("ip_address", "127.0.0.1").putExtra("projection_port", app.prefs.aaPort))
+                .putExtra("ip_address", "127.0.0.1").putExtra("projection_port", prefs.aaPort))
         }.onFailure { DiagLog.w("ICCOA", "Android Auto connection request failed: ${it.message}") }
     }
 
@@ -488,6 +491,8 @@ class IccoaProjection(
 
     fun stop() = onMain { stopInternal() }
     private fun stopInternal() {
+        CarTouchCalibration.cancel()
+        MirrorTouchCalibration.cancel()
         active = false
         displayPlan = null
         hideMirror()

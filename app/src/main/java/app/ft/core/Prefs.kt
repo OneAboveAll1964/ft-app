@@ -6,25 +6,38 @@ import app.ft.carlife.JoinWatch
 import app.ft.projection.VideoPlans
 import app.ft.projection.VideoProfile
 
-class Prefs(context: Context) {
-    private val sp: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
+/** A preference handle stays bound to its vehicle, even after the selected vehicle changes. */
+class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(context)) {
+    val profileId: String = vehicleProfileId.also { require(CarProfiles.isProfileId(it)) }
+    private val global: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
+    private val sp: SharedPreferences = if (profileId == LEGACY_ID) global else
+        context.getSharedPreferences(profileStoreName(profileId), Context.MODE_PRIVATE)
 
-    private fun int(key: String, def: Int) = sp.getInt(key, def)
-    private fun set(key: String, v: Int) = sp.edit().putInt(key, v).apply()
-    private fun bool(key: String, def: Boolean) = sp.getBoolean(key, def)
-    private fun set(key: String, v: Boolean) = sp.edit().putBoolean(key, v).apply()
-    private fun str(key: String, def: String) = sp.getString(key, def) ?: def
-    private fun set(key: String, v: String) = sp.edit().putString(key, v).apply()
-    private fun flt(key: String, def: Float) = sp.getFloat(key, def)
-    private fun set(key: String, v: Float) = sp.edit().putFloat(key, v).apply()
-    private fun lng(key: String, def: Long) = sp.getLong(key, def)
-    private fun set(key: String, v: Long) = sp.edit().putLong(key, v).apply()
+    private fun storeFor(key: String) = if (key in PROFILE_KEYS) sp else global
 
-    val all: Map<String, *> get() = sp.all
-    fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) = sp.registerOnSharedPreferenceChangeListener(listener)
-    fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) = sp.unregisterOnSharedPreferenceChangeListener(listener)
+    private fun int(key: String, def: Int) = storeFor(key).getInt(key, def)
+    private fun set(key: String, v: Int) = storeFor(key).edit().putInt(key, v).apply()
+    private fun bool(key: String, def: Boolean) = storeFor(key).getBoolean(key, def)
+    private fun set(key: String, v: Boolean) = storeFor(key).edit().putBoolean(key, v).apply()
+    private fun str(key: String, def: String) = storeFor(key).getString(key, def) ?: def
+    private fun set(key: String, v: String) = storeFor(key).edit().putString(key, v).apply()
+    private fun flt(key: String, def: Float) = storeFor(key).getFloat(key, def)
+    private fun set(key: String, v: Float) = storeFor(key).edit().putFloat(key, v).apply()
+    private fun lng(key: String, def: Long) = storeFor(key).getLong(key, def)
+    private fun set(key: String, v: Long) = storeFor(key).edit().putLong(key, v).apply()
+
+    val all: Map<String, *> get() = global.all.filterKeys { it !in PROFILE_KEYS } +
+        sp.all.filterKeys { it in PROFILE_KEYS && it !in LOCAL_IDENTITY_KEYS }
+    fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        sp.registerOnSharedPreferenceChangeListener(listener)
+        if (global !== sp) global.registerOnSharedPreferenceChangeListener(listener)
+    }
+    fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        sp.unregisterOnSharedPreferenceChangeListener(listener)
+        if (global !== sp) global.unregisterOnSharedPreferenceChangeListener(listener)
+    }
     fun put(key: String, value: Any?) {
-        val e = sp.edit()
+        val e = storeFor(key).edit()
         when (value) {
             is Boolean -> e.putBoolean(key, value)
             is Int -> e.putInt(key, value)
@@ -216,6 +229,34 @@ class Prefs(context: Context) {
     var supercastWay: Int get() = int("supercastWay", 0); set(v) = set("supercastWay", v)
     var supercastDockHidden: Boolean get() = bool("supercastDockHidden", false); set(v) = set("supercastDockHidden", v)
     var supercastSplit: Float get() = flt("supercastSplit", 0.5f); set(v) = set("supercastSplit", v)
+
+    companion object {
+        const val LEGACY_ID = "legacy"
+        internal fun profileStoreName(id: String) = "ft-car-$id"
+
+        // Opt in explicitly: new installation/runtime settings remain shared by all vehicles.
+        internal val PROFILE_KEYS = setOf(
+            "cmdPort", "videoPort", "mediaPort", "ttsPort", "vrPort", "touchPort",
+            "aaPort", "aaSelfPort", "aaWidth", "aaHeight", "aaFps", "aaDensity", "aaDensityBoost167",
+            "aaControlsLeft", "aaClusterNavigation", "aaMatchCar", "aaBluetooth", "aaPackage", "aaServerPackage",
+            "aaAutoStart", "aaShowReturnButton", "aaCorner",
+            "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps", "pictureBitrate", "videoQpFloor",
+            "carDensity", "encoderSavePower", "savedVideoProfile", "videoProfileGeneration", "carSizedApps",
+            "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio", "iccoaMicGain", "directions",
+            "carName", "autoConnect", "carProtocol", "linkMode", "carP2pName", "carBtName", "carBtAddress",
+            "carBtReconnect", "carLifeVehicleAddress", "carLifeVehicleName", "carLifeWifiAddress", "carLifeVehicleRevision",
+            "carWpsPin", "carJoinTimeoutSeconds", "swapTrackKeys", "wheelLongNext", "wheelLongPrev",
+            "gearReverse", "gearPark", "gearReverseSound", "gearParkSound", "gearReverseLevel", "gearParkLevel",
+            "pkgMaps", "pkgMusic", "pkgVideo", "pkgPhone", "openOnConnect", "openOnConnectSecond",
+            "carBackground", "carAccent", "carTiles", "carClock24", "carShowLink", "carSongInfo",
+            "carInfoRight", "carColumns", "carShowClock", "carShowMusic", "carShowAa", "carShowCarHome",
+            "carWidgets", "weatherFahrenheit", "speedMph", "carDayNight", "carNightBackground", "carNightAccent",
+            "supercastOn", "supercastScreenOff", "supercastApps", "supercastWay", "supercastDockHidden", "supercastSplit"
+        )
+        private val LOCAL_IDENTITY_KEYS = setOf(
+            "carBtAddress", "carLifeVehicleAddress", "carLifeVehicleName", "carLifeWifiAddress", "carLifeVehicleRevision"
+        )
+    }
 }
 
 // Settings and the service each own a Prefs instance, but must invalidate/save atomically.

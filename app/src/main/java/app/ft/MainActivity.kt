@@ -53,9 +53,11 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.height
@@ -74,6 +76,10 @@ import app.ft.core.CarConnection
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
+import app.ft.ui.home.rememberIccoaConnectionActions
+import app.ft.ui.cars.CarsScreen
+import app.ft.ui.car.CarIcons
+import app.ft.core.CarProtocol
 import app.ft.ui.settings.SettingsPage
 import app.ft.ui.settings.SettingsScreen
 import app.ft.ui.components.RootChip
@@ -97,6 +103,7 @@ import app.ft.ui.theme.rememberDark
 
 enum class Screen(@StringRes val label: Int, val icon: ImageVector) {
     HOME(R.string.nav_home, Icons.Filled.Home),
+    CARS(R.string.cars_title, CarIcons.Car),
     LOG(R.string.nav_log, Icons.Filled.Info),
     SETTINGS(R.string.nav_settings, Icons.Filled.Settings)
 }
@@ -230,10 +237,10 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (intent.getBooleanExtra("supercast", false)) {
-            Thread { SuperCast.start(applicationContext) }.start()
+            SuperCast.startAsync(applicationContext)
         }
         if (intent.getBooleanExtra("supercastBridge", false)) {
-            Thread { SuperCast.startOverBridge(applicationContext) }.start()
+            SuperCast.startAsync(applicationContext, bridge = true)
         }
         intent.getStringExtra("openOnConnect")?.let { app.prefs.openOnConnect = if (it == "none") "" else it }
         if (intent.hasExtra("wheelNext")) app.prefs.wheelLongNext = intent.getIntExtra("wheelNext", 0)
@@ -311,8 +318,18 @@ fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaF
 private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    var settingsFromCars by rememberSaveable { mutableStateOf(false) }
+    val profiles by FTApp.instance.cars.state.collectAsState()
+    val screenStates = rememberSaveableStateHolder()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val iccoaActions = rememberIccoaConnectionActions()
     val inPage = screen == Screen.SETTINGS && settingsPage != null
-    BackHandler(enabled = screen != Screen.HOME) { if (inPage) settingsPage = null else screen = Screen.HOME }
+    fun back() {
+        if (inPage && settingsFromCars) { screen = Screen.CARS; settingsPage = null }
+        else if (inPage) settingsPage = null
+        else screen = Screen.HOME
+    }
+    BackHandler(enabled = screen != Screen.HOME) { back() }
     val barState = rememberTopAppBarState()
     val scroll = TopAppBarDefaults.pinnedScrollBehavior(barState)
     LaunchedEffect(screen, settingsPage) { barState.contentOffset = 0f }
@@ -332,7 +349,7 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
                     }
                 },
                 navigationIcon = {
-                    if (inPage) IconButton(onClick = { settingsPage = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back)) }
+                    if (inPage) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back)) }
                 },
                 actions = {
                     if (screen == Screen.LOG) {
@@ -351,7 +368,7 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
                         NavigationBarItem(
                             selected = screen == s,
                             onClick = {
-                                if (s == Screen.SETTINGS) settingsPage = null
+                                if (s == Screen.SETTINGS) { settingsPage = null; settingsFromCars = false }
                                 screen = s
                             },
                             icon = { Icon(s.icon, contentDescription = stringResource(s.label)) },
@@ -379,22 +396,40 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
             },
             label = "screen"
         ) { (s, page) ->
+            val stateKey = "${s.name}:${page?.name.orEmpty()}:" +
+                if (s == Screen.HOME || s == Screen.SETTINGS) profiles.activeId else ""
+            screenStates.SaveableStateProvider(stateKey) {
+            key(if (s == Screen.HOME || s == Screen.SETTINGS) profiles.activeId else s.name) {
             when (s) {
                 Screen.HOME -> HomeScreen(
                     pad = pad,
                     onOpenAccessibility = onOpenAccessibility,
                     onOpenOverlay = onOpenOverlay,
                     onOpenConnectionSettings = {
+                        settingsFromCars = false
                         settingsPage = SettingsPage.CAR
                         screen = Screen.SETTINGS
                     },
                     onOpenAaSetup = {
+                        settingsFromCars = false
                         settingsPage = SettingsPage.ANDROID_AUTO
                         screen = Screen.SETTINGS
-                    }
+                    },
+                    onOpenCars = { screen = Screen.CARS },
+                    iccoaConnectionActions = iccoaActions
                 )
+                Screen.CARS -> CarsScreen(pad,
+                    onOpenSettings = { settingsPage = it; settingsFromCars = true; screen = Screen.SETTINGS },
+                    onConnect = {
+                        if (FTApp.instance.prefs.carProtocol == CarProtocol.ICCOA) iccoaActions.start(false)
+                        else CarConnection.switchOn(context)
+                        screen = Screen.HOME
+                    },
+                    isActive = screen == Screen.CARS)
                 Screen.LOG -> DiagnosticsScreen(pad)
                 Screen.SETTINGS -> SettingsScreen(pad, page, onPickAaFile) { settingsPage = it }
+            }
+            }
             }
         }
     }

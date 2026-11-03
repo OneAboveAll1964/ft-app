@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 170
-        versionName = "3.9.56-baidu-ft-button"
+        versionCode = 171
+        versionName = "3.9.57-my-cars"
     }
 
     signingConfigs {

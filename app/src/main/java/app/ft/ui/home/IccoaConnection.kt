@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,7 +39,7 @@ import app.ft.iccoa.IccoaService
 import app.ft.iccoa.IccoaState
 import app.ft.ui.components.ReportButton
 
-internal class IccoaConnectionActions(val denied: Boolean, val start: (scanAgain: Boolean) -> Unit)
+class IccoaConnectionActions(val denied: Boolean, val start: (scanAgain: Boolean) -> Unit)
 
 @Composable
 internal fun rememberIccoaConnectionActions(): IccoaConnectionActions {
@@ -46,7 +47,8 @@ internal fun rememberIccoaConnectionActions(): IccoaConnectionActions {
     val prefs = FTApp.instance.prefs
     val state by IccoaService.state.collectAsState()
     var denied by remember { mutableStateOf(false) }
-    var rescan by remember { mutableStateOf(false) }
+    var rescan by rememberSaveable { mutableStateOf(false) }
+    var requestedProfileId by rememberSaveable { mutableStateOf<String?>(null) }
     val permissions = remember {
         buildList {
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -59,6 +61,7 @@ internal fun rememberIccoaConnectionActions(): IccoaConnectionActions {
         }.toTypedArray()
     }
     val permissionRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (FTApp.instance.prefs.profileId != requestedProfileId) return@rememberLauncherForActivityResult
         // Coarse is requested alongside Fine for Android 12's location permission dialog.
         denied = permissions.any { it != Manifest.permission.ACCESS_COARSE_LOCATION && result[it] != true }
         if (!denied) {
@@ -69,6 +72,7 @@ internal fun rememberIccoaConnectionActions(): IccoaConnectionActions {
         }
     }
     fun start(scanAgain: Boolean) {
+        requestedProfileId = FTApp.instance.prefs.profileId
         rescan = scanAgain
         if (permissions.any { it != Manifest.permission.ACCESS_COARSE_LOCATION && context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }) permissionRequest.launch(permissions)
         else {

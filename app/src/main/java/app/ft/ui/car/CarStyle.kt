@@ -127,7 +127,12 @@ object CarStyles {
     private val _current = MutableStateFlow(CarStyle())
     val current: StateFlow<CarStyle> = _current
 
-    fun photoFile(context: Context) = File(context.filesDir, "car_background.jpg")
+    fun photoFile(context: Context, profileId: String = FTApp.instance.prefs.profileId): File {
+        require(profileId == Prefs.LEGACY_ID || runCatching {
+            java.util.UUID.fromString(profileId).toString() == profileId
+        }.getOrDefault(false))
+        return File(context.filesDir, if (profileId == Prefs.LEGACY_ID) "car_background.jpg" else "car_background_$profileId.jpg")
+    }
 
     fun reload() {
         val p = FTApp.instance.prefs
@@ -182,7 +187,7 @@ object CarStyles {
         }
     }
 
-    fun savePhoto(context: Context, uri: Uri): Boolean = runCatching {
+    fun savePhoto(context: Context, uri: Uri, profileId: String = FTApp.instance.prefs.profileId): Boolean = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
@@ -190,7 +195,7 @@ object CarStyles {
         val bitmap = context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
         } ?: return false
-        photoFile(context).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it) }
+        photoFile(context, profileId).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it) }
         true
     }.getOrDefault(false)
 }

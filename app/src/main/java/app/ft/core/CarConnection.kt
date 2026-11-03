@@ -5,9 +5,21 @@ import app.ft.FTApp
 import app.ft.aa.AaHeadUnitService
 import app.ft.carlife.CarLifeService
 import app.ft.iccoa.IccoaService
+import app.ft.supercast.SuperCast
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /** App entry points select a backend here. Each backend owns its own connection lifecycle. */
 object CarConnection {
+    private val mutableBusy = MutableStateFlow(false)
+    val busy: StateFlow<Boolean> = mutableBusy.asStateFlow()
+    val isBusy: Boolean get() = CarLifeService.isBusy || IccoaService.isBusy ||
+        AaHeadUnitService.isBusy || SuperCast.isBusy
+
+    /** Called at dispatch, creation and after teardown, including failed starts. */
+    internal fun lifecycleChanged() { mutableBusy.value = isBusy }
+
     fun startAuto(context: Context) {
         val prefs = FTApp.instance.prefs
         if (!prefs.autoConnect) return
@@ -30,9 +42,10 @@ object CarConnection {
 
     fun switchOff(context: Context) {
         FTApp.instance.prefs.autoConnect = false
-        if (CarLifeService.state.value.running) CarLifeService.stop(context)
+        if (CarLifeService.isBusy) CarLifeService.stop(context)
         IccoaService.stop(context)
-        if (AaHeadUnitService.running) AaHeadUnitService.stop(context)
+        if (AaHeadUnitService.isBusy) AaHeadUnitService.stop(context)
+        SuperCast.stopAll()
     }
 
     fun selectProtocol(context: Context, protocol: CarProtocol) {

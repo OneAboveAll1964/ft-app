@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Intent
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
+import app.ft.core.CarProfiles
+import app.ft.core.CarConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,6 +16,8 @@ import app.ft.core.Looks
 
 class FTApp : Application() {
     lateinit var prefs: Prefs
+        private set
+    lateinit var cars: CarProfiles
         private set
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile var mirrorResultCode: Int = 0
@@ -35,6 +39,17 @@ class FTApp : Application() {
         }
         app.ft.supercast.SuperCast.freshToken()
         app.ft.ui.car.CarStyles.reload()
+        cars = CarProfiles(this, prefs,
+            canSwitch = { !CarConnection.isBusy },
+            onSelected = { selected ->
+                prefs = selected
+                app.ft.core.CarAudioBus.guidance = selected.guidanceMode
+                app.ft.ui.car.CarStyles.reload()
+            },
+            onDeleted = { id ->
+                app.ft.iccoa.IccoaVehicleStores.clear(this, id)
+                app.ft.ui.car.CarStyles.photoFile(this, id).delete()
+            })
         app.ft.ui.car.CarStyles.watchDayNight(scope)
         DiagLog.i("App", "FT ${runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: ""} ready")
         DiagLog.i("App", "phone ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (${android.os.Build.DEVICE}), Android ${android.os.Build.VERSION.RELEASE} SDK ${android.os.Build.VERSION.SDK_INT}, " +

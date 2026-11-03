@@ -67,11 +67,21 @@ fun SuperCastSettings() {
 
     fun setUp() {
         failed = false
-        scope.launch {
-            busy = true
-            val ok = withContext(Dispatchers.IO) { SuperCast.start(context.applicationContext) }
-            busy = false
-            failed = !ok
+        val request = SuperCast.prepareStart()
+        try {
+            scope.launch {
+                busy = true
+                try {
+                    val ok = withContext(Dispatchers.IO) { request.start(context.applicationContext) }
+                    failed = !ok
+                } finally {
+                    busy = false
+                    request.close()
+                }
+            }.invokeOnCompletion { request.close() }
+        } catch (error: Throwable) {
+            request.close()
+            throw error
         }
     }
 

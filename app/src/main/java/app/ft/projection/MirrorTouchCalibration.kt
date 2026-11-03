@@ -2,6 +2,8 @@ package app.ft.projection
 
 import android.content.Context
 import app.ft.core.DiagLog
+import app.ft.core.CarProfiles
+import app.ft.iccoa.IccoaVehicleStores
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.roundToInt
@@ -63,15 +65,16 @@ internal object MirrorTouchCalibration {
     private fun key(bounds: MirrorTouchBounds, carWidth: Int, carHeight: Int): String =
         "${carWidth}x${carHeight}_mirror_${if (bounds.portrait) "portrait" else "landscape"}_quad4"
 
-    fun reset(context: Context, bounds: MirrorTouchBounds, carWidth: Int, carHeight: Int) {
+    fun reset(context: Context, bounds: MirrorTouchBounds, carWidth: Int, carHeight: Int,
+              vehicleProfileId: String = CarProfiles.selectedId(context)) {
         cancel()
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        context.getSharedPreferences(IccoaVehicleStores.name(PREFS, vehicleProfileId), Context.MODE_PRIVATE)
             .edit().remove(key(bounds, carWidth, carHeight)).apply()
         DiagLog.i("ICCOA", "Mirror ${if (bounds.portrait) "portrait" else "landscape"} calibration reset")
     }
 
     fun consume(context: Context, action: Int, x: Int, y: Int, bounds: MirrorTouchBounds,
-                carWidth: Int, carHeight: Int): Boolean {
+                carWidth: Int, carHeight: Int, vehicleProfileId: String = CarProfiles.selectedId(context)): Boolean {
         val st = _state.value
         if (st.step !in 1..4) {
             if (!swallowUp) return false
@@ -100,7 +103,7 @@ internal object MirrorTouchCalibration {
             _state.value = st.copy(step = 1)
             DiagLog.w("ICCOA", "Mirror 4-point touch geometry rejected, restart calibration")
         } else {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            context.getSharedPreferences(IccoaVehicleStores.name(PREFS, vehicleProfileId), Context.MODE_PRIVATE).edit()
                 .putString(key(bounds, carWidth, carHeight), quad.serialize()).apply()
             DiagLog.i("ICCOA", "Mirror four-point calibration saved orientation=${if (bounds.portrait) "portrait" else "landscape"}")
             cancel()
@@ -109,9 +112,9 @@ internal object MirrorTouchCalibration {
     }
 
     fun map(context: Context, bounds: MirrorTouchBounds, x: Int, y: Int,
-            carWidth: Int, carHeight: Int): Pair<Int, Int> {
+            carWidth: Int, carHeight: Int, vehicleProfileId: String = CarProfiles.selectedId(context)): Pair<Int, Int> {
         val normalized = bounds.normalized(x, y)
-        val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val saved = context.getSharedPreferences(IccoaVehicleStores.name(PREFS, vehicleProfileId), Context.MODE_PRIVATE)
             .getString(key(bounds, carWidth, carHeight), null) ?: return normalized
         return TouchQuad.deserialize(saved, UNIT, UNIT)?.map(normalized.first, normalized.second, UNIT, UNIT)
             ?: normalized

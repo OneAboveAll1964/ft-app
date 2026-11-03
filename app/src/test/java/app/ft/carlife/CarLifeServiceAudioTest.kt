@@ -45,6 +45,7 @@ class CarLifeServiceAudioTest {
         `when`(audio.active).thenReturn(true)
         `when`(audio.startedAt).thenReturn(123L)
         set("tag", "CarLifeTest")
+        set("prefs", prefs)
         set("audio", audio)
         set("projection", projection)
         set("projectionLock", Any())

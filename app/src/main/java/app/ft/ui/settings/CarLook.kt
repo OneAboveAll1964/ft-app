@@ -177,7 +177,7 @@ fun CarColourSettings(preview: CarPreviewState) {
     var photoFailed by remember { mutableStateOf(false) }
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
-            val ok = withContext(Dispatchers.IO) { CarStyles.savePhoto(context, uri) }
+            val ok = withContext(Dispatchers.IO) { CarStyles.savePhoto(context, uri, p.profileId) }
             photoFailed = !ok
             if (ok) save { p.carBackground = CarStyle.PHOTO }
             preview.night = false

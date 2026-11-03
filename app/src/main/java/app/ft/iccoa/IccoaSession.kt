@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import app.ft.core.DiagLog
+import app.ft.core.Prefs
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
@@ -56,12 +57,13 @@ class IccoaSession(
     private val onControlReady: () -> Unit = {},
     private val trustedCarName: String = "",
     private val tryRememberedPin: Boolean = false,
-    private val forceCurrentPin: Boolean = false
+    private val forceCurrentPin: Boolean = false,
+    private val vehicleProfileId: String = Prefs(context).profileId
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
-    private val trustedPin by lazy { IccoaTrustedPin(context) }
-    private val trustedCarKey by lazy { IccoaTrustedCarKey(context) }
+    private val trustedPin by lazy { IccoaTrustedPin(context, vehicleProfileId) }
+    private val trustedCarKey by lazy { IccoaTrustedCarKey(context, vehicleProfileId) }
     @Volatile private var current: Attempt? = null
     val cipher: IccoaControl.Cipher? get() = current?.cipher
 

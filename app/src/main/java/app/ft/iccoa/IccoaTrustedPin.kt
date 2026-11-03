@@ -1,6 +1,7 @@
 package app.ft.iccoa
 
 import android.content.Context
+import app.ft.core.Prefs
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.security.KeyStore
@@ -13,8 +14,8 @@ import javax.crypto.SecretKey
  * Old PIN may be rejected by OEM on subsequent pairing. Try once, then prompt owner.
  * Ciphertext in Android backup cannot be decrypted without the on-device keystore key.
  */
-internal class IccoaTrustedPin(context: Context) {
-    private val storage = context.getSharedPreferences("iccoa-trusted-reconnect-v1", Context.MODE_PRIVATE)
+internal class IccoaTrustedPin(context: Context, vehicleProfileId: String = Prefs(context).profileId) {
+    private val storage = context.getSharedPreferences(IccoaVehicleStores.name("iccoa-trusted-reconnect-v1", vehicleProfileId), Context.MODE_PRIVATE)
 
     fun load(profileId: String, carName: String): String? {
         if (carName.isBlank()) return null

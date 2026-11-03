@@ -1,6 +1,7 @@
 package app.ft.iccoa
 
 import android.content.Context
+import app.ft.core.Prefs
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.security.KeyStore
@@ -16,8 +17,8 @@ import javax.crypto.spec.GCMParameterSpec
  * confirmed CONTROL. The 64-byte public key is encrypted/authenticated at rest,
  * bound to the approved car name and stable client ID, and cannot be silently reset.
  */
-internal class IccoaTrustedCarKey(context: Context) {
-    private val prefs = context.getSharedPreferences("iccoa-trusted-quick-v1", Context.MODE_PRIVATE)
+internal class IccoaTrustedCarKey(context: Context, vehicleProfileId: String = Prefs(context).profileId) {
+    private val prefs = context.getSharedPreferences(IccoaVehicleStores.name("iccoa-trusted-quick-v1", vehicleProfileId), Context.MODE_PRIVATE)
 
     fun load(profileId: String, carName: String): ByteArray? {
         if (carName.isBlank()) return null
