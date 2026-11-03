@@ -319,7 +319,11 @@ class IccoaService : Service() {
         }
         connection = IccoaSession(this,
             onStatus = { text -> current { _state.update { it.copy(status = text) } } },
-            onPinRequired = { current { _state.update { it.copy(pinRequired = true, status = "Enter the six-digit code shown by the car") } } },
+            onPinRequired = { current {
+                cancelRecoveryScan()
+                dropRecovery.onPinRequired()
+                _state.update { it.copy(pinRequired = true, status = "Enter the six-digit code shown by the car") }
+            } },
             onReady = { network, peer ->
                 // AuthConfirm must only advertise our address after these listeners are bound.
                 synchronized(lifecycle) {
@@ -331,7 +335,7 @@ class IccoaService : Service() {
                         onKeyframe = { current { projection?.requestKeyFrame() } },
                         onTouch = { touch -> current { projection?.touch(touch) } },
                         onKey = { code -> current { projection?.key(code) } },
-                        onClosed = { reason -> current { connectionFailed(reason) } })
+                        onClosed = { reason -> current { connectionFailed(reason, retryableTransportFailure = true) } })
                     transport.start()
                     media = transport
                 }
@@ -349,7 +353,7 @@ class IccoaService : Service() {
                     else control(category, method, body)
                 }
             },
-            onClosed = { reason -> current { connectionFailed(reason) } },
+            onClosed = { reason, transport -> current { connectionFailed(reason, transport) } },
             onControlReady = { current {
                 navigationRetries = 0
                 main.removeCallbacks(navigationSend)
@@ -397,6 +401,8 @@ class IccoaService : Service() {
         pendingCar?.let { car ->
             if (rememberedCar.remember(car)) DiagLog.i("ICCOA", "Authenticated vehicle selection remembered for next connection")
         }
+        cancelRecoveryScan()
+        dropRecovery.onConnected()
         _state.update { it.copy(connecting = false, connected = true, pinRequired = false,
             status = "ICCOA linked · awaiting H.264 video · ${plan.streamWidth}×${plan.streamHeight} · ${plan.fps} fps") }
     }
@@ -425,7 +431,7 @@ class IccoaService : Service() {
             4 -> lastVideoConfig?.let(::play)
             5, 41 -> pauseProjection()
             16 -> projection?.key(84) // Same AA voice/search key as the CarLife voice button.
-            23 -> connectionFailed("The car disconnected")
+            23 -> connectionFailed("The car disconnected", retryableTransportFailure = true)
             25 -> runCatching { IccoaCarConfig.describe(body) }
                 .onSuccess { DiagLog.i("ICCOA", "Car config: $it") }
                 .onFailure { DiagLog.w("ICCOA", "Car config unreadable: bytes=${body.size} ${it.javaClass.simpleName}") }
@@ -449,13 +455,23 @@ class IccoaService : Service() {
         if (audioPlayerState.pending && session != null) main.postDelayed(audioStateRetry, 500)
     }
 
-    private fun connectionFailed(reason: String) {
+    private fun connectionFailed(reason: String, retryableTransportFailure: Boolean = false) {
         DiagLog.w("ICCOA", reason)
+        val number = dropRecovery.onFailure(
+            _state.value.connected, FTApp.instance.prefs.autoConnect, retryableTransportFailure
+        )
+        cancelRecoveryScan()
         endConnection()
-        _state.update { it.copy(status = "$reason. Обновляю список устройств для новой попытки") }
-        // XA60 changes its private BLE address after a failed handshake. Reusing the old
-        // card times out without GATT callbacks. Clear stale peers and discover afresh.
-        if (_state.value.running) discovery?.start()
+        if (number != null) {
+            // A new scan is mandatory: Toyota can rotate its BLE address.
+            autoConnectAttempted = false
+            _state.update { it.copy(status = "$reason. Переподключение $number/${IccoaDropRecovery.MAX_ATTEMPTS}") }
+            scheduleRecoveryScan(number)
+        } else {
+            _state.update { it.copy(status = "$reason. Автоматические попытки остановлены") }
+            // A manual receiver selection is still possible after any failure.
+            if (_state.value.running) discovery?.start()
+        }
     }
 
     private fun endConnection() {
@@ -508,6 +524,8 @@ class IccoaService : Service() {
         }
 
     override fun onDestroy() {
+        cancelRecoveryScan()
+        dropRecovery.onExplicitOwnerRequest()
         bluetoothReconnect?.close(); bluetoothReconnect = null
         bluetoothCalls?.close(); bluetoothCalls = null
         discovery?.stop(); discovery = null
