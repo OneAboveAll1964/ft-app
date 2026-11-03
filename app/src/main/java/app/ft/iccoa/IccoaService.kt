@@ -357,7 +357,19 @@ class IccoaService : Service() {
                     else control(category, method, body)
                 }
             },
-            onClosed = { reason, transport -> current { connectionFailed(reason, transport) } },
+            onClosed = { closed -> current {
+                when (closed.action) {
+                    IccoaCloseAction.RETRY_TRANSPORT ->
+                        connectionFailed(closed.message, retryableTransportFailure = true)
+                    IccoaCloseAction.REQUIRE_NORMAL_PIN -> {
+                        // This branch has no Quick Auth yet. Never misread its fallback
+                        // as permission to retry transport. The Quick PR handles PIN flow.
+                        dropRecovery.onPinRequired()
+                        connectionFailed(closed.message)
+                    }
+                    IccoaCloseAction.STOP -> connectionFailed(closed.message)
+                }
+            } },
             onControlReady = { current {
                 navigationRetries = 0
                 main.removeCallbacks(navigationSend)
@@ -435,7 +447,7 @@ class IccoaService : Service() {
             4 -> lastVideoConfig?.let(::play)
             5, 41 -> pauseProjection()
             16 -> projection?.key(84) // Same AA voice/search key as the CarLife voice button.
-            23 -> connectionFailed("The car disconnected", retryableTransportFailure = true)
+            // Control method 23 is intercepted in IccoaSession as RETRY_TRANSPORT.
             25 -> runCatching { IccoaCarConfig.describe(body) }
                 .onSuccess { DiagLog.i("ICCOA", "Car config: $it") }
                 .onFailure { DiagLog.w("ICCOA", "Car config unreadable: bytes=${body.size} ${it.javaClass.simpleName}") }
