@@ -62,6 +62,16 @@ class IccoaGpsWireTest {
         assertNull(IccoaGpsWire.decode(ProtoWriter().bytes(6, raw).toByteArray()))
         assertNull(IccoaGpsWire.decode(ProtoWriter().int32(1, 7).toByteArray()))
     }
+    @Test fun oemAndroidLocationFlooringGivesKilometersPerHourAndHeading() {
+        // OEM: floor(Location.getSpeed() m/s) and floor(getBearing() degrees).
+        assertEquals(7.2f, IccoaGpsUnits.speedKmh(2L)!!, 0.0001f)
+        assertEquals(0f, IccoaGpsUnits.speedKmh(0L)!!, 0f)
+        assertEquals(359f, IccoaGpsUnits.headingDegrees(359L)!!, 0f)
+        assertEquals(0f, IccoaGpsUnits.headingDegrees(0L)!!, 0f)
+        assertNull(IccoaGpsUnits.speedKmh(-1))
+        assertNull(IccoaGpsUnits.speedKmh(10000L))
+        assertNull(IccoaGpsUnits.headingDegrees(360L))
+    }
 
     @Test fun rejectsOutOfRangeCoordinates() {
         assertNull(IccoaGpsWire.decode(data(91.0, 37.0)))
