@@ -55,9 +55,9 @@ fun CarWidgets(style: CarStyle, modifier: Modifier = Modifier, preview: Boolean 
             when (key) {
                 CarStyle.WIDGET_WEATHER -> WeatherChip(style.fahrenheit, preview)
                 CarStyle.WIDGET_BATTERY -> BatteryChip(preview)
-                CarStyle.WIDGET_SPEED -> SpeedChip(style.mph, preview, freshVehicle)
-                CarStyle.WIDGET_COORDINATES -> CoordinatesChip(freshVehicle, preview, now)
-                CarStyle.WIDGET_COURSE -> CourseChip(freshVehicle, preview, now)
+                CarStyle.WIDGET_SPEED -> SpeedChip(style.mph, preview, freshVehicle, now)
+                CarStyle.WIDGET_COORDINATES -> CoordinatesChip(vehicle, preview, now)
+                CarStyle.WIDGET_COURSE -> CourseChip(vehicle, preview, now)
                 CarStyle.WIDGET_CALENDAR -> EventChip(style.clock24, preview)
             }
         }
@@ -83,10 +83,11 @@ private fun BatteryChip(preview: Boolean) {
 }
 
 @Composable
-private fun SpeedChip(mph: Boolean, preview: Boolean, vehicle: VehicleLocation?) {
+private fun SpeedChip(mph: Boolean, preview: Boolean, vehicle: VehicleLocation?, now: Long) {
     val live by CarInfo.speed.collectAsState()
-    // Do not label an unknown Baidu/ICCOA wire integer as km/h.
-    val carSpeed = vehicle?.speedKmh?.takeIf { it.isFinite() && it in 0f..450f }
+    // A displayed car speed is live only with a recent OEM GPS position.
+    val carSpeed = vehicle?.takeIf { it.positionFresh(now) }?.speedKmh
+        ?.takeIf { it.isFinite() && it in 0f..450f }
     val speed = carSpeed ?: if (live < 0f && preview) 60f else live
     if (speed < 0f) return
     val shown = if (mph) speed * 0.621371f else speed
@@ -99,7 +100,8 @@ private fun SpeedChip(mph: Boolean, preview: Boolean, vehicle: VehicleLocation?)
 
 @Composable
 private fun CoordinatesChip(vehicle: VehicleLocation?, preview: Boolean, now: Long) {
-    val fix = vehicle?.takeIf { it.positionFresh(now) }
+    val fix = vehicle?.takeIf { it.positionAtMs > 0L }
+    val fresh = fix?.positionFresh(now) == true
     val latitude = fix?.displayLatitude
     val longitude = fix?.displayLongitude
     val value = when {
@@ -108,15 +110,20 @@ private fun CoordinatesChip(vehicle: VehicleLocation?, preview: Boolean, now: Lo
             "${fix.rawLatitude}, ${fix.rawLongitude}"
         else -> "—"
     }
-    val detail = if (latitude != null) "${fix?.source ?: ""} · datum?"
-        else if (fix?.rawLatitude != null) "${fix.source} · raw"
-        else "${vehicle?.source ?: "CAR"} · NO FIX"
+    val detail = when {
+        latitude != null && fresh -> "${fix?.source ?: "CAR"} · GPS"
+        latitude != null -> "${fix?.source ?: "CAR"} · STALE ${((now - fix!!.positionAtMs).coerceAtLeast(0L) / 1000L)}s"
+        fix?.rawLatitude != null && fresh -> "${fix.source} · raw"
+        fix?.rawLatitude != null -> "${fix.source} · raw STALE"
+        else -> "${vehicle?.source ?: "CAR"} · NO FIX"
+    }
     Chip(CarIcons.Map, value, detail, wide = true)
 }
 
 @Composable
 private fun CourseChip(vehicle: VehicleLocation?, preview: Boolean, now: Long) {
-    val fix = vehicle?.takeIf { it.positionFresh(now) }
+    val fix = vehicle?.takeIf { it.positionAtMs > 0L }
+    val fresh = fix?.positionFresh(now) == true
     val degrees = fix?.headingDegrees?.takeIf { it.isFinite() && it in 0f..360f }
     val raw = fix?.headingRaw
     val label = when {
@@ -124,9 +131,13 @@ private fun CourseChip(vehicle: VehicleLocation?, preview: Boolean, now: Long) {
         raw != null -> "$raw"
         else -> "—"
     }
-    val detail = if (degrees != null) (fix?.source ?: "CAR")
-        else if (raw != null) "${fix?.source ?: "CAR"} · raw"
-        else "${vehicle?.source ?: "CAR"} · NO FIX"
+    val detail = when {
+        degrees != null && fresh -> fix?.source ?: "CAR"
+        degrees != null -> "${fix?.source ?: "CAR"} · STALE ${((now - fix!!.positionAtMs).coerceAtLeast(0L) / 1000L)}s"
+        raw != null && fresh -> "${fix?.source ?: "CAR"} · raw"
+        raw != null -> "${fix?.source ?: "CAR"} · raw STALE"
+        else -> "${vehicle?.source ?: "CAR"} · NO FIX"
+    }
     Chip(CarIcons.Rotate, label, detail)
 }
 
