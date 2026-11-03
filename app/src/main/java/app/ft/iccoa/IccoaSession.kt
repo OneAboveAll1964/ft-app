@@ -50,7 +50,7 @@ class IccoaSession(
     private val onPinRequired: () -> Unit,
     private val onReady: (Network, String) -> Unit,
     private val onMessage: (Int, Int, ByteArray) -> Unit,
-    private val onClosed: (String, Boolean) -> Unit,
+    private val onClosed: (IccoaCloseEvent) -> Unit,
     private val onControlReady: () -> Unit = {},
     private val trustedCarName: String = "",
     private val tryRememberedPin: Boolean = false
@@ -116,9 +116,9 @@ class IccoaSession(
                 later(attempt, 20_000) {
                     // pinReady becomes false again while a submitted PIN is in flight.
                     // The initial Bluetooth watchdog must stop once bootstrap is ready.
-                    if (!attempt.servicesHandled && !attempt.wifiRequested) fail(attempt, "Тайм-аут подключения ICCOA по Bluetooth", transportFailure = true)
+                    if (!attempt.servicesHandled && !attempt.wifiRequested) fail(attempt, "Тайм-аут подключения ICCOA по Bluetooth", action = IccoaCloseAction.RETRY_TRANSPORT)
                 }
-            } catch (e: Exception) { fail(attempt, "Не удалось подключиться по Bluetooth (${e.javaClass.simpleName})", transportFailure = true) }
+            } catch (e: Exception) { fail(attempt, "Не удалось подключиться по Bluetooth (${e.javaClass.simpleName})", action = IccoaCloseAction.RETRY_TRANSPORT) }
         }
     }
 
@@ -158,7 +158,7 @@ class IccoaSession(
                 if (!accepted) {
                     // A local GATT queue failure cannot invalidate a previously verified PIN.
                     if (fromCache) fail(attempt, "Сохранённый код не поставлен в очередь Bluetooth",
-                        transportFailure = true)
+                        action = IccoaCloseAction.RETRY_TRANSPORT)
                     else requestPin(attempt, "Не удалось отправить код. Введите текущий PIN")
                     return@post
                 }
@@ -169,7 +169,8 @@ class IccoaSession(
                     }
                 }
             } catch (e: Exception) { fail(attempt, "Ошибка отправки кода ICCOA (${e.javaClass.simpleName})",
-                transportFailure = fromCache && (e is java.io.IOException || e is IllegalStateException)) }
+                action = if (fromCache && (e is java.io.IOException || e is IllegalStateException))
+                    IccoaCloseAction.RETRY_TRANSPORT else IccoaCloseAction.STOP) }
         }
     }
 
@@ -207,7 +208,7 @@ class IccoaSession(
                     }
                 } catch (e: Exception) {
                     if (active(attempt)) DiagLog.w("ICCOA", "SEND category=$category method=$method ${IccoaTransportError.describe(e)}")
-                    fail(attempt, "Канал ICCOA $category закрыт (${e.javaClass.simpleName})", transportFailure = true)
+                    fail(attempt, "Канал ICCOA $category закрыт (${e.javaClass.simpleName})", action = IccoaCloseAction.RETRY_TRANSPORT)
                 } finally {
                     copy.fill(0)
                     if (category == 4) attempt.audioWritingAt = 0 else attempt.controlWritingAt = 0
@@ -230,7 +231,7 @@ class IccoaSession(
                 if (!gatt.requestMtu(512)) discover(attempt, gatt)
                 later(attempt, 2_000) { discover(attempt, gatt) }
             } else if (!attempt.wifiRequested && (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED)) {
-                fail(attempt, "Соединение Bluetooth ICCOA закрыто (status=$status)", transportFailure = true)
+                fail(attempt, "Соединение Bluetooth ICCOA закрыто (status=$status)", action = IccoaCloseAction.RETRY_TRANSPORT)
             }
         }
 
@@ -270,7 +271,7 @@ class IccoaSession(
             if (gatt === attempt.gatt && characteristic.uuid == CLIENT_INFO && status != BluetoothGatt.GATT_SUCCESS && !attempt.wifiRequested) {
                 if (attempt.reusingPin) {
                     fail(attempt, "Ошибка записи сохранённого кода Bluetooth (status=$status)",
-                        transportFailure = true)
+                        action = IccoaCloseAction.RETRY_TRANSPORT)
                 } else requestPin(attempt, "Ошибка записи кода ICCOA (status=$status)")
             }
         }
@@ -342,7 +343,7 @@ class IccoaSession(
                 networkReady(attempt, network, properties)
             }
             override fun onUnavailable() { fail(attempt, "Подключение к Wi-Fi автомобиля отменено или истёк тайм-аут") }
-            override fun onLost(network: Network) { fail(attempt, "Соединение с Wi-Fi автомобиля потеряно", transportFailure = true) }
+            override fun onLost(network: Network) { fail(attempt, "Соединение с Wi-Fi автомобиля потеряно", action = IccoaCloseAction.RETRY_TRANSPORT) }
         }
         attempt.wifiRequested = true
         attempt.networkCallback = callback
@@ -353,13 +354,13 @@ class IccoaSession(
             fail(attempt, "Android запретил подключение к Wi-Fi автомобиля (SecurityException)")
             return
         } catch (e: Exception) {
-            fail(attempt, "Не удалось запросить Wi-Fi автомобиля (${e.javaClass.simpleName})", transportFailure = true)
+            fail(attempt, "Не удалось запросить Wi-Fi автомобиля (${e.javaClass.simpleName})", action = IccoaCloseAction.RETRY_TRANSPORT)
             return
         }
         later(attempt, 65_000) {
             if (!attempt.authStarted) fail(attempt, if (attempt.hasWifiAddress)
                 "Wi-Fi автомобиля подключён, но не получен проверенный адрес шлюза"
-            else "Не получен IPv4-адрес Wi-Fi автомобиля", transportFailure = true)
+            else "Не получен IPv4-адрес Wi-Fi автомобиля", action = IccoaCloseAction.RETRY_TRANSPORT)
         }
     }
 
@@ -481,8 +482,9 @@ class IccoaSession(
                 else -> "Отправьте отчёт из FT"
             }
             fail(attempt, "Сбой ICCOA на этапе $stage ($reason). $hint",
-                transportFailure = (stage == "tcp-bind" || stage == "tcp-connect") &&
-                    e !is IccoaHandshakeException)
+                action = if ((stage == "tcp-bind" || stage == "tcp-connect") &&
+                    e !is IccoaHandshakeException) IccoaCloseAction.RETRY_TRANSPORT
+                    else IccoaCloseAction.STOP)
         }
     }
 
@@ -515,7 +517,7 @@ class IccoaSession(
                     if (attempt.audio === socket) attempt.audio = null
                 }
                 if (lostControl && active(attempt))
-                    fail(attempt, "ICCOA CONTROL channel disconnected", transportFailure = true)
+                    fail(attempt, "ICCOA CONTROL channel disconnected", action = IccoaCloseAction.RETRY_TRANSPORT)
             },
             onFrame = { frame -> handleFrame(attempt, frame) },
             log = { message -> if (active(attempt)) DiagLog.i("ICCOA", message) })
@@ -523,7 +525,7 @@ class IccoaSession(
         worker(attempt) {
             try {
                 lane.run()
-            } catch (e: Exception) { fail(attempt, "Канал ICCOA $port закрыт (${e.javaClass.simpleName})", transportFailure = true) }
+            } catch (e: Exception) { fail(attempt, "Канал ICCOA $port закрыт (${e.javaClass.simpleName})", action = IccoaCloseAction.RETRY_TRANSPORT) }
         }
     }
 
@@ -533,8 +535,10 @@ class IccoaSession(
         // Empty/plain protocol messages exist in the reference; encrypted envelopes fail closed.
         val body = if (IccoaControl.isEncrypted(frame.body)) key.decrypt(frame.body) else frame.body
         if (!active(attempt)) return
-        if (frame.category == 1 && frame.method == 23) {
-            fail(attempt, "Автомобиль завершил соединение ICCOA")
+        val closeAction = IccoaCloseClassifier.remoteControlAction(frame.category, frame.method)
+        if (closeAction != null) {
+            // The session intercepts method 23; service-level control(23) is not reached.
+            fail(attempt, "Автомобиль завершил соединение ICCOA", action = closeAction)
             return
         }
         if (frame.category != 1 || frame.method != 1) onMessage(frame.category, frame.method, body)
@@ -572,13 +576,13 @@ class IccoaSession(
         else { attempt.resources += resource; true }
     }
 
-    private fun fail(attempt: Attempt, message: String, transportFailure: Boolean = false) = post(attempt) {
+    private fun fail(attempt: Attempt, message: String, action: IccoaCloseAction = IccoaCloseAction.STOP) = post(attempt) {
         synchronized(this) {
             if (!active(attempt)) return@post
             current = null
             close(attempt)
         }
-        onClosed(message, transportFailure)
+        onClosed(IccoaCloseEvent(message, action))
     }
 
     private fun close(attempt: Attempt) {
