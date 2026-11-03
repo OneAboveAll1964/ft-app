@@ -155,7 +155,7 @@ class IccoaSession(
             }
             payload.fill(0)
             if (!queued) {
-                fail(attempt, "QUICK: ошибка очереди Bluetooth", transportFailure = true)
+                fail(attempt, "QUICK: ошибка очереди Bluetooth")
                 return@post
             }
             later(attempt, 12_000) {
@@ -165,8 +165,7 @@ class IccoaSession(
                 }
             }
         } catch (e: Exception) {
-            fail(attempt, "QUICK: ошибка Bluetooth (" + e.javaClass.simpleName + ")",
-                transportFailure = e is java.io.IOException)
+            fail(attempt, "QUICK: ошибка Bluetooth (" + e.javaClass.simpleName + ")")
         }
     }
 
