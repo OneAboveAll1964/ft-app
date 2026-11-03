@@ -49,7 +49,11 @@ class IccoaDiscovery(private val context: Context, private val onState: (IccoaDi
     private val gattTimeout = Runnable { failGatt("GATT discovery timed out") }
 
     fun start() {
-        stop()
+        // An interrupted scan is not a completed recovery attempt.
+        // Do not emit an old SCAN_COMPLETE while a new scan is starting.
+        generation++
+        endScan()
+        closeGatt()
         samples = AdvertisementSamples()
         devices.clear()
         peers.clear()
