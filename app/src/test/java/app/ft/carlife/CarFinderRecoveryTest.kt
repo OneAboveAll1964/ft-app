@@ -506,6 +506,119 @@ class CarFinderRecoveryTest {
     }
 
     @Test
+    fun stoppingAPendingInvitationCancelsAndroidBeforeClosingTheChannel() = check { h ->
+        h.finder.stop()
+        val order = inOrder(h.manager, h.channel)
+        order.verify(h.manager).cancelConnect(any(), isNull())
+        order.verify(h.channel).close()
+        verify(h.manager, never()).removeGroup(any(), any())
+        advanceTimeBy(10_000)
+        runCurrent()
+        assertTrue(h.cancels.isEmpty())
+    }
+
+    @Test
+    fun stoppingAnEstablishedGroupKeepsItForTheNextStart() = check { h ->
+        h.broadcastConnection(true)
+        h.groups.single().onGroupInfoAvailable(mock(WifiP2pGroup::class.java))
+        h.finder.stop()
+        verify(h.manager, never()).cancelConnect(any(), any())
+        verify(h.manager, never()).removeGroup(any(), any())
+        verify(h.channel).close()
+    }
+
+    @Test
+    fun busyDiscoveryRecoversAnInvitationLeftByAnEarlierService() = check { h ->
+        h.busyDiscovery()
+        advanceTimeBy(10_000)
+        runCurrent()
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(false))
+        runCurrent()
+        h.networks.single().onNetworkInfoAvailable(h.network(NetworkInfo.DetailedState.CONNECTING))
+        runCurrent()
+        assertEquals(1, h.cancels.size)
+        var prepared = 0
+        h.finder.onRetryReady = { kept -> assertFalse(kept); prepared++ }
+        clearInvocations(h.manager)
+        advanceTimeBy(1_000)
+        runCurrent()
+        verify(h.manager, never()).discoverPeers(any(), any())
+        h.cancels.single().onSuccess()
+        runCurrent()
+        h.removals.single().onSuccess()
+        runCurrent()
+        h.groups.single().onGroupInfoAvailable(null)
+        runCurrent()
+        assertEquals(1, prepared)
+        doAnswer { it.getArgument<WifiP2pManager.ActionListener>(1).onSuccess(); null }
+            .`when`(h.manager).discoverPeers(any(), any())
+        advanceTimeBy(2_500)
+        runCurrent()
+        verify(h.manager).discoverPeers(any(), any())
+        verify(h.manager, never()).connect(any(), any(), any())
+        assertEquals(0, h.finder.busyStreak)
+    }
+
+    @Test
+    fun busyDiscoveryAdoptsAnAlreadyFormedGroupWithoutCancellingIt() = check { h ->
+        h.busyDiscovery()
+        advanceTimeBy(10_000)
+        runCurrent()
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true))
+        runCurrent()
+        h.groups.single().onGroupInfoAvailable(mock(WifiP2pGroup::class.java))
+        assertTrue(h.finder.joined)
+        assertTrue(h.cancels.isEmpty())
+        assertTrue(h.networks.isEmpty())
+    }
+
+    @Test
+    fun busyDiscoveryDoesNotCancelAnIdleNetwork() = check { h ->
+        h.busyDiscovery()
+        advanceTimeBy(10_000)
+        runCurrent()
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(false))
+        runCurrent()
+        h.networks.single().onNetworkInfoAvailable(h.network(NetworkInfo.DetailedState.DISCONNECTED))
+        runCurrent()
+        assertTrue(h.cancels.isEmpty())
+        assertTrue(h.removals.isEmpty())
+    }
+
+    @Test
+    fun busyDiscoveryCannotCancelAJoinStartedWhileTheStateQueryWasPending() = check { h ->
+        h.busyDiscovery()
+        advanceTimeBy(10_000)
+        runCurrent()
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(false))
+        runCurrent()
+        val oldNetwork = h.networks.single()
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.finder.connect(CarFinder.Peer("CarLife", h.car.deviceAddress, WifiP2pDevice.AVAILABLE, false))
+        }
+        oldNetwork.onNetworkInfoAvailable(h.network(NetworkInfo.DetailedState.CONNECTING))
+        runCurrent()
+        assertTrue(h.cancels.isEmpty())
+        verify(h.manager).connect(any(), any(), any())
+    }
+
+    @Test
+    fun busyDiscoveryIgnoresAStateQueryCompletedAfterStop() = check { h ->
+        h.busyDiscovery()
+        advanceTimeBy(10_000)
+        runCurrent()
+        h.connections.last().onConnectionInfoAvailable(h.connectionInfo(false))
+        runCurrent()
+        val oldNetwork = h.networks.single()
+        h.finder.stop()
+        clearInvocations(h.manager)
+        oldNetwork.onNetworkInfoAvailable(h.network(NetworkInfo.DetailedState.CONNECTING))
+        advanceTimeBy(10_000)
+        runCurrent()
+        verifyNoInteractions(h.manager)
+    }
+
+    @Test
     fun missingActionAndNetworkCallbacksBlockJoinsAndLateCompletionIsIgnored() = check { h ->
         advanceTimeBy(5_000)
         runCurrent()
@@ -1031,7 +1144,7 @@ class CarFinderRecoveryTest {
         val manager = mock(WifiP2pManager::class.java)
         private val context = mock(Context::class.java)
         val prefs = mock(Prefs::class.java)
-        private val channel = mock(WifiP2pManager.Channel::class.java)
+        val channel = mock(WifiP2pManager.Channel::class.java)
         val cancels = mutableListOf<WifiP2pManager.ActionListener>()
         val removals = mutableListOf<WifiP2pManager.ActionListener>()
         val groups = mutableListOf<WifiP2pManager.GroupInfoListener>()
@@ -1060,7 +1173,7 @@ class CarFinderRecoveryTest {
                 it.getArgument<WifiP2pManager.PeerListListener>(1).onPeersAvailable(peers)
                 null
             }.`when`(manager).requestPeers(any(), any())
-            doAnswer { cancels += it.getArgument<WifiP2pManager.ActionListener>(1); null }
+            doAnswer { it.getArgument<WifiP2pManager.ActionListener?>(1)?.let(cancels::add); null }
                 .`when`(manager).cancelConnect(any(), any())
             doAnswer { removals += it.getArgument<WifiP2pManager.ActionListener>(1); null }
                 .`when`(manager).removeGroup(any(), any())
@@ -1090,6 +1203,17 @@ class CarFinderRecoveryTest {
         }
 
         fun timeout(seconds: Int) { `when`(prefs.carJoinTimeoutSeconds).thenReturn(seconds) }
+
+        fun busyDiscovery() {
+            broadcastEnabled(false)
+            visible = emptyList()
+            broadcastPeers()
+            broadcastEnabled(true)
+            doAnswer { it.getArgument<WifiP2pManager.ActionListener>(1).onFailure(WifiP2pManager.BUSY); null }
+                .`when`(manager).discoverPeers(any(), any())
+            finder.connectByName("CarLife")
+            finder.search()
+        }
 
         fun connectionInfo(formed: Boolean, ownerAddress: Boolean = true) = WifiP2pInfo().apply {
             groupFormed = formed

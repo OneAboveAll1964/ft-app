@@ -43,6 +43,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var recovery: Job? = null
     private var preparation: Job? = null
     private var groupProbe: Job? = null
+    private var busyProbe: Job? = null
     private var reopen: Job? = null
     private var lifecycle = 0L
     private var attempt = 0L
@@ -208,6 +209,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
 
     private fun cancelAttempt() {
         attempt++
+        busyProbe?.cancel()
+        busyProbe = null
         watchdog?.cancel()
         watchdog = null
         recovery?.cancel()
@@ -355,9 +358,54 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 if (!current(ch, life)) return
                 if (reason == WifiP2pManager.BUSY) busyStreak++
                 DiagLog.w(tag, "discoverPeers failed reason=$reason (${failureName(reason)})" +
-                    if (reason == WifiP2pManager.BUSY && busyStreak == 3) "; the phone keeps refusing to search, usually because its hotspot is on or another app is using WiFi Direct (screen casting, Nearby Share)" else "")
+                    if (reason == WifiP2pManager.BUSY && busyStreak == 3) "; checking for unfinished WiFi Direct negotiation; hotspot or another app can also keep discovery busy" else "")
+                if (reason == WifiP2pManager.BUSY && busyStreak >= 3) recoverBusyDiscovery()
             }
         })
+    }
+
+    @Suppress("DEPRECATION")
+    private fun recoverBusyDiscovery() {
+        val m = manager ?: return
+        val ch = channel ?: return
+        if (busyProbe?.isActive == true) return
+        val life = lifecycle
+        val id = attempt
+        val group = groupVersion
+        fun waiting() = current(ch, life) && enabled && armed && busyStreak >= 3 &&
+            attempt == id && groupVersion == group && connecting == null &&
+            recovery == null && groupProbe == null && _link.value == null
+        if (!waiting()) return
+        busyProbe = scope.launch(Dispatchers.Main) {
+            val info = CompletableDeferred<WifiP2pInfo>()
+            val network = CompletableDeferred<android.net.NetworkInfo?>()
+            try {
+                withTimeoutOrNull(2_000) {
+                    m.requestConnectionInfo(ch) { if (it != null) info.complete(it) }
+                    val existing = info.await()
+                    if (!waiting()) return@withTimeoutOrNull
+                    if (existing.groupFormed) {
+                        onGroup(existing)
+                        return@withTimeoutOrNull
+                    }
+                    m.requestNetworkInfo(ch) { network.complete(it) }
+                    // A restarted service has no local attempt, but Android may
+                    // still be negotiating the old invitation. BUSY by itself
+                    // is not evidence: leave idle networks and live groups alone.
+                    if (network.await()?.detailedState == android.net.NetworkInfo.DetailedState.CONNECTING && waiting()) {
+                        restart(Peer(targetName, "", WifiP2pDevice.INVITED, false),
+                            "Android is still negotiating an earlier WiFi Direct connection")
+                    }
+                }
+            } catch (e: SecurityException) {
+                DiagLog.w(tag, "busy discovery state query permission denied: ${e.javaClass.simpleName}")
+            } catch (e: IllegalArgumentException) {
+                DiagLog.w(tag, "busy discovery state query unavailable: ${e.javaClass.simpleName}")
+            } finally {
+                info.cancel()
+                network.cancel()
+            }
+        }
     }
 
     private fun failureName(reason: Int) = when (reason) {
@@ -717,6 +765,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val ch = channel ?: return
         val life = lifecycle
         val id = ++attempt
+        busyProbe?.cancel()
+        busyProbe = null
         watchdog?.cancel()
         watchdog = null
         recovery?.cancel()
@@ -849,6 +899,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     }
 
     fun stop() {
+        val pendingJoin = _link.value == null && (connecting != null || recovery != null)
         lifecycle++
         loop?.cancel()
         loop = null
@@ -864,6 +915,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val m = manager
         val ch = channel
         channel = null
+        // Closing the app's channel does not cancel Android's negotiation. Send
+        // cancellation before closing it so the next service can discover peers.
+        // An established group can be reused on the next start and is kept.
+        if (m != null && ch != null && pendingJoin) runCatching { m.cancelConnect(ch, null) }
         if (m != null && ch != null) runCatching { m.stopPeerDiscovery(ch, null) }
         if (m != null && ch != null && servicesChannel === ch) runCatching { m.clearServiceRequests(ch, null) }
         servicesChannel = null
