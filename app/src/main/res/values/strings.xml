@@ -303,7 +303,7 @@
     <string name="keyboard_go">Go</string>
     <string name="keyboard_space">space</string>
     <string name="keyboard_delete">del</string>
-    <string name="touch_service_desc">Lets the car touchscreen control apps mirrored from this phone, and switches on Android Auto\'s head unit server for you.</string>
+    <string name="touch_service_desc">Lets the car touchscreen control apps mirrored from this phone.</string>
     <string name="touch_service_label">FT car touch</string>
     <string-array name="car_days">
         <item>Sunday</item>
@@ -441,6 +441,15 @@
     <string name="aa_switch_on">Switch it on</string>
     <string name="aa_switching_on">Switching it on</string>
     <string name="aa_switch_failed">FT could not switch it on by itself, so do it by hand below.</string>
+    <string name="aa_helper_ready">The Android Auto helper is connected. FT can try to start the server while the phone is unlocked.</string>
+    <string name="aa_helper_disconnected">The Android Auto helper is enabled in settings, but Android has not connected it to FT. Open accessibility settings, switch “FT — Android Auto server” off and on again, then return to FT.</string>
+    <string name="aa_helper_settings">Check helper in settings</string>
+    <string name="aa_switch_no_window">FT opened Android Auto settings but could not access its window. Check the helper in accessibility settings, then try again.</string>
+    <string name="aa_switch_no_menu">FT could not find the menu button in Android Auto. Open Android Auto and start the head unit server manually. The report records this step for diagnosis.</string>
+    <string name="aa_switch_no_start">FT pressed the menu button but could not find Start head unit server. Enable Android Auto developer settings and check this item manually.</string>
+    <string name="aa_switch_action_rejected">Android Auto did not accept the helper\'s button press. Try starting the server manually in Android Auto.</string>
+    <string name="aa_switch_not_confirmed">FT pressed Start head unit server, but could not confirm that it started. Check the server in Android Auto.</string>
+    <string name="aa_switch_focus_lost">Android Auto lost focus. Return to FT and try again with the phone unlocked.</string>
     <string name="aa_let_ft">Let FT switch it on</string>
     <string name="aa_let_ft_body">Enable “FT — Android Auto server” in your phone\'s accessibility settings. This separate helper opens Android Auto settings and selects Start head unit server while the phone is unlocked. Enable Android Auto developer settings first.</string>
     <string name="aa_starter_service_label">FT — Android Auto server</string>

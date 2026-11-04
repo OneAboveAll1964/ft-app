@@ -294,7 +294,7 @@
     <string name="keyboard_go">انتقال</string>
     <string name="keyboard_space">مسافة</string>
     <string name="keyboard_delete">حذف</string>
-    <string name="touch_service_desc">يتيح لشاشة اللمس في السيارة التحكم بالتطبيقات المعروضة من هذا الهاتف، ويشغّل لك خادم head unit في Android Auto.</string>
+    <string name="touch_service_desc">يتيح لشاشة اللمس في السيارة التحكم بالتطبيقات المعروضة من هذا الهاتف.</string>
     <string name="touch_service_label">FT – لمس السيارة</string>
     <string-array name="car_days">
         <item>الأحد</item>
@@ -432,6 +432,15 @@
     <string name="aa_switch_on">شغّله</string>
     <string name="aa_switching_on">جارٍ تشغيله</string>
     <string name="aa_switch_failed">لم يتمكن FT من تشغيله وحده، فافعل ذلك يدوياً أدناه.</string>
+    <string name="aa_helper_ready">مساعد Android Auto متصل. يمكن لـ FT محاولة تشغيل الخادم عندما يكون الهاتف غير مقفل.</string>
+    <string name="aa_helper_disconnected">مساعد Android Auto مفعّل في الإعدادات، لكن Android لم يوصله بـ FT. افتح إعدادات إمكانية الوصول وأوقف «FT — Android Auto server» ثم فعّله مجدداً وارجع إلى FT.</string>
+    <string name="aa_helper_settings">فحص المساعد في الإعدادات</string>
+    <string name="aa_switch_no_window">فتح FT إعدادات Android Auto لكنه لم يتمكن من الوصول إلى نافذته. افحص المساعد في إعدادات إمكانية الوصول ثم أعد المحاولة.</string>
+    <string name="aa_switch_no_menu">لم يجد FT زر القائمة في Android Auto. افتح Android Auto وشغّل خادم head unit يدوياً. سُجلت مرحلة الفشل في السجل للتشخيص.</string>
+    <string name="aa_switch_no_start">ضغط FT زر القائمة لكنه لم يجد خيار تشغيل الخادم. فعّل إعدادات المطوّر في Android Auto وافحص هذا الخيار يدوياً.</string>
+    <string name="aa_switch_action_rejected">لم يقبل Android Auto ضغطة المساعد. حاول تشغيل الخادم يدوياً في Android Auto.</string>
+    <string name="aa_switch_not_confirmed">ضغط FT خيار تشغيل الخادم لكنه لم يستطع تأكيد تشغيله. افحص الخادم في Android Auto.</string>
+    <string name="aa_switch_focus_lost">فقد Android Auto التركيز. ارجع إلى FT وأعد المحاولة والهاتف غير مقفل.</string>
     <string name="aa_let_ft">دع FT يشغّله</string>
     <string name="aa_let_ft_body">فعّل «FT — Android Auto server» من إعدادات إمكانية الوصول في هاتفك، وسيشغّل FT الخادم وحده كلما احتاجت السيارة إلى Android Auto، حتى بعد إعادة التشغيل.</string>
     <string name="aa_no_developer">إعدادات المطوّرين في Android Auto غير مفعّلة. نفّذ الخطوتين 1 و2 في «أرني الطريقة» ثم حاول مجددًا.</string>

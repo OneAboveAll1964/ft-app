@@ -29,6 +29,8 @@ class AaStarterAccessibilityService : AccessibilityService() {
             private set
         private val mutableConnected = MutableStateFlow(false)
         val connected: StateFlow<Boolean> = mutableConnected
+        @Volatile var lastResult: AaSwitch.Result? = null
+            private set
     }
 
     private class Request(
@@ -38,6 +40,7 @@ class AaStarterAccessibilityService : AccessibilityService() {
     ) {
         var job: Job? = null
         var finishing = false
+        var observation: String? = null
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -50,7 +53,7 @@ class AaStarterAccessibilityService : AccessibilityService() {
         instance = this
         mutableConnected.value = true
         overflowLabels = overflowLabels()
-        DiagLog.i("AA", "separate Android Auto starter connected")
+        DiagLog.i("AA", "separate Android Auto starter connected; capabilities=${serviceInfo?.capabilities} flags=${serviceInfo?.flags}; overflow labels=${overflowLabels.size}")
     }
 
     /** Called on main, before opening AA settings. An overlapping request is rejected. */
@@ -59,8 +62,10 @@ class AaStarterAccessibilityService : AccessibilityService() {
         if (request != null) return false
         val current = Request(token, AaStarterAttempt(SystemClock.elapsedRealtime() + TIMEOUT_MS), completed)
         request = current
+        lastResult = null
+        DiagLog.i("AA", "Android Auto starter armed; timeout=${TIMEOUT_MS}ms")
         handler.postDelayed({
-            if (request === current) finish(current, AaSwitch.Result.FAILED)
+            if (request === current) finish(current, current.attempt.timeoutResult())
         }, current, TIMEOUT_MS)
         current.job = scope.launch {
             // Polling also detects a foreground change: events from other packages are filtered out.
@@ -87,7 +92,7 @@ class AaStarterAccessibilityService : AccessibilityService() {
         if (request !== current || current.finishing) return
         try {
             if (current.attempt.expired(SystemClock.elapsedRealtime())) {
-                finish(current, AaSwitch.Result.FAILED)
+                finish(current, current.attempt.timeoutResult())
                 return
             }
             val locked = AaSwitch.locked(this)
@@ -98,13 +103,19 @@ class AaStarterAccessibilityService : AccessibilityService() {
             val root = rootInActiveWindow
             val aaWindow = root?.packageName?.toString()?.let { it == AaInstaller.GEARHEAD }
             val nodes = if (aaWindow == true) AaStarterNodes.menu(root, overflowLabels) else AaStarterNodes.Menu()
+            // Log only bounded structural facts, never window text or other apps' package names.
+            val observation = "aaWindow=$aaWindow server=$serverOn nodes=${nodes.visited} start=${nodes.start != null} stop=${nodes.stop != null} overflow=${nodes.overflow != null}"
+            if (current.observation != observation) {
+                current.observation = observation
+                DiagLog.i("AA", "Android Auto starter: $observation")
+            }
             when (current.attempt.next(SystemClock.elapsedRealtime(), false, aaWindow, serverOn,
                 nodes.start != null, nodes.stop != null, nodes.overflow != null)) {
                 AaStarterAttempt.Action.ON -> finish(current, AaSwitch.Result.ON)
                 AaStarterAttempt.Action.LOCKED -> finish(current, AaSwitch.Result.LOCKED, returnToFt = false)
-                AaStarterAttempt.Action.FAILED -> finish(current, AaSwitch.Result.FAILED)
-                AaStarterAttempt.Action.OPEN_MENU -> click(current, nodes.overflow!!, root!!.windowId)
-                AaStarterAttempt.Action.START -> click(current, nodes.start!!, root!!.windowId)
+                AaStarterAttempt.Action.FAILED -> finish(current, if (current.attempt.expired(SystemClock.elapsedRealtime())) current.attempt.timeoutResult() else AaSwitch.Result.FOCUS_LOST)
+                AaStarterAttempt.Action.OPEN_MENU -> click(current, nodes.overflow!!, root!!.windowId, "open menu")
+                AaStarterAttempt.Action.START -> click(current, nodes.start!!, root!!.windowId, "start server")
                 AaStarterAttempt.Action.WAIT -> Unit
             }
         } catch (e: Exception) {
@@ -113,12 +124,19 @@ class AaStarterAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun click(current: Request, node: AccessibilityNodeInfo, windowId: Int) {
+    private fun click(current: Request, node: AccessibilityNodeInfo, windowId: Int, action: String) {
         // Recheck focus immediately before ACTION_CLICK; never fall back to screen coordinates.
         val active = rootInActiveWindow
-        if (current.attempt.expired(SystemClock.elapsedRealtime()) || AaSwitch.locked(this) || active?.packageName?.toString() != AaInstaller.GEARHEAD ||
-            active.windowId != windowId || !AaStarterNodes.click(node, windowId)) {
-            finish(current, AaSwitch.Result.FAILED)
+        when {
+            current.attempt.expired(SystemClock.elapsedRealtime()) -> finish(current, current.attempt.timeoutResult())
+            AaSwitch.locked(this) -> finish(current, AaSwitch.Result.LOCKED, returnToFt = false)
+            active?.packageName?.toString() != AaInstaller.GEARHEAD || active.windowId != windowId ->
+                finish(current, AaSwitch.Result.FOCUS_LOST, returnToFt = false)
+            else -> {
+                val accepted = AaStarterNodes.click(node, windowId)
+                DiagLog.i("AA", "Android Auto starter action=$action accepted=$accepted")
+                if (!accepted) finish(current, AaSwitch.Result.ACTION_REJECTED)
+            }
         }
     }
 
@@ -139,6 +157,7 @@ class AaStarterAccessibilityService : AccessibilityService() {
                 }
             }
             request = null
+            lastResult = result
             DiagLog.i("AA", "Android Auto starter completed: $result")
             current.completed(result)
         }
@@ -146,10 +165,12 @@ class AaStarterAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
+        DiagLog.i("AA", "Android Auto starter interrupted")
         request?.let { finish(it, AaSwitch.Result.FAILED, returnToFt = false, immediately = true) }
     }
 
-    private fun disconnected() {
+    private fun disconnected(reason: String) {
+        DiagLog.i("AA", "Android Auto starter disconnected: $reason")
         request?.let { finish(it, AaSwitch.Result.NO_HELPER, returnToFt = false, immediately = true) }
         if (instance === this) {
             instance = null
@@ -158,18 +179,18 @@ class AaStarterAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        disconnected()
+        disconnected("unbind")
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
-        disconnected()
+        disconnected("destroy")
         scope.cancel()
         super.onDestroy()
     }
 
     private fun overflowLabels(): Set<String> = buildSet {
-        addAll(listOf("More options", "Ещё", "Еще"))
+        addAll(AaStarterNodes.DEFAULT_OVERFLOW_LABELS)
         runCatching {
             val res = packageManager.getResourcesForApplication(AaInstaller.GEARHEAD)
             for (name in listOf("abc_action_menu_overflow_description", "m3c_top_app_bar_overflow_description", "more_options")) {
@@ -186,10 +207,15 @@ class AaStarterAccessibilityService : AccessibilityService() {
 }
 
 internal object AaStarterNodes {
-    data class Menu(val start: AccessibilityNodeInfo? = null, val stop: AccessibilityNodeInfo? = null, val overflow: AccessibilityNodeInfo? = null)
+    // Resource names in the installed AA APK may be obfuscated; keep exact known labels too.
+    val DEFAULT_OVERFLOW_LABELS = setOf("More options", "Ещё", "Еще", "Другие параметры", "Дополнительные параметры")
+    data class Menu(val start: AccessibilityNodeInfo? = null, val stop: AccessibilityNodeInfo? = null, val overflow: AccessibilityNodeInfo? = null, val visited: Int = 0)
+
+    private fun sameWindow(node: AccessibilityNodeInfo, windowId: Int) =
+        node.packageName?.toString() == AaInstaller.GEARHEAD && node.windowId == windowId
 
     private fun allowed(node: AccessibilityNodeInfo, windowId: Int) =
-        node.packageName?.toString() == AaInstaller.GEARHEAD && node.windowId == windowId && node.isVisibleToUser && node.isEnabled
+        sameWindow(node, windowId) && node.isVisibleToUser && node.isEnabled
 
     fun menu(root: AccessibilityNodeInfo, overflowLabels: Set<String>): Menu {
         if (root.packageName?.toString() != AaInstaller.GEARHEAD) return Menu()
@@ -201,19 +227,23 @@ internal object AaStarterNodes {
         var visited = 0
         while (queue.isNotEmpty() && visited++ < 512) {
             val node = queue.removeFirst()
-            if (!allowed(node, root.windowId)) continue
-            when (node.text?.toString()) {
-                "Start head unit server", "Запустить сервер головного устройства" -> start = node
-                "Stop head unit server", "Остановить сервер головного устройства" -> stop = node
+            if (!sameWindow(node, root.windowId)) continue
+            // Layout containers can be hidden/disabled while exposing visible actionable children.
+            // Visibility and enabled state constrain candidates and clicks, not traversal.
+            if (allowed(node, root.windowId)) {
+                when (node.text?.toString()) {
+                    "Start head unit server", "Запустить сервер головного устройства" -> start = node
+                    "Stop head unit server", "Остановить сервер головного устройства" -> stop = node
+                }
+                if (node.contentDescription?.toString() in overflowLabels ||
+                    node.className?.toString()?.endsWith("OverflowMenuButton") == true) overflow = node
             }
-            if (node.contentDescription?.toString() in overflowLabels ||
-                node.className?.toString()?.endsWith("OverflowMenuButton") == true) overflow = node
             for (i in 0 until node.childCount.coerceAtMost(64)) {
                 if (queue.size >= 512) break
                 node.getChild(i)?.let(queue::addLast)
             }
         }
-        return Menu(start, stop, overflow)
+        return Menu(start, stop, overflow, visited.coerceAtMost(512))
     }
 
     fun click(node: AccessibilityNodeInfo, windowId: Int): Boolean {

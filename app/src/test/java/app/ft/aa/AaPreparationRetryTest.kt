@@ -9,12 +9,14 @@ class AaPreparationRetryTest {
     @After fun reset() { AaKeep.preparing() }
 
     @Test fun failedAttemptDoesNotSuppressAnotherVehicleOrDisabledOption() {
-        AaKeep.prepared("car-a", AaSwitch.Result.FAILED)
-        assertTrue(AaKeep.preparationFailed("car-a", true))
-        assertFalse(AaKeep.preparationFailed("car-b", true))
-        assertFalse(AaKeep.preparationFailed("car-a", false))
-        AaKeep.preparing()
-        assertFalse(AaKeep.preparationFailed("car-a", true))
+        for (result in AaSwitch.Result.entries.filter { it.failedAttempt }) {
+            AaKeep.prepared("car-a", result)
+            assertTrue(AaKeep.preparationFailed("car-a", true))
+            assertFalse(AaKeep.preparationFailed("car-b", true))
+            assertFalse(AaKeep.preparationFailed("car-a", false))
+            AaKeep.preparing()
+            assertFalse(AaKeep.preparationFailed("car-a", true))
+        }
     }
 
     @Test fun unlockAndHelperEnableCanRecoverWithoutTenMinuteWait() {

@@ -51,6 +51,40 @@ class AaStarterNodesTest {
         assertNull(AaStarterNodes.menu(root, emptySet()).start)
     }
 
+    @Test fun visibleButtonsInsideHiddenOrDisabledContainersRemainDiscoverable() {
+        for (hidden in listOf(true, false)) {
+            val root = node()
+            val container = node()
+            `when`(container.isVisibleToUser).thenReturn(!hidden)
+            `when`(container.isEnabled).thenReturn(hidden)
+            val button = node()
+            `when`(button.contentDescription).thenReturn("Другие параметры")
+            children(root, container)
+            children(container, button)
+            assertSame(button, AaStarterNodes.menu(root, AaStarterNodes.DEFAULT_OVERFLOW_LABELS).overflow)
+        }
+    }
+
+    @Test fun everyKnownOverflowLabelIsRecognizedWithoutAaResourceNames() {
+        for (label in AaStarterNodes.DEFAULT_OVERFLOW_LABELS) {
+            val root = node()
+            val button = node()
+            `when`(button.contentDescription).thenReturn(label)
+            children(root, button)
+            assertSame(label, button, AaStarterNodes.menu(root, AaStarterNodes.DEFAULT_OVERFLOW_LABELS).overflow)
+        }
+    }
+
+    @Test fun traversalNeverCrossesForeignPackageOrWindowContainers() {
+        for (container in listOf(node(pkg = "another.app"), node(window = 8))) {
+            val root = node()
+            children(root, container)
+            children(container, node("Start head unit server"))
+            assertNull(AaStarterNodes.menu(root, emptySet()).start)
+            verify(container, never()).getChild(anyInt())
+        }
+    }
+
     @Test fun clicksOnlyClickableParentInSamePackageAndWindow() {
         val item = node("Start head unit server")
         val parent = node()

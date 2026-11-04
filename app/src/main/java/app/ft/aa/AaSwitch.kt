@@ -25,7 +25,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 object AaSwitch {
-    enum class Result { ON, LOCKED, NO_HELPER, NOT_INSTALLED, FAILED }
+    enum class Result {
+        ON, LOCKED, NO_HELPER, NOT_INSTALLED, FAILED,
+        NO_AA_WINDOW, MENU_UNAVAILABLE, START_UNAVAILABLE, ACTION_REJECTED, NOT_CONFIRMED, FOCUS_LOST;
+
+        val failedAttempt: Boolean get() = this !in setOf(ON, LOCKED, NO_HELPER, NOT_INSTALLED)
+    }
 
     fun isStarterServiceEnabled(context: Context): Boolean {
         val expected = ComponentName(context, AaStarterAccessibilityService::class.java)
@@ -51,6 +56,7 @@ object AaSwitch {
         if (Looper.myLooper() == Looper.getMainLooper()) return Result.FAILED
         val port = FTApp.instance.prefs.aaSelfPort
         if (AaInstaller.serverRunning(port)) return Result.ON
+        DiagLog.i("AA", "Android Auto starter requested; enabled=${isStarterServiceEnabled(context)} connected=${AaStarterAccessibilityService.connected.value}")
         val service = AaStarterAccessibilityService.instance ?: return Result.NO_HELPER
         if (!isStarterServiceEnabled(context)) return Result.NO_HELPER
         if (AaInstaller.settingsPackage(context) != AaInstaller.GEARHEAD || AaInstaller.stub(context)) return Result.NOT_INSTALLED
@@ -125,7 +131,7 @@ object AaKeep {
     internal fun prepared(profileId: String, result: AaSwitch.Result) {
         // LOCKED and NO_HELPER may recover when the user unlocks or enables the helper.
         // Only a completed, unsuccessful UI attempt is suppressed for this vehicle attempt.
-        failedPreparationProfile = profileId.takeIf { result == AaSwitch.Result.FAILED }
+        failedPreparationProfile = profileId.takeIf { result.failedAttempt }
     }
 
     internal fun preparationFailed(profileId: String, enabled: Boolean): Boolean =

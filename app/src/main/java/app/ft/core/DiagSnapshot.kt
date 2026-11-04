@@ -7,6 +7,7 @@ import android.app.usage.UsageStatsManager
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInfo
@@ -24,6 +25,8 @@ import android.os.Process
 import android.provider.Settings
 import app.ft.FTTouchService
 import app.ft.aa.AaHeadUnitService
+import app.ft.aa.AaSwitch
+import app.ft.aa.AaStarterAccessibilityService
 import app.ft.carlife.CarLifeService
 import java.net.NetworkInterface
 
@@ -93,7 +96,11 @@ object DiagSnapshot {
         add(line("notifications allowed") { c.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled() })
         add(line("touch control (accessibility)") {
             val list = Settings.Secure.getString(c.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
-            "enabled=${list.contains("${c.packageName}/")} running=${FTTouchService.instance != null}"
+            val component = ComponentName(c, FTTouchService::class.java)
+            "enabled=${list.split(':').any { ComponentName.unflattenFromString(it) == component }} running=${FTTouchService.instance != null}"
+        })
+        add(line("Android Auto starter (accessibility)") {
+            "enabled=${AaSwitch.isStarterServiceEnabled(c)} connected=${AaStarterAccessibilityService.connected.value} lastResult=${AaStarterAccessibilityService.lastResult}"
         })
         add(line("draw over apps") { Settings.canDrawOverlays(c) })
         add(line("screen sharing without asking") { appop(c, "android:project_media") })

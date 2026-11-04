@@ -11,6 +11,13 @@ internal class AaStarterAttempt(private val deadline: Long) {
 
     fun expired(now: Long): Boolean = now >= deadline
 
+    fun timeoutResult(): AaSwitch.Result = when {
+        clickedStart -> AaSwitch.Result.NOT_CONFIRMED
+        openedMenu -> AaSwitch.Result.START_UNAVAILABLE
+        observedAa -> AaSwitch.Result.MENU_UNAVAILABLE
+        else -> AaSwitch.Result.NO_AA_WINDOW
+    }
+
     fun next(
         now: Long,
         locked: Boolean,

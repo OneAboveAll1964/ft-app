@@ -294,7 +294,7 @@
     <string name="keyboard_go">بڕۆ</string>
     <string name="keyboard_space">بۆشایی</string>
     <string name="keyboard_delete">سڕینەوە</string>
-    <string name="touch_service_desc">ڕێگە بە شاشەی دەستلێدانی ئۆتۆمبێل دەدات ئەو ئەپانە کۆنترۆڵ بکات کە لەم مۆبایلەوە پیشان دەدرێن، و سێرڤەری head unitی Android Auto بۆت هەڵدەکات.</string>
+    <string name="touch_service_desc">ڕێگە بە شاشەی دەستلێدانی ئۆتۆمبێل دەدات ئەو ئەپانە کۆنترۆڵ بکات کە لەم مۆبایلەوە پیشان دەدرێن.</string>
     <string name="touch_service_label">FT – دەستلێدانی ئۆتۆمبێل</string>
     <string-array name="car_days">
         <item>یەکشەممە</item>
@@ -432,6 +432,15 @@
     <string name="aa_switch_on">بیکەرەوە</string>
     <string name="aa_switching_on">دەکرێتەوە</string>
     <string name="aa_switch_failed">FT نەیتوانی بە تەنها بیکاتەوە، بۆیە لە خوارەوە بە دەستی بیکەرەوە.</string>
+    <string name="aa_helper_ready">یارمەتیدەری Android Auto پەیوەستە. FT دەتوانێت هەوڵی هەڵکردنی سێرڤەر بدات کاتێک مۆبایلەکە کراوەیە.</string>
+    <string name="aa_helper_disconnected">یارمەتیدەری Android Auto لە ڕێکخستنەکان هەڵکراوە، بەڵام Android پەیوەستی نەکردووە بە FT. ڕێکخستنەکانی Accessibility بکەرەوە، «FT — Android Auto server» بکوژێنەوە و دووبارە هەڵیبکە، پاشان بگەڕێوە بۆ FT.</string>
+    <string name="aa_helper_settings">پشکنینی یارمەتیدەر لە ڕێکخستنەکان</string>
+    <string name="aa_switch_no_window">FT ڕێکخستنەکانی Android Auto کردەوە، بەڵام نەیتوانی دەستی بگات بە پەنجەرەکەی. یارمەتیدەر لە ڕێکخستنەکانی Accessibility بپشکنە و دووبارە هەوڵ بدەوە.</string>
+    <string name="aa_switch_no_menu">FT دوگمەی مێنیوی لە Android Auto نەدۆزییەوە. Android Auto بکەرەوە و سێرڤەری head unit بە دەستی هەڵبکە. قۆناغی شکستهێنان لە تۆمارەکە نووسراوە بۆ دەستنیشانکردنی کێشەکە.</string>
+    <string name="aa_switch_no_start">FT پەنجەی بە دوگمەی مێنیودا نا، بەڵام بژاردەی هەڵکردنی سێرڤەری نەدۆزییەوە. ڕێکخستنەکانی گەشەپێدەری Android Auto هەڵبکە و ئەم بژاردەیە بە دەستی بپشکنە.</string>
+    <string name="aa_switch_action_rejected">Android Auto پەنجەلێدانی یارمەتیدەری قبوڵ نەکرد. هەوڵ بدە سێرڤەر بە دەستی لە Android Auto هەڵبکەیت.</string>
+    <string name="aa_switch_not_confirmed">FT پەنجەی بە بژاردەی هەڵکردنی سێرڤەردا نا، بەڵام نەیتوانی هەڵبوونی پشتڕاست بکاتەوە. سێرڤەر لە Android Auto بپشکنە.</string>
+    <string name="aa_switch_focus_lost">Android Auto فوکەسی لەدەست دا. بگەڕێوە بۆ FT و لە کاتی کراوەبوونی مۆبایلەکەدا دووبارە هەوڵ بدەوە.</string>
     <string name="aa_let_ft">با FT هەڵیبکات</string>
     <string name="aa_let_ft_body">«FT — Android Auto server» لە ڕێکخستنەکانی Accessibilityی مۆبایلەکەت هەڵبکە، ئیتر هەر کاتێک ئۆتۆمبێلەکە پێویستی بە Android Auto بوو، FT خۆی سێرڤەرەکە هەڵدەکات، تەنانەت دوای ڕیستارتیش.</string>
     <string name="aa_no_developer">ڕێکخستنەکانی گەشەپێدەری Android Auto کوژاونەتەوە. هەنگاوەکانی 1 و 2 لە «پیشانم بدە چۆن» بکە، پاشان دووبارە هەوڵ بدەرەوە.</string>

@@ -50,7 +50,7 @@ object AaConnectionPreparation {
             AaSwitch.Result.LOCKED -> Status.LOCKED
             AaSwitch.Result.NO_HELPER -> Status.NO_HELPER
             AaSwitch.Result.NOT_INSTALLED -> Status.NOT_INSTALLED
-            AaSwitch.Result.FAILED -> Status.FAILED
+            else -> Status.FAILED
         }
         DiagLog.i("AA", "Pre-connection preparation: $result; continuing vehicle connection")
         report(status)

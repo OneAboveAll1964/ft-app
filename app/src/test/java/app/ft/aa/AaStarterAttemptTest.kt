@@ -5,6 +5,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AaStarterAttemptTest {
+    @Test fun timeoutIdentifiesTheLastReachedStage() {
+        val attempt = AaStarterAttempt(8000)
+        assertEquals(AaSwitch.Result.NO_AA_WINDOW, attempt.timeoutResult())
+        attempt.next(1, false, true)
+        assertEquals(AaSwitch.Result.MENU_UNAVAILABLE, attempt.timeoutResult())
+        attempt.next(2, false, true, overflow = true)
+        assertEquals(AaSwitch.Result.START_UNAVAILABLE, attempt.timeoutResult())
+        attempt.next(3, false, true, start = true)
+        assertEquals(AaSwitch.Result.NOT_CONFIRMED, attempt.timeoutResult())
+    }
     @Test fun repeatedEventsDoNotToggleOverflowOrStartTwice() {
         val attempt = AaStarterAttempt(8000)
         assertEquals(Action.OPEN_MENU, attempt.next(0, false, true, overflow = true))

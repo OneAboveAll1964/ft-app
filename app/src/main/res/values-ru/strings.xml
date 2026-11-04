@@ -294,7 +294,7 @@
     <string name="keyboard_go">Перейти</string>
     <string name="keyboard_space">пробел</string>
     <string name="keyboard_delete">удалить</string>
-    <string name="touch_service_desc">Позволяет управлять с сенсорного экрана автомобиля приложениями, которые дублируются с этого телефона, и автоматически включает сервер головного устройства в Android Auto.</string>
+    <string name="touch_service_desc">Позволяет управлять с сенсорного экрана автомобиля приложениями, которые дублируются с этого телефона.</string>
     <string name="touch_service_label">FT — касания в автомобиле</string>
     <string-array name="car_days">
         <item>Воскресенье</item>
@@ -432,6 +432,15 @@
     <string name="aa_switch_on">Включить</string>
     <string name="aa_switching_on">Включение</string>
     <string name="aa_switch_failed">FT не удалось включить его самостоятельно. Сделайте это вручную по шагам ниже.</string>
+    <string name="aa_helper_ready">Помощник Android Auto подключён. FT может попробовать запустить сервер, когда телефон разблокирован.</string>
+    <string name="aa_helper_disconnected">Помощник Android Auto включён в настройках, но Android не подключил его к FT. Откройте специальные возможности, выключите и снова включите «FT — запуск Android Auto», затем вернитесь в FT.</string>
+    <string name="aa_helper_settings">Проверить помощник в настройках</string>
+    <string name="aa_switch_no_window">FT открыл настройки Android Auto, но не получил доступ к его окну. Проверьте помощник в специальных возможностях и повторите попытку.</string>
+    <string name="aa_switch_no_menu">FT не нашёл кнопку меню в Android Auto. Откройте Android Auto и запустите сервер головного устройства вручную. Этап отказа записан в журнал для диагностики.</string>
+    <string name="aa_switch_no_start">FT нажал кнопку меню, но не нашёл пункт запуска сервера. Включите настройки разработчика Android Auto и проверьте этот пункт вручную.</string>
+    <string name="aa_switch_action_rejected">Android Auto не принял нажатие помощника. Попробуйте запустить сервер вручную в Android Auto.</string>
+    <string name="aa_switch_not_confirmed">FT нажал пункт запуска сервера, но не смог подтвердить запуск. Проверьте сервер в Android Auto.</string>
+    <string name="aa_switch_focus_lost">Android Auto потерял фокус. Вернитесь в FT и повторите попытку на разблокированном телефоне.</string>
     <string name="aa_let_ft">Пусть FT включает сам</string>
     <string name="aa_let_ft_body">Включите «FT — запуск Android Auto» в разделе «Специальные возможности» на телефоне. Эта отдельная служба открывает настройки Android Auto и выбирает запуск сервера, когда телефон разблокирован. Сначала включите настройки разработчика Android Auto.</string>
     <string name="aa_starter_service_label">FT — запуск Android Auto</string>

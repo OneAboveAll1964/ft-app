@@ -75,6 +75,7 @@ import app.ft.ui.components.AaMissing
 import app.ft.ui.components.AaStart
 import app.ft.ui.components.rememberRootGranted
 import app.ft.ui.components.rememberAaServerOn
+import app.ft.ui.components.rememberAaStarterEnabled
 import app.ft.ui.components.Option
 import app.ft.ui.components.PickSetting
 import app.ft.ui.car.CarStyles
@@ -502,16 +503,17 @@ private fun AaPreparationSetting() {
     var enabled by remember(prefs.profileId) { mutableStateOf(prefs.aaPrepareBeforeConnect) }
     val root = rememberRootGranted()
     val helper by AaStarterAccessibilityService.connected.collectAsStateWithLifecycle()
+    val helperEnabled = rememberAaStarterEnabled()
     BoolSetting(stringResource(R.string.aa_prepare_before_connect), enabled,
         stringResource(R.string.aa_prepare_before_connect_body)) {
         enabled = it
         prefs.aaPrepareBeforeConnect = it
     }
     if (enabled && !root && !helper) {
-        Text(stringResource(R.string.aa_prepare_helper_body), style = MaterialTheme.typography.bodySmall,
+        Text(stringResource(if (helperEnabled) R.string.aa_helper_disconnected else R.string.aa_prepare_helper_body), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = { AaSwitch.openAccessibilitySettings(context) }) {
-            Text(stringResource(R.string.aa_let_ft))
+            Text(stringResource(if (helperEnabled) R.string.aa_helper_settings else R.string.aa_let_ft))
         }
     }
 }

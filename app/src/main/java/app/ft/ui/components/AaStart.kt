@@ -96,6 +96,37 @@ fun rememberAaServerOn(): Boolean? {
 }
 
 @Composable
+fun rememberAaStarterEnabled(): Boolean {
+    val context = LocalContext.current
+    val connected by AaStarterAccessibilityService.connected.collectAsState()
+    var enabled by remember { mutableStateOf(AaSwitch.isStarterServiceEnabled(context)) }
+    val scope = rememberCoroutineScope()
+    LifecycleResumeEffect(connected) {
+        val job = scope.launch {
+            while (isActive) {
+                enabled = AaSwitch.isStarterServiceEnabled(context)
+                delay(2000)
+            }
+        }
+        onPauseOrDispose { job.cancel() }
+    }
+    return enabled
+}
+
+private fun AaSwitch.Result.message(): Int = when (this) {
+    AaSwitch.Result.LOCKED -> R.string.aa_prepare_locked
+    AaSwitch.Result.NO_HELPER -> R.string.aa_prepare_no_helper
+    AaSwitch.Result.NOT_INSTALLED -> R.string.aa_prepare_not_installed
+    AaSwitch.Result.NO_AA_WINDOW -> R.string.aa_switch_no_window
+    AaSwitch.Result.MENU_UNAVAILABLE -> R.string.aa_switch_no_menu
+    AaSwitch.Result.START_UNAVAILABLE -> R.string.aa_switch_no_start
+    AaSwitch.Result.ACTION_REJECTED -> R.string.aa_switch_action_rejected
+    AaSwitch.Result.NOT_CONFIRMED -> R.string.aa_switch_not_confirmed
+    AaSwitch.Result.FOCUS_LOST -> R.string.aa_switch_focus_lost
+    else -> R.string.aa_switch_failed
+}
+
+@Composable
 fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
     val context = LocalContext.current
     var help by remember { mutableStateOf(false) }
@@ -112,25 +143,32 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
     val root = rememberRootGranted()
     val scope = rememberCoroutineScope()
     var switching by remember { mutableStateOf(false) }
-    var refused by remember { mutableStateOf(false) }
+    var failure by remember { mutableStateOf<AaSwitch.Result?>(null) }
     val helper by AaStarterAccessibilityService.connected.collectAsState()
+    val helperEnabled = rememberAaStarterEnabled()
     OptionCard(stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking }), framed = framed) {
         Note(stringResource(R.string.aa_server_option_body))
-        if (!on && !helper && (!root || refused)) {
-            Note(stringResource(R.string.aa_let_ft_body))
+        if (!on && !root) {
+            Note(stringResource(when {
+                helper -> R.string.aa_helper_ready
+                helperEnabled -> R.string.aa_helper_disconnected
+                else -> R.string.aa_let_ft_body
+            }))
+        }
+        if (!on && !helper && (!root || failure != null)) {
             FilledTonalButton(
                 onClick = { AaSwitch.openAccessibilitySettings(context) },
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
             ) {
-                Text(stringResource(R.string.aa_let_ft), maxLines = 1)
+                Text(stringResource(if (helperEnabled) R.string.aa_helper_settings else R.string.aa_let_ft), maxLines = 1)
             }
         }
         if (!on && (root || helper)) {
             FilledTonalButton(
                 onClick = {
-                    refused = false
+                    failure = null
+                    switching = true
                     scope.launch {
-                        switching = true
                         try {
                             val result = runInterruptible(Dispatchers.IO) {
                                 if (root) {
@@ -139,7 +177,7 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
                                     AaSwitch.start(context)
                                 }
                             }
-                            refused = result != AaSwitch.Result.ON
+                            failure = result.takeUnless { it == AaSwitch.Result.ON }
                         } finally {
                             switching = false
                         }
@@ -150,8 +188,8 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
             ) {
                 Text(stringResource(if (switching) R.string.aa_switching_on else R.string.aa_switch_on), maxLines = 1)
             }
-            if (refused) Note(stringResource(R.string.aa_switch_failed))
         }
+        if (!on) failure?.let { Note(stringResource(it.message())) }
         if (!on) ButtonPair(stringResource(R.string.aa_show_me_how), { help = true }, stringResource(R.string.aa_open_aa), { AaInstaller.openSettings(context) })
     }
     if (help) ServerHelpSheet(serverOn) { help = false }
