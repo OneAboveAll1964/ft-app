@@ -6,6 +6,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.delay
 import org.junit.Assert.*
 import org.junit.Test
 import java.net.ServerSocket
@@ -15,8 +19,95 @@ import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 class WifiChannelLinkTest {
+    @Test fun aTimeoutDoesNotInterruptACommandBeingProcessedOrRetireItsCompletedSession() = runBlocking {
+        val port = ServerSocket(0).use { it.localPort }
+        val bound = LinkedBlockingQueue<Int>()
+        val connected = LinkedBlockingQueue<Long>()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val finished = CountDownLatch(1)
+        val closed = LinkedBlockingQueue<String>()
+        val admission = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(mapOf(CarLifeProtocol.CH_CMD to port),
+            onBound = { bound.put(it) }, admissionDispatcher = admission)
+        var client: Socket? = null
+        try {
+            link.start(scope, { _, _, _ ->
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS))
+                finished.countDown()
+            }, {}, { connected.put(link.commandGeneration) }, { closed.put(it) })
+            assertNotNull(bound.poll(5, TimeUnit.SECONDS))
+            client = Socket("127.0.0.1", port)
+            val generation = requireNotNull(connected.poll(5, TimeUnit.SECONDS))
+            client.getOutputStream().write(CarLifeFraming.cmd(CarLifeProtocol.CMD_HU_PROTOCOL_VERSION))
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            // Admission remains free while the IO handler is processing the reply.
+            assertFalse(withContext(admission) { link.retryCommand(generation) })
+            assertTrue(link.connected)
+            release.countDown()
+            assertTrue(finished.await(5, TimeUnit.SECONDS))
+            val checked = AtomicBoolean(false)
+            withTimeout(5_000) {
+                while (!checked.get()) {
+                    assertFalse(withContext(admission) {
+                        link.retryCommand(generation) { checked.set(true); false }
+                    })
+                    delay(10)
+                }
+            }
+            assertTrue(link.connected)
+            assertNull(closed.poll())
+        } finally {
+            release.countDown()
+            link.stop()
+            client?.close()
+            scope.cancel()
+            admission.close()
+        }
+    }
+
+    @Test fun aTimedOutCommandCanReconnectOnTheSameListenerAndAnOldTimeoutCannotCloseItsReplacement() = runBlocking {
+        val port = ServerSocket(0).use { it.localPort }
+        val bound = LinkedBlockingQueue<Int>()
+        val connected = LinkedBlockingQueue<Long>()
+        val closed = LinkedBlockingQueue<String>()
+        val admission = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(mapOf(CarLifeProtocol.CH_CMD to port),
+            onBound = { bound.put(it) }, admissionDispatcher = admission)
+        val clients = mutableListOf<Socket>()
+        try {
+            link.start(scope, { _, _, _ -> }, {}, { connected.put(link.commandGeneration) }, { closed.put(it) })
+            assertNotNull(bound.poll(5, TimeUnit.SECONDS))
+            clients += Socket("127.0.0.1", port)
+            val first = requireNotNull(connected.poll(5, TimeUnit.SECONDS))
+            assertTrue(withContext(admission) { link.retryCommand(first) })
+            assertEquals("CarLife startup negotiation timed out", closed.poll(5, TimeUnit.SECONDS))
+            assertFalse(link.connected)
+            val replacement = Socket("127.0.0.1", port).also { it.soTimeout = 5_000; clients += it }
+            val second = requireNotNull(connected.poll(5, TimeUnit.SECONDS))
+            assertTrue(second > first)
+            assertFalse(withContext(admission) { link.retryCommand(first) })
+            assertTrue(link.connected)
+            assertTrue(link.send(CarLifeProtocol.CH_CMD, byteArrayOf(42)))
+            assertEquals(42, replacement.getInputStream().read())
+            // Also drains the old reader's disconnect callback on the admission dispatcher.
+            withContext(admission) { assertTrue(link.connected) }
+            assertNull(closed.poll())
+            assertNull("the listener was reused without binding again", bound.poll())
+        } finally {
+            link.stop()
+            clients.forEach { runCatching { it.close() } }
+            scope.cancel()
+            admission.close()
+        }
+    }
+
     @Test fun commandAdmissionCannotBeSplitByAQueuedGroupChange() {
         val port = ServerSocket(0).use { it.localPort }
         val bound = LinkedBlockingQueue<Int>()

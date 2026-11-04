@@ -30,7 +30,5 @@ object JoinWatch {
         else -> STALL_MS
     }
 
-    fun actOnCarReady(attempting: Boolean): Boolean = !attempting
-
     fun askCarAgain(unseenMs: Long, carInSight: Boolean): Boolean = !carInSight && unseenMs >= ASK_AGAIN_MS
 }

@@ -30,8 +30,10 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
     @Volatile private var listener: Listener? = null
     @Volatile private var lastListenFailure = ""
     private var serverJob: Job? = null
-    var onFrame: ((ByteArray) -> Unit)? = null
-    var onCar: ((String?) -> Unit)? = null
+    var onFrame: ((Long, ByteArray) -> Unit)? = null
+    var onCar: ((Long, String?) -> Unit)? = null
+    @Volatile var connectionGeneration = 0L
+        private set
     var onStep: ((String) -> Unit)? = null
 
     val open: Boolean get() = listener?.socket?.isConnected == true
@@ -55,14 +57,18 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
 
     @Synchronized
     fun stop() {
+        connectionGeneration++
         serverJob?.cancel()
         serverJob = null
         listener?.close()
         listener = null
     }
 
-    fun send(bytes: ByteArray): Boolean {
-        val s = listener?.socket ?: return false
+    fun send(bytes: ByteArray, generation: Long = connectionGeneration): Boolean {
+        val s = synchronized(this) {
+            if (connectionGeneration != generation) return false
+            listener?.socket ?: return false
+        }
         return runCatching {
             s.outputStream.write(bytes)
             s.outputStream.flush()
@@ -189,30 +195,33 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
             val d = s.remoteDevice
             DiagLog.i(tag, "car bluetooth: address ${d?.address} class 0x${Integer.toHexString(d?.bluetoothClass?.deviceClass ?: 0)} bond ${d?.bondState} type ${d?.type} connection ${s.connectionType} max packet ${s.maxReceivePacketSize}")
         }
-        if (!owner.connect(s)) return
+        val generation = synchronized(this) {
+            if (listener !== owner || !owner.connect(s)) return
+            carAddress = address
+            ++connectionGeneration
+        }
         try {
             if (!currentCoroutineContext().isActive) return
-            carAddress = runCatching { s.remoteDevice?.address }.getOrNull().orEmpty()
             if (prefs.carLifeVehicleAddress.orEmpty().isBlank() && carAddress.isNotBlank()) prefs.carBtAddress = carAddress
-            onCar?.invoke(who)
+            onCar?.invoke(generation, who)
             val input = runCatching { s.inputStream }.getOrNull()
             val buf = ByteArray(512)
             var seen = 0
             var why = "the link ended"
             while (currentCoroutineContext().isActive) {
                 val n = runCatching { input?.read(buf) ?: -1 }.getOrElse { why = "${it.javaClass.simpleName} ${it.message ?: ""}"; -1 }
-                if (!accepted()) break
+                if (!accepted() || listener !== owner || connectionGeneration != generation) break
                 if (n < 0) break
                 if (n == 0) continue
                 seen++
                 val frame = buf.copyOf(n)
                 if (seen <= 20 || seen % 30 == 0) DiagLog.rx(tag, "bluetooth #$seen", frame)
-                onFrame?.invoke(frame)
+                onFrame?.invoke(generation, frame)
             }
             if (accepted() || prefs.showOtherDevicesInLogs) DiagLog.i(tag, "bluetooth link to '$who' closed ($why, $seen messages)")
         } finally {
             owner.release(s)
-            if (listener === owner) onCar?.invoke(null)
+            if (listener === owner && connectionGeneration == generation) onCar?.invoke(generation, null)
         }
     }
 

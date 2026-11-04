@@ -40,18 +40,49 @@ class CarBluetoothTest {
 
     @Test fun callbackFailureClosesConnectedSocket() = fixture(connect = true) { f ->
         val failed = CountDownLatch(1)
-        f.bt.onCar = { if (it != null) { failed.countDown(); throw IllegalStateException("callback failed") } }
+        f.bt.onCar = { _, name -> if (name != null) { failed.countDown(); throw IllegalStateException("callback failed") } }
         f.bt.start()
         await(failed)
         await(f.clientClosed)
         verify(f.client, times(1)).close()
     }
 
+    @Test fun aReadCompletedAfterStopCannotDeliverAFrameOrDisconnect() = fixture(connect = true) { f ->
+        val input = mock(InputStream::class.java)
+        val reading = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val frames = AtomicInteger()
+        val disconnects = AtomicInteger()
+        `when`(f.client.inputStream).thenReturn(input)
+        `when`(input.read(any(ByteArray::class.java))).thenAnswer {
+            reading.countDown()
+            await(release)
+            1
+        }
+        f.bt.onFrame = { _, _ -> frames.incrementAndGet() }
+        f.bt.onCar = { generation, name ->
+            assertEquals(f.bt.connectionGeneration, generation)
+            if (name == null) disconnects.incrementAndGet()
+        }
+        try {
+            f.bt.start()
+            await(reading)
+            val old = f.bt.connectionGeneration
+            f.bt.stop()
+            assertTrue(f.bt.connectionGeneration > old)
+            release.countDown()
+            f.job.cancel()
+            runBlocking { withTimeout(5000) { f.job.join() } }
+            assertEquals(0, frames.get())
+            assertEquals(0, disconnects.get())
+        } finally { release.countDown() }
+    }
+
     @Test fun frameCallbackFailureClosesLinkAndOffersBluetoothAgain() = fixture(connect = true) { f ->
         val input = mock(InputStream::class.java)
         `when`(f.client.inputStream).thenReturn(input)
         `when`(input.read(any(ByteArray::class.java))).thenReturn(1)
-        f.bt.onFrame = { throw IllegalStateException("bad frame") }
+        f.bt.onFrame = { _, _ -> throw IllegalStateException("bad frame") }
         f.bt.start()
         await(f.clientClosed)
         await(f.listeningAgain)

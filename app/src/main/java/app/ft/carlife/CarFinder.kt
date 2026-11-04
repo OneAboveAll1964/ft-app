@@ -42,6 +42,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var watchdog: Job? = null
     private var recovery: Job? = null
     private var preparation: Job? = null
+    internal val preparingRetry: Boolean get() = recovery != null || preparation?.isActive == true
     private var groupProbe: Job? = null
     private var busyProbe: Job? = null
     private var reopen: Job? = null
@@ -54,6 +55,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var lastNoMatch = ""
     private var lastSnapshot = ""
     private var announcedName = ""
+    private var awaitingRetryAnnouncement = false
     private var joiningAddress = ""
     private var bluetoothAddress = ""
     private var joiningBluetoothAddress = ""
@@ -78,8 +80,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         get() = if (locked || bluetoothAddress.isNotBlank()) trustedAnnouncement else prefs.carP2pName
 
     private fun pick(ps: List<Peer>, want: String = targetName): Peer? =
-        if (locked) CarMatch.known(ps, trustedAnnouncement, prefs.carLifeWifiAddress.orEmpty())
-        else if (awaitingAnnouncement) null
+        if (awaitingAnnouncement || awaitingRetryAnnouncement) null
+        else if (locked) CarMatch.known(ps, trustedAnnouncement, prefs.carLifeWifiAddress.orEmpty())
         else CarMatch.pick(ps, want, prefs.carBtAddress)?.first
 
     private fun visible(p: Peer): Boolean = prefs.showOtherDevicesInLogs ||
@@ -125,7 +127,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     var onLeft: (() -> Unit)? = null
     var onRetry: ((name: String, attempt: Int) -> Unit)? = null
     // Called after teardown, or with groupKept=true when retry can reuse a live group.
-    var onRetryReady: (suspend (groupKept: Boolean) -> Unit)? = null
+    var onRetryReady: (suspend (groupKept: Boolean) -> Boolean)? = null
     var onJoinTimeout: ((seconds: Int) -> Unit)? = null
 
     fun start() {
@@ -215,6 +217,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         watchdog = null
         recovery?.cancel()
         recovery = null
+        awaitingRetryAnnouncement = false
         preparation?.cancel()
         preparation = null
         cancelGroupProbe()
@@ -640,6 +643,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
 
     fun connectByName(name: String) {
         announcedName = name
+        awaitingRetryAnnouncement = false
         prefs.carP2pName = name
         armed = true
         namedAt = android.os.SystemClock.elapsedRealtime()
@@ -671,26 +675,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         restart(p, "manual retry requested")
     }
 
-    fun carReady() {
-        if (_link.value != null) return
-        val name = targetName.trim()
-        if (name.isEmpty()) return
-        if (!JoinWatch.actOnCarReady(connecting != null || recovery != null)) return
-        val p = theCar(_peers.value, name)
-        if (p == null) {
-            discover()
-            return
-        }
-        if (p.status == WifiP2pDevice.CONNECTED) return
-        DiagLog.i(tag, "received another wireless notification from the car; trying its discovered WiFi Direct peer")
-        connect(p)
-    }
-
     fun connect(p: Peer) = connect(p, serviceMatch = false)
 
     private fun connect(p: Peer, serviceMatch: Boolean) {
         if (locked && (if (serviceMatch) trustedAnnouncement.isBlank() else pick(listOf(p)) == null)) return
-        if (!locked && awaitingAnnouncement) return
+        if (awaitingAnnouncement || awaitingRetryAnnouncement) return
         val m = manager ?: return
         val ch = channel ?: return
         if (!enabled || recovery != null || groupProbe != null || _link.value != null || connecting != null) return
@@ -722,11 +711,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         attemptAt = android.os.SystemClock.elapsedRealtime()
         DiagLog.d(tag, "join attempt=$id peerStatus=${statusName(p.status)} peerOwner=${p.groupOwner} " +
             "wps=${if (cfg.wps.setup == WpsInfo.PBC) "push-button" else "keypad"} ownerIntent=${cfg.groupOwnerIntent} persistentSave=false")
+        // Android can omit the action callback altogether. Bound the whole
+        // request, including that wait, without extending it on a late success.
+        watch(p, timeoutMs)
         m.connect(ch, cfg, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 if (!current(ch, life) || attempt != id || connecting != p.name) return
                 DiagLog.d(tag, "join attempt=$id accepted by Android; waiting for group formation")
-                watch(p, timeoutMs)
             }
             override fun onFailure(reason: Int) {
                 if (!current(ch, life) || attempt != id || connecting != p.name) return
@@ -796,8 +787,16 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             // Ask the head unit to prepare again even when its peer stayed visible.
             // Keep recovery active during the exchange and backoff: Bluetooth replies
             // must not start a join against the peer snapshot from before teardown.
-            onRetryReady?.invoke(false)
-            delay(JoinWatch.retryDelayMs(failures))
+            awaitingRetryAnnouncement = onRetryReady != null
+            do {
+                val ready = onRetryReady?.invoke(false) ?: true
+                if (lifecycle != life || receiver == null || !enabled || attempt != id) return@launch
+                delay(JoinWatch.retryDelayMs(failures))
+                if (lifecycle != life || receiver == null || !enabled || attempt != id) return@launch
+                if (ready || !awaitingRetryAnnouncement) break
+                DiagLog.i(tag, "no current Bluetooth target info; repeating wireless preparation before a new join")
+            } while (isActive)
+            awaitingRetryAnnouncement = false
             if (lifecycle != life || receiver == null || !enabled || attempt != id) return@launch
             peersVersion++
             _peers.value = emptyList()

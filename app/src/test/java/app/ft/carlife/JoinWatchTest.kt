@@ -28,12 +28,6 @@ class JoinWatchTest {
     }
 
     @Test
-    fun theCarSayingItIsReadyNeverInterruptsAJoinAlreadyInFlight() {
-        assertTrue(JoinWatch.actOnCarReady(attempting = false))
-        assertFalse(JoinWatch.actOnCarReady(attempting = true))
-    }
-
-    @Test
     fun theWiFiDirectChannelIsRenewedEveryThirdFailure() {
         assertFalse(JoinWatch.renewChannel(0))
         assertFalse(JoinWatch.renewChannel(2))

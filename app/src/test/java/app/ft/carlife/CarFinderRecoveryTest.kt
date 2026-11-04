@@ -137,7 +137,7 @@ class CarFinderRecoveryTest {
     fun recoveryWaitsForPreparationBeforeStartingItsBackoff() = check { h ->
         val ready = CompletableDeferred<Unit>()
         var preparing = false
-        h.finder.onRetryReady = { preparing = true; ready.await() }
+        h.finder.onRetryReady = { preparing = true; ready.await(); true }
         h.finder.retry()
         runCurrent()
         h.cancels.single().onSuccess()
@@ -319,18 +319,72 @@ class CarFinderRecoveryTest {
     }
 
     @Test
+    fun missingTargetInfoRepeatsPreparationWithoutJoiningOrRemovingTheGroupAgain() = check { h ->
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            var preparations = 0
+            h.finder.onRetryReady = { preparations++; false }
+            h.finder.retry()
+            runCurrent()
+            h.cancels.single().onSuccess()
+            runCurrent()
+            h.removals.single().onSuccess()
+            runCurrent()
+            h.groups.single().onGroupInfoAvailable(null)
+            runCurrent()
+            h.visible = listOf(h.car.apply { status = WifiP2pDevice.AVAILABLE })
+            h.broadcastPeers()
+            advanceTimeBy(20_000)
+            runCurrent()
+            assertTrue(preparations > 1)
+            assertEquals(1, h.cancels.size)
+            assertEquals(1, h.removals.size)
+            verify(h.manager, never()).connect(any(), any(), any())
+            // A reply from a newly established SPP exchange also releases recovery.
+            h.finder.connectByName("CarLife")
+            runCurrent()
+            verify(h.manager, never()).connect(any(), any(), any())
+            advanceTimeBy(2_500)
+            runCurrent()
+            verify(h.manager).connect(any(), any(), any())
+        }
+    }
+
+    @Test
+    fun aPinnedCallerMustAnnounceItsNameBeforeSavedMacOrServiceCanConnect() = check { h ->
+        h.broadcastEnabled(false)
+        val address = "64:FE:15:28:C8:E4"
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn(address)
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        `when`(h.prefs.carP2pName).thenReturn("_CarA")
+        h.car.status = WifiP2pDevice.AVAILABLE
+        h.finder.beginBluetoothExchange(address)
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.finder.connect(CarFinder.Peer("CarLife", h.car.deviceAddress, WifiP2pDevice.AVAILABLE, false))
+        assertFalse(h.finder.inSight("_CarA"))
+        h.finder.search()
+        advanceTimeBy(15_000)
+        runCurrent()
+        h.serviceListener.onDnsSdServiceAvailable("_CarA", "_tcp", h.car)
+        verify(h.manager, never()).connect(any(), any(), any())
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.finder.connectByName("_CarA")
+            verify(h.manager).connect(any(), any(), any())
+        }
+    }
+
+    @Test
     fun automaticRetryPreparesTheCarAfterCleanupAndAcceptsANonOwnerPeer() = check { h ->
         mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
             val sent = mutableListOf<ByteArray>()
             val wireless = CarWirelessSetup(
                 send = { sent.add(it) },
-                onCarWifiName = { h.finder.connectByName(it) },
-                onCarReady = { h.finder.carReady() }
+                onCarWifiName = { h.finder.connectByName(it) }
             )
             wireless.wifiDirectReady("192.168.49.23")
             h.finder.onRetryReady = { groupKept ->
                 assertFalse(groupKept)
-                wireless.restart(keepIp = groupKept)
+                wireless.restartAwaitingName(keepIp = groupKept).await()
             }
             var joined = 0
             h.finder.onJoined = { joined++ }
@@ -376,7 +430,7 @@ class CarFinderRecoveryTest {
     fun aBusyConnectMustFinishCleanupBeforePreparingTheCarAgain() = check { h ->
         mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
             var prepared = 0
-            h.finder.onRetryReady = { prepared++ }
+            h.finder.onRetryReady = { prepared++; true }
             h.broadcastEnabled(false)
             h.visible = listOf(h.car.apply { status = WifiP2pDevice.AVAILABLE })
             h.broadcastEnabled(true)
@@ -431,7 +485,7 @@ class CarFinderRecoveryTest {
     @Test
     fun repeatedManualRetryDoesNotOverlapCleanupOrJoinAnOldPeer() = check { h ->
         var prepared = 0
-        h.finder.onRetryReady = { prepared++ }
+        h.finder.onRetryReady = { prepared++; true }
         h.finder.retry()
         runCurrent()
         h.finder.retry()
@@ -476,7 +530,7 @@ class CarFinderRecoveryTest {
     fun manualRetryKeepsAnEstablishedGroup() = check { h ->
         var joined = 0
         val prepared = mutableListOf<Boolean>()
-        h.finder.onRetryReady = { prepared += it }
+        h.finder.onRetryReady = { prepared += it; true }
         h.finder.onJoined = { joined++ }
         h.broadcastConnection(true)
         h.groups.single().onGroupInfoAvailable(mock(WifiP2pGroup::class.java))
@@ -492,7 +546,7 @@ class CarFinderRecoveryTest {
     @Test
     fun stopInvalidatesAPendingCleanupCallback() = check { h ->
         var prepared = 0
-        h.finder.onRetryReady = { prepared++ }
+        h.finder.onRetryReady = { prepared++; true }
         advanceTimeBy(5_000)
         runCurrent()
         val pending = h.cancels.single()
@@ -538,7 +592,7 @@ class CarFinderRecoveryTest {
         runCurrent()
         assertEquals(1, h.cancels.size)
         var prepared = 0
-        h.finder.onRetryReady = { kept -> assertFalse(kept); prepared++ }
+        h.finder.onRetryReady = { kept -> assertFalse(kept); prepared++; true }
         clearInvocations(h.manager)
         advanceTimeBy(1_000)
         runCurrent()
@@ -1018,7 +1072,7 @@ class CarFinderRecoveryTest {
         h.broadcastEnabled(true)
         h.finder.beginBluetoothExchange("22:33:44:55:66:77")
         h.broadcastPeers()
-        h.finder.carReady()
+        h.finder.connect(CarFinder.Peer("CarLife", h.car.deviceAddress, WifiP2pDevice.AVAILABLE, false))
         assertFalse(h.finder.inSight("CarLife"))
         verify(h.manager, never()).connect(any(), any(), any())
 
@@ -1115,6 +1169,46 @@ class CarFinderRecoveryTest {
         runCurrent()
         h.serviceListener.onDnsSdServiceAvailable("_CarA", "_tcp", h.car)
         verify(h.manager, never()).connect(any(), any(), any())
+    }
+
+    @Test fun aMissingConnectCallbackStillTimesOutAndItsLateSuccessCannotRestartTheDeadline() = check { h ->
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.broadcastEnabled(false)
+            h.car.status = WifiP2pDevice.AVAILABLE
+            h.broadcastEnabled(true)
+            h.broadcastPeers()
+            h.finder.connectByName("CarLife")
+            val callback = ArgumentCaptor.forClass(WifiP2pManager.ActionListener::class.java)
+            verify(h.manager).connect(any(), any(), callback.capture())
+            runCurrent()
+            // Android has neither accepted nor rejected connect().
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertEquals("the original request must have a deadline", 1, h.cancels.size)
+            callback.value.onSuccess()
+            callback.value.onFailure(WifiP2pManager.ERROR)
+            runCurrent()
+            assertEquals("retired request callbacks must not start another recovery", 1, h.cancels.size)
+        }
+    }
+
+    @Test fun aDelayedConnectAcknowledgementDoesNotExtendTheOriginalJoinDeadline() = check { h ->
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.broadcastEnabled(false)
+            h.car.status = WifiP2pDevice.AVAILABLE
+            h.broadcastEnabled(true)
+            h.broadcastPeers()
+            h.finder.connectByName("CarLife")
+            val callback = ArgumentCaptor.forClass(WifiP2pManager.ActionListener::class.java)
+            verify(h.manager).connect(any(), any(), callback.capture())
+            runCurrent()
+            advanceTimeBy(4_000)
+            runCurrent()
+            callback.value.onSuccess()
+            advanceTimeBy(1_000)
+            runCurrent()
+            assertEquals(1, h.cancels.size)
+        }
     }
 
     private fun check(block: suspend TestScope.(Harness) -> Unit) = runTest {

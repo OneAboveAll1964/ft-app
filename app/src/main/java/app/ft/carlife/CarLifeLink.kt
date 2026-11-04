@@ -46,11 +46,26 @@ class WifiChannelLink(
     private val writers = HashMap<Int, CarLifeWriter<ByteArray>>()
     private val jobs = ArrayList<Job>()
     private var cmdGeneration = 0
+    private var commandProcessing: Socket? = null
     private var closedHook: ((String) -> Unit)? = null
     private var watch: Job? = null
 
     override val isOpen: Boolean get() = running.get() && synchronized(sockets) { sockets.isNotEmpty() }
     override val connected: Boolean get() = running.get() && synchronized(sockets) { sockets.containsKey(CarLifeProtocol.CH_CMD) }
+    internal val commandGeneration: Long get() = synchronized(sockets) { cmdGeneration.toLong() }
+
+    /** Called on admissionDispatcher, just like acceptance and disconnect callbacks. */
+    internal fun retryCommand(expectedGeneration: Long, stillWaiting: () -> Boolean = { true }): Boolean {
+        val command = synchronized(sockets) {
+            if (cmdGeneration.toLong() != expectedGeneration) return false
+            sockets[CarLifeProtocol.CH_CMD] ?: return false
+        }
+        // The IO handler may be finishing negotiation right now. Do not wait
+        // for it on Main, and test its resulting state atomically with retirement.
+        if (!dropAll(expectedCommand = command) { commandProcessing !== command && stillWaiting() }) return false
+        closedHook?.invoke("CarLife startup negotiation timed out")
+        return true
+    }
 
     override fun start(scope: CoroutineScope, onMessage: LinkMessage, onEvent: (String) -> Unit, onConnected: () -> Unit, onClosed: (String) -> Unit) {
         running.set(true)
@@ -154,9 +169,10 @@ class WifiChannelLink(
         else -> null
     }
 
-    private fun dropAll(expectedCommand: Socket? = null): Boolean {
+    private fun dropAll(expectedCommand: Socket? = null, canDrop: () -> Boolean = { true }): Boolean {
         val all = synchronized(sockets) {
             if (expectedCommand != null && sockets[CarLifeProtocol.CH_CMD] !== expectedCommand) return false
+            if (!canDrop()) return false
             val list = sockets.values.toList() to writers.values.toList()
             sockets.clear()
             writers.clear()
@@ -222,8 +238,21 @@ class WifiChannelLink(
                 if (len < 0 || len > CarLifeFraming.maxBody(channel)) throw IllegalStateException("bad body length $len")
                 val body = ByteArray(len)
                 Bytes.readFully(i, body)
-                progressAt = android.os.SystemClock.elapsedRealtime()
-                onMessage(channel, head, body)
+                if (channel == CarLifeProtocol.CH_CMD) {
+                    synchronized(sockets) {
+                        if (!running.get() || sockets[channel] !== s) return
+                        commandProcessing = s
+                    }
+                    try {
+                        progressAt = android.os.SystemClock.elapsedRealtime()
+                        onMessage(channel, head, body)
+                    } finally {
+                        synchronized(sockets) { if (commandProcessing === s) commandProcessing = null }
+                    }
+                } else {
+                    progressAt = android.os.SystemClock.elapsedRealtime()
+                    onMessage(channel, head, body)
+                }
             }
         } catch (t: Throwable) {
             if (running.get()) DiagLog.d(tag, "WIFI ${CarLifeProtocol.channelName(channel)} read ended: ${t.message}")

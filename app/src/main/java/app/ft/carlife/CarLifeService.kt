@@ -67,6 +67,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.runInterruptible
 import app.ft.aa.AaConnectionPreparation
 import app.ft.core.ConnectionPreparation
@@ -310,6 +311,8 @@ class CarLifeService : Service() {
     private var musicJob: Job? = null
     @Volatile private var mirrorJob: Job? = null
     private var ipJob: Job? = null
+    private val startupWatch = CarLifeStartupWatch()
+    private var startupRetry: Job? = null
     private var aaWatch: Job? = null
     @Volatile private var mode = -1
     private var callWatch: Any? = null
@@ -531,6 +534,7 @@ class CarLifeService : Service() {
     @Volatile private var p2pIface: String? = null
     @Volatile private var carP2pIp: String? = null
     private val bt by lazy { CarBluetooth(this, prefs, scope) }
+    @Volatile private var wirelessBluetoothGeneration = 0L
     private val btAudio by lazy { CarBtAudio(this) }
     private var bluetoothReconnect: CarBluetoothReconnect? = null
     private fun step(text: String) {
@@ -540,13 +544,23 @@ class CarLifeService : Service() {
 
     private val wireless by lazy {
         CarWirelessSetup(
-            send = { bytes -> bt.send(bytes) },
-            onCarWifiName = { name -> onCarRaisedWifiDirect(name) },
+            send = { bytes -> bt.send(bytes, wirelessBluetoothGeneration) },
+            onCarWifiName = { name -> queueWirelessName(name) },
             progress = { text ->
                 if (wifiLink?.connected == true) DiagLog.i(tag, text) else step(text)
             },
-            onCarReady = { if (mode == 1 && wifiLink?.connected != true) finder?.carReady() }
+            commandConnected = { wifiLink?.connected == true }
         )
+    }
+
+    internal fun queueWirelessName(name: String) {
+        val generation = wirelessBluetoothGeneration
+        val exchange = wireless.exchange
+        val f = finder
+        scope.launch(Dispatchers.Main) {
+            if (mode == 1 && finder === f && bt.connectionGeneration == generation &&
+                wireless.exchange == exchange) onCarRaisedWifiDirect(name)
+        }
     }
 
     override fun onCreate() {
@@ -978,23 +992,42 @@ class CarLifeService : Service() {
         vehicleCandidates.clear()
         val revision = prefs.carLifeVehicleRevision
         wireless.reset()
-        bt.onFrame = { frame ->
-            val bound = prefs.carLifeVehicleAddress
-            if (bound.isBlank() || bound.equals(bt.carAddress, true)) wireless.feed(frame)
+        bt.onFrame = { generation, frame ->
+            synchronized(wireless) {
+                val bound = prefs.carLifeVehicleAddress
+                if (mode == 1 && bt.connectionGeneration == generation &&
+                    (bound.isBlank() || bound.equals(bt.carAddress, true))) wireless.feed(frame)
+            }
         }
         bt.onStep = { text ->
             DiagLog.i(tag, text)
             _state.update { it.withBluetoothStep(text) }
         }
-        bt.onCar = onCar@{ name ->
-            val bound = prefs.carLifeVehicleAddress
-            if (name != null && bound.isNotBlank() && !bound.equals(bt.carAddress, true)) return@onCar
-            _state.update { it.withBluetoothCar(name) }
-            if (name != null) {
-                vehicleCandidates[bt.carAddress.uppercase(java.util.Locale.ROOT)] = VehicleCandidate(bt.carAddress, name, revision)
-                finder?.beginBluetoothExchange(bt.carAddress)
-                DiagLog.i(tag, "'$name' called over bluetooth")
-                wireless.restart()
+        bt.onCar = { generation, name ->
+            synchronized(wireless) {
+                val address = bt.carAddress
+                val bound = prefs.carLifeVehicleAddress
+                if (mode == 1 && bt.connectionGeneration == generation &&
+                    (name == null || bound.isBlank() || bound.equals(address, true))) {
+                    if (name != null) {
+                        wirelessBluetoothGeneration = generation
+                        wireless.reset()
+                    } else wireless.bluetoothDisconnected()
+                    val f = finder
+                    scope.launch(Dispatchers.Main) {
+                        if (mode == 1 && finder === f && bt.connectionGeneration == generation) {
+                            _state.update { it.withBluetoothCar(name) }
+                            if (name != null) {
+                                vehicleCandidates[address.uppercase(java.util.Locale.ROOT)] = VehicleCandidate(address, name, revision)
+                                f?.beginBluetoothExchange(address)
+                            }
+                        }
+                    }
+                    if (name != null) {
+                        DiagLog.i(tag, "'$name' called over bluetooth")
+                        wireless.begin()
+                    }
+                }
             }
         }
         step("Waiting for the car to call over bluetooth")
@@ -1007,6 +1040,8 @@ class CarLifeService : Service() {
 
     private fun watchWifiDirect() {
         p2pWatch?.cancel()
+        startupRetry?.cancel()
+        startupWatch.reset()
         directStartedAt = android.os.SystemClock.elapsedRealtime()
         blockerNote = ""
         lastOtherWifi = -1
@@ -1015,6 +1050,7 @@ class CarLifeService : Service() {
             var ticks = 0
             while (mode == 1) {
                 delay(2000)
+                withContext(Dispatchers.Main) { checkWirelessStartup(android.os.SystemClock.elapsedRealtime()) }
                 if (wifiLink?.connected == true) continue
                 if (ticks++ % 5 == 0) checkDirectBlockers()
                 askCarAgain()
@@ -1034,6 +1070,66 @@ class CarLifeService : Service() {
                     wireless.wifiDirectReady(null)
                     updateBeacon()
                 }
+            }
+        }
+    }
+
+    /** Read and act on Main, which also serializes group and CMD admission callbacks. */
+    internal fun wirelessStartupPoint(): CarLifeStartupWatch.Point? {
+        if (mode != 1 || _state.value.waitingForShare) return null
+        val f = finder ?: return null
+        val l = wifiLink ?: return null
+        val st = session?.state?.value
+        if (st is CarLifeSession.State.Negotiated || st is CarLifeSession.State.Projecting) return null
+        if (l.connected) return CarLifeStartupWatch.Point(CarLifeStartupWatch.Stage.NEGOTIATION, l.commandGeneration)
+        if (f.joined) return CarLifeStartupWatch.Point(
+            if (_state.value.wifiDirect) CarLifeStartupWatch.Stage.COMMAND else CarLifeStartupWatch.Stage.ADDRESS,
+            f.connectionGeneration
+        )
+        if (!bt.open || bt.connectionGeneration != wirelessBluetoothGeneration || wireless.carWifiName != null) return null
+        return CarLifeStartupWatch.Point(CarLifeStartupWatch.Stage.BLUETOOTH, wirelessBluetoothGeneration, wireless.exchange)
+    }
+
+    internal fun checkWirelessStartup(now: Long) {
+        // Finder owns cleanup and its fresh-name wait. Do not create a second
+        // preparation or reset the retry budget while that preparation runs.
+        val f = finder ?: return
+        if (f.preparingRetry || startupRetry?.isActive == true) return
+        val point = wirelessStartupPoint()
+        val attempt = startupWatch.next(point, now) ?: return
+        val l = wifiLink ?: return
+        startupRetry = scope.launch(Dispatchers.Main) { retryWirelessStartup(f, l, point!!, attempt) }
+    }
+
+    internal suspend fun retryWirelessStartup(
+        f: CarFinder, l: WifiChannelLink, point: CarLifeStartupWatch.Point, attempt: Int
+    ) {
+        currentCoroutineContext().ensureActive()
+        if (finder !== f || wifiLink !== l || f.preparingRetry || wirelessStartupPoint() != point) return
+        DiagLog.w(tag, "wireless startup stalled at ${point.stage}; retry $attempt/${CarLifeStartupWatch.MAX_RETRIES}, " +
+            "group=${f.connectionGeneration} command=${l.commandGeneration} bluetooth=$wirelessBluetoothGeneration exchange=${wireless.exchange}")
+        when (point.stage) {
+            CarLifeStartupWatch.Stage.BLUETOOTH -> withContext(Dispatchers.IO) {
+                val job = currentCoroutineContext()
+                synchronized(wireless) {
+                    job.ensureActive()
+                    // A write can wait for an earlier Bluetooth operation. Check
+                    // the socket, exchange and accepted reply again after waiting.
+                    if (mode == 1 && finder === f && wifiLink === l && !f.joined && !l.connected &&
+                        bt.open && bt.connectionGeneration == point.generation && wirelessBluetoothGeneration == point.generation &&
+                        wireless.exchange == point.exchange && wireless.carWifiName == null) wireless.begin()
+                }
+            }
+            CarLifeStartupWatch.Stage.ADDRESS -> {
+                // No address is an Android/group issue, not a reason to remove
+                // a valid group or restart listening sockets.
+                f.checkExisting()
+            }
+            CarLifeStartupWatch.Stage.COMMAND -> f.retry()
+            CarLifeStartupWatch.Stage.NEGOTIATION -> {
+                // Only the stalled CMD incarnation is retired; listeners and
+                // the approved P2P group remain available for the next call.
+                if (l.retryCommand(point.generation) { wirelessStartupPoint() == point }) f.retry()
             }
         }
     }
@@ -1085,6 +1181,9 @@ class CarLifeService : Service() {
         mirrorClose()
         p2pWatch?.cancel()
         p2pWatch = null
+        startupRetry?.cancel()
+        startupRetry = null
+        startupWatch.reset()
         beacon.stop()
         discovery.stop()
         // Cancel pending retry preparation before closing/resetting its transport.
@@ -1188,33 +1287,45 @@ class CarLifeService : Service() {
         finder = null
     }
 
-    internal suspend fun prepareWirelessRetry(f: CarFinder, groupKept: Boolean) {
-        val needsBluetooth = withContext(Dispatchers.IO) {
+    internal suspend fun prepareWirelessRetry(f: CarFinder, groupKept: Boolean): Boolean {
+        val reply = withContext(Dispatchers.IO) {
             val job = currentCoroutineContext()
             // A Bluetooth write can hold this monitor. Never wait for it on Main,
             // and recheck cancellation after acquiring it, not only before waiting.
             synchronized(wireless) {
                 job.ensureActive()
-                if (mode != 1 || finder !== f || wifiLink?.connected == true) return@synchronized false
+                if (mode != 1 || finder !== f || wifiLink?.connected == true) return@synchronized null
                 DiagLog.i(tag, "preparing a new wireless exchange after WiFi Direct recovery; groupKept=$groupKept bluetoothOpen=${bt.open}")
                 if (bt.open) {
                     step("Asking the car again over bluetooth")
-                    wireless.restart(keepIp = groupKept)
-                    false
+                    val pending = wireless.restartAwaitingName(keepIp = groupKept)
+                    Triple(pending, wirelessBluetoothGeneration, wireless.exchange)
                 } else {
                     wireless.reset(keepIp = groupKept)
-                    true
+                    null
                 }
             }
         }
         // Resume on the caller's Main dispatcher. A cancelled old worker must
         // never restart the Bluetooth listener after stopLink has closed it.
         currentCoroutineContext().ensureActive()
-        if (needsBluetooth && mode == 1 && finder === f && wifiLink?.connected != true) {
+        if (mode != 1 || finder !== f || wifiLink?.connected == true) return false
+        if (reply == null) {
             if (!groupKept) _state.update { it.withWirelessAttemptEnded() }
+            step("Waiting for the car to call over bluetooth; open CarLife on the car")
+            // start() is idempotent and preserves the existing RFCOMM listeners.
             bt.start()
             wakeCarBluetooth()
+            return false
         }
+        // An existing group does not depend on a repeated name announcement.
+        if (groupKept) return true
+        val ready = withTimeoutOrNull(8_000) { reply.first.await() } == true &&
+            bt.connectionGeneration == reply.second && wireless.exchange == reply.third
+        currentCoroutineContext().ensureActive()
+        if (mode != 1 || finder !== f || wifiLink?.connected == true) return false
+        if (!ready) step("Waiting for the car's WiFi Direct name over bluetooth")
+        return ready
     }
 
     private fun retry() {
@@ -1530,7 +1641,7 @@ class CarLifeService : Service() {
     }
 
     private fun echoBluetooth(on: Boolean) {
-        bt.onFrame = if (on) { frame -> bt.send(frame) } else null
+        bt.onFrame = if (on) { generation, frame -> bt.send(frame, generation) } else null
         DiagLog.i(tag, "bluetooth echo ${if (on) "on" else "off"}")
     }
 
