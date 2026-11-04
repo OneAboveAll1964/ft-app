@@ -187,6 +187,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         on -> Status(stringResource(R.string.home_status_starting), way, 1)
         else -> Status(stringResource(R.string.home_status_off), stringResource(R.string.home_detail_off), 0)
     }
+    val aaPreparation = if (iccoa) iccoaState.aaPreparation else car.aaPreparation
 
     fun pickMode(value: Int) {
         if (value == linkMode) return
@@ -215,6 +216,11 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 else if (iccoaActions != null) iccoaActions.start(false)
                 else CarConnection.switchOn(context)
             }
+        }
+
+        if (on && aaPreparation != null) item {
+            Text(stringResource(aaPreparation.message), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
         }
 
         if (iccoa && projecting && !screenState.aaOverlay && !screenState.mirroring) item {

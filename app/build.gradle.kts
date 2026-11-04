@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 171
-        versionName = "3.9.57-my-cars"
+        versionCode = 172
+        versionName = "3.9.58-aa-starter"
     }
 
     signingConfigs {

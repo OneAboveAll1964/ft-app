@@ -62,6 +62,12 @@ object AaInstaller {
         return context.packageManager.getLaunchIntentForPackage(pkg)?.component?.flattenToString() ?: pkg
     }
 
+    internal fun openStarterSettings(context: Context): Boolean = runCatching {
+        context.startActivity(Intent().setClassName(GEARHEAD,
+            "com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+    }.isSuccess
+
     fun openSettings(context: Context, fallback: Boolean = true): Boolean {
         val pkg = settingsPackage(context) ?: GEARHEAD
         val settings = (if (pkg == GEARHEAD) {

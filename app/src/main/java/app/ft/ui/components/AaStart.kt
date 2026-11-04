@@ -69,11 +69,12 @@ import app.ft.R
 import app.ft.core.Root
 import app.ft.aa.AaInstaller
 import app.ft.aa.AaSwitch
-import app.ft.FTTouchService
+import app.ft.aa.AaStarterAccessibilityService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.res.stringResource
 
@@ -112,14 +113,13 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
     val scope = rememberCoroutineScope()
     var switching by remember { mutableStateOf(false) }
     var refused by remember { mutableStateOf(false) }
-    var noMenu by remember { mutableStateOf(false) }
-    val helper by FTTouchService.connected.collectAsState()
+    val helper by AaStarterAccessibilityService.connected.collectAsState()
     OptionCard(stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking }), framed = framed) {
         Note(stringResource(R.string.aa_server_option_body))
-        if (!on && !root && !helper) {
+        if (!on && !helper && (!root || refused)) {
             Note(stringResource(R.string.aa_let_ft_body))
             FilledTonalButton(
-                onClick = { runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } },
+                onClick = { AaSwitch.openAccessibilitySettings(context) },
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
             ) {
                 Text(stringResource(R.string.aa_let_ft), maxLines = 1)
@@ -129,19 +129,20 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
             FilledTonalButton(
                 onClick = {
                     refused = false
-                    noMenu = false
                     scope.launch {
                         switching = true
-                        val result = withContext(Dispatchers.IO) {
-                            if (root) {
-                                if (Root.startAaServer(context)) AaSwitch.Result.ON else AaSwitch.Result.FAILED
-                            } else {
-                                AaSwitch.start(context)
+                        try {
+                            val result = runInterruptible(Dispatchers.IO) {
+                                if (root) {
+                                    if (Root.startAaServer(context)) AaSwitch.Result.ON else AaSwitch.Result.FAILED
+                                } else {
+                                    AaSwitch.start(context)
+                                }
                             }
+                            refused = result != AaSwitch.Result.ON
+                        } finally {
+                            switching = false
                         }
-                        switching = false
-                        noMenu = result == AaSwitch.Result.NO_DEVELOPER_MENU
-                        refused = result != AaSwitch.Result.ON && !noMenu
                     }
                 },
                 enabled = !switching,
@@ -150,7 +151,6 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
                 Text(stringResource(if (switching) R.string.aa_switching_on else R.string.aa_switch_on), maxLines = 1)
             }
             if (refused) Note(stringResource(R.string.aa_switch_failed))
-            if (noMenu) Note(stringResource(R.string.aa_no_developer))
         }
         if (!on) ButtonPair(stringResource(R.string.aa_show_me_how), { help = true }, stringResource(R.string.aa_open_aa), { AaInstaller.openSettings(context) })
     }

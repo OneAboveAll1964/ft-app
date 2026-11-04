@@ -433,7 +433,7 @@
     <string name="aa_switching_on">تێت ڤەکرن</string>
     <string name="aa_switch_failed">FT بی تنێ نەشیا ڤەکەت، ڤێجا ل خوارێ ب دەستان ڤەکە.</string>
     <string name="aa_let_ft">بهێلە FT ڤەکەت</string>
-    <string name="aa_let_ft_body">FT ل رێکخستنێن Accessibility یێن مۆبایلێ خۆ ڤەکە، ئیدی هەر دەمێ ترومبێل پێدڤی ب Android Auto ببیت، FT ب خۆ دێ سێرڤەری ڤەکەت، هەتا پشتی ریستارتێ ژی.</string>
+    <string name="aa_let_ft_body">«FT — Android Auto server» ل رێکخستنێن Accessibility یێن مۆبایلێ خۆ ڤەکە، ئیدی هەر دەمێ ترومبێل پێدڤی ب Android Auto ببیت، FT ب خۆ دێ سێرڤەری ڤەکەت، هەتا پشتی ریستارتێ ژی.</string>
     <string name="aa_no_developer">رێکخستنێن پێشڤەبەری یێن Android Auto گرتینە. پێنگاڤێن 1 و 2 ل «نیشا من بدە چاوا» بکە، پاشان جارەکا دی هەول بدە.</string>
     <string name="supercast_not_set_up">ئەپ ل سەر ترومبێلێ هێژ نەهاتیە ڕێکخستن. FT ل سەر موبایلا خۆ ڤەکە، ڕێکخستن، ئەپ ل سەر ترومبێلێ.</string>
     <string name="supercast_which_apps">ئەوێن ئەپان ل سەر ترومبێلێ دیار دبن</string>
@@ -483,4 +483,15 @@
     <string name="iccoa_mic_gain_about">Amplifies the car microphone for Android Auto. ×1 keeps the original level. Choose a value from ×1 to ×16; high values can distort speech. Applies to the next voice request.</string>
     <string name="vehicle_coordinate_log">Save GPS coordinates in diagnostic logs</string>
     <string name="vehicle_coordinate_log_about">Off by default. Enable only for a test you choose: exact vehicle position can reveal where you travel. GPS navigation works regardless. Previously recorded locations and exported reports are not deleted when you switch this off.</string>
+    <string name="aa_prepare_before_connect">Check and start Android Auto before connecting</string>
+    <string name="aa_prepare_before_connect_body">Prepare the phone’s head unit server before connecting to this car. Uses root or the separate FT Android Auto helper on an unlocked phone. Opening Android Auto on the car is configured separately.</string>
+    <string name="aa_prepare_helper_body">Enable “FT — Android Auto server” in Accessibility and enable Android Auto developer mode manually. If preparation fails, FT still connects to the car.</string>
+    <string name="aa_prepare_checking">Checking Android Auto before connecting…</string>
+    <string name="aa_prepare_ready">Android Auto server is ready.</string>
+    <string name="aa_prepare_locked">Unlock the phone to start Android Auto. Continuing connection to the car.</string>
+    <string name="aa_prepare_no_helper">Android Auto helper is not enabled. Continuing connection to the car; enable the helper in connection settings.</string>
+    <string name="aa_prepare_not_installed">Android Auto is not installed or is only a placeholder. Continuing connection to the car.</string>
+    <string name="aa_prepare_failed">Could not confirm Android Auto server startup. Continuing connection to the car; check Android Auto developer mode or start the server manually.</string>
+    <string name="aa_starter_service_label">FT — Android Auto server</string>
+    <string name="aa_starter_service_desc">During a short server-start request, reads Android Auto settings and selects Start head unit server. Returns to FT when finished. Cannot inject gestures. Enabled separately from FT car touch.</string>
 </resources>

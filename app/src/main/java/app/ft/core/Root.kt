@@ -66,6 +66,25 @@ object Root {
 
     private fun ok(cmd: String): Boolean = run(cmd)?.ok == true
 
+    /** AA startup must never wait for a fresh root grant or an unbounded shell. */
+    internal fun runAaCommand(command: String): Boolean {
+        if (Thread.currentThread().isInterrupted) throw InterruptedException()
+        if (!granted) return false
+        val su = binary ?: return false
+        return try {
+            val process = ProcessBuilder(su, "-c", command)
+                .redirectOutput(java.io.File("/dev/null"))
+                .redirectError(java.io.File("/dev/null"))
+                .start()
+            AaRootProcess.await(process)
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            DiagLog.d("Root", "AA root command failed (${e.javaClass.simpleName})")
+            false
+        }
+    }
+
     fun appop(pkg: String, op: String, mode: String) = ok("appops set $pkg $op $mode")
 
     fun grant(pkg: String, permission: String) = ok("pm grant $pkg $permission")
@@ -111,86 +130,21 @@ object Root {
     fun stopHotspot() = ok("cmd wifi stop-softap")
 
     fun aaServerUp(): Boolean {
-        val out = run("cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -i ' 0A ' | grep -ci ':149D'") ?: return false
-        return (out.stdout.trim().toIntOrNull() ?: 0) > 0
+        return app.ft.aa.AaInstaller.serverRunning(app.ft.FTApp.instance.prefs.aaSelfPort)
     }
 
     fun startAaServer(context: android.content.Context? = null): Boolean {
         if (aaServerUp()) return true
-        app.ft.aa.AaInstaller.settingsPackage(app.ft.FTApp.instance)?.let { if (app.ft.aa.AaInstaller.stub(app.ft.FTApp.instance, it)) return false }
-        if (context != null && app.ft.aa.AaServer.start(context)) return true
-        if (context != null && !app.ft.aa.AaSwitch.canTap()) {
-            enableAccessibility(context.packageName, "${context.packageName}/${app.ft.FTTouchService::class.java.name}")
-            repeat(30) { if (!app.ft.aa.AaSwitch.canTap()) Thread.sleep(100) }
-        }
-        if (context != null && app.ft.aa.AaSwitch.canTap() && app.ft.aa.AaSwitch.start(context) == app.ft.aa.AaSwitch.Result.ON) return true
-        return toggleAaServer(start = true)
+        if (context == null) return false
+        app.ft.aa.AaInstaller.settingsPackage(context)?.let { if (app.ft.aa.AaInstaller.stub(context, it)) return false }
+        if (app.ft.aa.AaServer.start(context)) return true
+        return app.ft.aa.AaSwitch.canTap() && app.ft.aa.AaSwitch.start(context) == app.ft.aa.AaSwitch.Result.ON
     }
 
     fun stopAaServer(context: android.content.Context? = null): Boolean {
         if (!aaServerUp()) return true
-        if (context != null && app.ft.aa.AaServer.stop(context)) return true
-        return toggleAaServer(start = false)
+        return context != null && app.ft.aa.AaServer.stop(context)
     }
-
-    private fun toggleAaServer(start: Boolean): Boolean {
-        if (!granted) return false
-        if (aaServerUp() == start) return true
-        run("input keyevent KEYCODE_WAKEUP", "wm dismiss-keyguard")
-        run("am start -n ${app.ft.aa.AaInstaller.settingsComponent(app.ft.FTApp.instance)}")
-        val menu = waitForNode("content-desc", "More options", 5000) ?: run { back(); return aaServerUp() }
-        tap(menu)
-        var xml = dumpUi()
-        var tries = 0
-        while (xml != null && !xml.contains("head unit server") && tries++ < 6) { Thread.sleep(150); xml = dumpUi() }
-        val wanted = if (start) "Start head unit server" else "Stop head unit server"
-        val item = xml?.let { nodeBounds(it, "text", wanted) }
-        if (item == null) {
-            val opposite = xml?.contains(if (start) "Stop head unit server" else "Start head unit server") == true
-            back()
-            return if (opposite) start else aaServerUp()
-        }
-        tap(item)
-        var ok = false
-        repeat(20) { if (!ok) { Thread.sleep(150); ok = aaServerUp() == start } }
-        back()
-        if (ok) DiagLog.i("Root", if (start) "started Android Auto's head unit server" else "stopped Android Auto's head unit server")
-        else DiagLog.w("Root", "could not ${if (start) "start" else "stop"} Android Auto's head unit server")
-        return ok
-    }
-
-    private fun back() { run("input keyevent KEYCODE_BACK") }
-
-    private fun tap(p: IntArray) { run("input tap ${p[0]} ${p[1]}") }
-
-    private fun dumpUi(): String? {
-        repeat(3) {
-            val d = run("uiautomator dump /data/local/tmp/ft_ui.xml >/dev/null 2>&1; cat /data/local/tmp/ft_ui.xml")
-            val xml = d?.takeIf { it.ok }?.stdout
-            if (xml != null && xml.contains("<node")) return xml
-            Thread.sleep(400)
-        }
-        return null
-    }
-
-    private fun waitForNode(attr: String, value: String, timeoutMs: Long): IntArray? {
-        val end = android.os.SystemClock.elapsedRealtime() + timeoutMs
-        while (android.os.SystemClock.elapsedRealtime() < end) {
-            val xml = dumpUi()
-            val b = xml?.let { nodeBounds(it, attr, value) }
-            if (b != null) return b
-            Thread.sleep(150)
-        }
-        return null
-    }
-
-    private fun nodeBounds(xml: String, attr: String, value: String): IntArray? {
-        val tag = Regex("<node\\b[^>]*\\b$attr=\"${Regex.escape(value)}\"[^>]*>").find(xml)?.value ?: return null
-        val m = Regex("bounds=\"\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]\"").find(tag) ?: return null
-        val (x1, y1, x2, y2) = m.destructured
-        return intArrayOf((x1.toInt() + x2.toInt()) / 2, (y1.toInt() + y2.toInt()) / 2)
-    }
-
     private fun probe(): Out? {
         findBinary() ?: return null
         return run("id")

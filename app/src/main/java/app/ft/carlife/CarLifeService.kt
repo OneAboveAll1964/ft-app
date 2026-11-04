@@ -67,10 +67,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runInterruptible
+import app.ft.aa.AaConnectionPreparation
+import app.ft.core.ConnectionPreparation
 import app.ft.core.Lang
 import kotlinx.coroutines.flow.drop
 
 data class CarState(
+    val aaPreparation: AaConnectionPreparation.Status? = null,
     val running: Boolean = false,
     val direct: Boolean = false,
     val link: String = "",
@@ -274,6 +278,13 @@ class CarLifeService : Service() {
 
     private val tag = "CarLife"
     internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val preparationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val preparation = ConnectionPreparation(preparationScope) {
+        AaConnectionPreparation.prepare(this@CarLifeService, prefs) { status ->
+            _state.update { it.copy(aaPreparation = status) }
+        }
+    }
+    private var aaStartJob: Job? = null
     private lateinit var carDisplay: CarDisplay
     private val mirror = PhoneMirror()
     private var session: CarLifeSession? = null
@@ -672,6 +683,13 @@ class CarLifeService : Service() {
     }
 
     private fun startChosenWay() {
+        preparationScope.launch {
+            foreground(note)
+            preparation.run(prefs.aaPrepareBeforeConnect) { startChosenWayReady() }
+        }
+    }
+
+    private fun startChosenWayReady() {
         listenForTestCable()
         if (mode == 2 && usbLink != null) {
             foreground(note)
@@ -744,8 +762,22 @@ class CarLifeService : Service() {
         runCatching { um.requestPermission(acc, pi) }.onFailure { DiagLog.w(tag, "USB: could not ask for the cable: ${it.message}") }
     }
 
+    private var pendingUsb: android.hardware.usb.UsbAccessory? = null
+
     private fun useUsb(acc: android.hardware.usb.UsbAccessory) {
         if (prefs.carProtocol != CarProtocol.CARLIFE) return
+        preparationScope.launch {
+            foreground(note)
+            pendingUsb = acc
+            preparation.run(prefs.aaPrepareBeforeConnect) {
+                pendingUsb = null
+                val manager = getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
+                if (manager.accessoryList?.contains(acc) == true) useUsbReady(acc)
+            }
+        }
+    }
+
+    private fun useUsbReady(acc: android.hardware.usb.UsbAccessory) {
         if (mode == 2 && usbLink != null) DiagLog.i(tag, "USB: the car attached again, starting the cable link over")
         DiagLog.i(tag, "USB: the car opened CarLife over the cable (${UsbCar.describe(acc)}), using the cable")
         val um = getSystemService(Context.USB_SERVICE) as android.hardware.usb.UsbManager
@@ -1575,10 +1607,11 @@ class CarLifeService : Service() {
             AaHeadUnitService.start(this, prefs.aaBluetooth)
         }
         DiagLog.i(tag, "bridging this phone's Android Auto onto the car, waiting for it to start projecting")
-        scope.launch {
+        aaStartJob?.cancel()
+        aaStartJob = scope.launch {
             if (!AaInstaller.serverRunning(prefs.aaSelfPort)) {
                 DiagLog.i(tag, if (Root.granted) "starting Android Auto's head unit server with root" else "starting Android Auto's head unit server through accessibility")
-                AaKeep.switchOn(this@CarLifeService)
+                runInterruptible(Dispatchers.IO) { AaKeep.switchOn(this@CarLifeService) }
             }
             delay(1500)
             askAndroidAutoToConnect()
@@ -2382,6 +2415,8 @@ class CarLifeService : Service() {
     }
 
     private fun stopAndroidAuto(reason: String) {
+        aaStartJob?.cancel()
+        aaStartJob = null
         aaReturn?.cancel()
         aaReturn = null
         val wasOn = _state.value.aaOverlay
@@ -2398,6 +2433,10 @@ class CarLifeService : Service() {
     }
 
     private fun teardown() {
+        pendingUsb = null
+        preparation.cancel()
+        aaStartJob?.cancel()
+        aaStartJob = null
         if (AaHeadUnitService.running) runCatching { AaHeadUnitService.stop(this) }
         if (SuperCast.ready.value) SuperCast.later {
             SuperCast.phoneScreen(true)
@@ -2686,6 +2725,12 @@ class CarLifeService : Service() {
                     }
                     android.hardware.usb.UsbManager.ACTION_USB_ACCESSORY_DETACHED -> {
                         DiagLog.i("USB", "usb accessory detached: ${usbAccessory(i)}")
+                        val detached = accessoryFrom(i)
+                        if (pendingUsb != null && pendingUsb == detached) {
+                            pendingUsb = null
+                            preparation.cancel()
+                            _state.update { it.copy(aaPreparation = null) }
+                        }
                         if (mode == 2 && usbLink != null) usbGone("the cable was unplugged")
                     }
                     android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED, android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED ->
@@ -2707,9 +2752,12 @@ class CarLifeService : Service() {
         runCatching { um?.accessoryList?.forEach { a -> DiagLog.i("USB", "usb accessory present: ${a.manufacturer} ${a.model} ${a.version} ${a.description}") } }
     }
 
-    private fun usbAccessory(i: Intent): String {
-        val a: android.hardware.usb.UsbAccessory? = if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(android.hardware.usb.UsbManager.EXTRA_ACCESSORY, android.hardware.usb.UsbAccessory::class.java)
+    private fun accessoryFrom(i: Intent): android.hardware.usb.UsbAccessory? =
+        if (Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(android.hardware.usb.UsbManager.EXTRA_ACCESSORY, android.hardware.usb.UsbAccessory::class.java)
             else @Suppress("DEPRECATION") i.getParcelableExtra(android.hardware.usb.UsbManager.EXTRA_ACCESSORY)
+
+    private fun usbAccessory(i: Intent): String {
+        val a = accessoryFrom(i)
         return a?.let { "${it.manufacturer} ${it.model} ${it.version} ${it.description}" } ?: "unknown"
     }
 
@@ -2770,6 +2818,7 @@ class CarLifeService : Service() {
     }
 
     override fun onDestroy() {
+        preparationScope.cancel()
         bluetoothReconnect?.close(); bluetoothReconnect = null
         prefs.unregisterListener(navigationPreferenceListener)
         teardown()

@@ -25,6 +25,12 @@ import app.ft.core.ServiceLaunches
 import app.ft.MainActivity
 import app.ft.R
 import app.ft.aa.AaHeadUnitService
+import app.ft.aa.AaConnectionPreparation
+import app.ft.core.ConnectionPreparation
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import app.ft.core.CarProtocol
 import app.ft.core.DiagLog
 import app.ft.core.ProtoWriter
@@ -36,6 +42,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 
 data class IccoaState(
+    val aaPreparation: AaConnectionPreparation.Status? = null,
     val running: Boolean = false,
     val discovery: IccoaDiscoveryState = IccoaDiscoveryState(),
     val status: String = "",
@@ -49,6 +56,12 @@ class IccoaService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private val lifecycle = Any()
     private lateinit var prefs: Prefs
+    private val preparationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val preparation = ConnectionPreparation(preparationScope) {
+        AaConnectionPreparation.prepare(this@IccoaService, prefs) { status ->
+            _state.update { it.copy(aaPreparation = status) }
+        }
+    }
     private val rememberedCar by lazy { IccoaRememberedCar(this, prefs.profileId) }
     private var pendingCar: IccoaPeer? = null
     private var autoConnectAttempted = false
@@ -227,6 +240,7 @@ class IccoaService : Service() {
         }
         if (intent?.action == STOP || prefs.carProtocol != CarProtocol.ICCOA || !prefs.autoConnect) {
             cancelAutomaticConnection()
+            endConnection()
             stopSelf()
             return START_NOT_STICKY
         }
@@ -254,6 +268,7 @@ class IccoaService : Service() {
         when (intent?.action) {
             CONNECT, CONNECT_NORMAL -> intent.getStringExtra("address")?.let { address ->
                 cancelAutomaticConnection()
+                preparation.cancel()
                 connectTo(address, forceCurrentPin = intent.action == CONNECT_NORMAL)
             }
             PIN -> intent.getStringExtra("pin")?.let { pin ->
@@ -265,6 +280,7 @@ class IccoaService : Service() {
             }
             DISCONNECT -> {
                 cancelAutomaticConnection()
+                preparation.cancel()
                 endConnection()
                 _state.update { it.copy(status = "Disconnected") }
             }
@@ -274,6 +290,7 @@ class IccoaService : Service() {
             }
             SCAN -> {
                 cancelAutomaticConnection()
+                preparation.cancel()
                 endConnection()
                 _state.update { it.copy(status = "") }
                 discovery?.start()
@@ -358,6 +375,13 @@ class IccoaService : Service() {
     }
 
     private fun connectTo(address: String, forceCurrentPin: Boolean = false) {
+        endConnection()
+        _state.update { it.copy(connecting = true) }
+        discovery?.stop()
+        preparation.run(prefs.aaPrepareBeforeConnect) { connectReady(address, forceCurrentPin) }
+    }
+
+    private fun connectReady(address: String, forceCurrentPin: Boolean) {
         pendingCar = _state.value.discovery.peers.singleOrNull { it.address.equals(address, ignoreCase = true) }
         val known = rememberedCar.matches(pendingCar, _state.value.discovery.peers)
         // Toyota BLE name can be blank and its MAC rotates; OEM EC signature authenticates the peer.
@@ -563,6 +587,7 @@ class IccoaService : Service() {
     }
 
     private fun endConnection() {
+        preparation.cancel(reset = false)
         main.removeCallbacks(connectionTimeout)
         main.removeCallbacks(audioStateRetry)
         main.removeCallbacks(requestConfig)
@@ -616,6 +641,7 @@ class IccoaService : Service() {
         }
 
     override fun onDestroy() {
+        preparationScope.cancel()
         cancelAutomaticConnection()
         bluetoothReconnect?.close(); bluetoothReconnect = null
         bluetoothCalls?.close(); bluetoothCalls = null

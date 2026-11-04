@@ -22,7 +22,7 @@ import app.ft.aa.AaTouchViewport
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
-import app.ft.core.Root
+import app.ft.aa.AaKeep
 import app.ft.media.CarPlayer
 import app.ft.projection.AudioCapture
 import app.ft.projection.CarControls
@@ -410,7 +410,7 @@ class IccoaProjection(
         }
         aaStartJob?.cancel()
         aaStartJob = scope.launch {
-            withContext(Dispatchers.IO) { if (Root.granted && !Root.aaServerUp()) Root.startAaServer(context) }
+            kotlinx.coroutines.runInterruptible(Dispatchers.IO) { AaKeep.switchOn(context) }
             delay(1500)
             requestAaConnection()
         }

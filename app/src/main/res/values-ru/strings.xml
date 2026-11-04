@@ -433,7 +433,9 @@
     <string name="aa_switching_on">Включение</string>
     <string name="aa_switch_failed">FT не удалось включить его самостоятельно. Сделайте это вручную по шагам ниже.</string>
     <string name="aa_let_ft">Пусть FT включает сам</string>
-    <string name="aa_let_ft_body">Включите FT в разделе «Специальные возможности» на телефоне — и FT сам будет включать сервер, когда автомобилю нужен Android Auto, даже после перезагрузки.</string>
+    <string name="aa_let_ft_body">Включите «FT — запуск Android Auto» в разделе «Специальные возможности» на телефоне. Эта отдельная служба открывает настройки Android Auto и выбирает запуск сервера, когда телефон разблокирован. Сначала включите настройки разработчика Android Auto.</string>
+    <string name="aa_starter_service_label">FT — запуск Android Auto</string>
+    <string name="aa_starter_service_desc">Во время короткого запроса запуска читает настройки Android Auto и нажимает «Запустить сервер головного устройства». После завершения возвращает FT. Не может выполнять жесты. Включается отдельно от службы касаний в автомобиле.</string>
     <string name="aa_no_developer">Настройки для разработчиков в Android Auto выключены. Выполните шаги 1 и 2 в разделе «Показать, как» и попробуйте снова.</string>
     <string name="supercast_not_set_up">Приложения в автомобиле ещё не настроены. Откройте FT на телефоне: «Настройки» → «Приложения в автомобиле».</string>
     <string name="supercast_which_apps">Какие приложения показывать в автомобиле</string>
@@ -482,4 +484,13 @@
     <string name="iccoa_mic_gain_about">Усиливает микрофон магнитолы для Android Auto. ×1 сохраняет исходный уровень. Можно выбрать от ×1 до ×16; высокие значения могут искажать речь. Применяется со следующего голосового запроса.</string>
     <string name="vehicle_coordinate_log">Записывать координаты GPS в отчёт</string>
     <string name="vehicle_coordinate_log_about">По умолчанию выключено. Включайте только для нужного испытания: координаты раскрывают маршруты и местоположение. Навигация работает независимо. Выключение не удаляет ранее записанные координаты и сохранённые отчёты.</string>
+    <string name="aa_prepare_before_connect">Проверять и запускать Android Auto перед подключением</string>
+    <string name="aa_prepare_before_connect_body">Подготовить сервер головного устройства на телефоне перед подключением к этому автомобилю. Нужен root или отдельный помощник FT на разблокированном телефоне. Открытие Android Auto на экране машины настраивается отдельно.</string>
+    <string name="aa_prepare_helper_body">Включите «FT — запуск Android Auto» в специальных возможностях и вручную включите режим разработчика Android Auto. Если подготовка не удастся, FT всё равно подключится к машине.</string>
+    <string name="aa_prepare_checking">Проверка Android Auto перед подключением…</string>
+    <string name="aa_prepare_ready">Сервер Android Auto готов.</string>
+    <string name="aa_prepare_locked">Для запуска Android Auto разблокируйте телефон. Подключение к машине продолжается.</string>
+    <string name="aa_prepare_no_helper">Помощник запуска Android Auto не включён. Подключение к машине продолжается; включите помощник в настройках подключения.</string>
+    <string name="aa_prepare_not_installed">Android Auto не установлен или доступна только заглушка. Подключение к машине продолжается.</string>
+    <string name="aa_prepare_failed">Запуск сервера Android Auto не подтверждён. Подключение к машине продолжается; проверьте режим разработчика Android Auto или запустите сервер вручную.</string>
 </resources>

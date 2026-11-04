@@ -79,6 +79,8 @@ import app.ft.ui.components.Option
 import app.ft.ui.components.PickSetting
 import app.ft.ui.car.CarStyles
 import app.ft.aa.AaInstaller
+import app.ft.aa.AaSwitch
+import app.ft.aa.AaStarterAccessibilityService
 import app.ft.core.CarAudioBus
 import app.ft.core.CarProtocol
 import app.ft.ui.components.CarProtocolSetting
@@ -250,6 +252,7 @@ private fun PageContent(page: SettingsPage) {
         }
         SettingsPage.CAR -> {
             val protocol = CarProtocolSetting()
+            AaPreparationSetting()
             BoolSetting(stringResource(R.string.car_bt_reconnect), p.carBtReconnect,
                 detail = stringResource(R.string.car_bt_reconnect_about)) { p.carBtReconnect = it }
             if (protocol == CarProtocol.ICCOA) {
@@ -489,6 +492,27 @@ internal fun BoolSetting(label: String, initial: Boolean, detail: String? = null
         }
         Spacer(Modifier.width(12.dp))
         Switch(checked = on, onCheckedChange = { on = it; onChange(it) })
+    }
+}
+
+@Composable
+private fun AaPreparationSetting() {
+    val prefs = FTApp.instance.prefs
+    val context = LocalContext.current
+    var enabled by remember(prefs.profileId) { mutableStateOf(prefs.aaPrepareBeforeConnect) }
+    val root = rememberRootGranted()
+    val helper by AaStarterAccessibilityService.connected.collectAsStateWithLifecycle()
+    BoolSetting(stringResource(R.string.aa_prepare_before_connect), enabled,
+        stringResource(R.string.aa_prepare_before_connect_body)) {
+        enabled = it
+        prefs.aaPrepareBeforeConnect = it
+    }
+    if (enabled && !root && !helper) {
+        Text(stringResource(R.string.aa_prepare_helper_body), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { AaSwitch.openAccessibilitySettings(context) }) {
+            Text(stringResource(R.string.aa_let_ft))
+        }
     }
 }
 

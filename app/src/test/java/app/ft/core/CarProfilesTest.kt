@@ -10,6 +10,24 @@ import org.mockito.ArgumentMatchers.*
 import org.mockito.Mockito.*
 
 class CarProfilesTest {
+    @Test fun androidAutoPreparationIsOptInAndBoundToVehicle() {
+        val i = Installation()
+        val first = i.selected
+        assertFalse(first.aaPrepareBeforeConnect)
+        first.aaPrepareBeforeConnect = true
+        i.create()
+        assertFalse(i.selected.aaPrepareBeforeConnect)
+        assertFalse(i.selected.aaAutoStart)
+        i.selected.aaAutoStart = true
+        assertTrue(first.aaPrepareBeforeConnect)
+        assertFalse(first.aaAutoStart)
+        Backup.restore(i.selected, Backup.write(mapOf("aaPrepareBeforeConnect" to true)))
+        assertTrue(i.selected.aaPrepareBeforeConnect)
+        assertEquals(true, i.selected.all["aaPrepareBeforeConnect"])
+        first.aaPrepareBeforeConnect = false
+        assertTrue(i.selected.aaPrepareBeforeConnect)
+    }
+
     private class Store {
         val values = linkedMapOf<String, Any>()
         val listeners = linkedSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()

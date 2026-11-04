@@ -151,6 +151,18 @@
                 android:resource="@xml/accessibility_service" />
         </service>
         <service
+            android:name=".aa.AaStarterAccessibilityService"
+            android:exported="true"
+            android:label="@string/aa_starter_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/aa_starter_accessibility_service" />
+        </service>
+        <service
             android:name=".FtTile"
             android:exported="true"
             android:icon="@drawable/ic_tile_ft"
