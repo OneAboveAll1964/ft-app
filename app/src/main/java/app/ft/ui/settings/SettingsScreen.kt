@@ -215,7 +215,9 @@ private fun MadeBy() {
             Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
         }
         if (version.isNotBlank()) {
-            Text("FT $version", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { app.ft.core.Links.openOnPhone(context, app.ft.core.Links.RELEASES) }) {
+                Text("FT $version", style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }
