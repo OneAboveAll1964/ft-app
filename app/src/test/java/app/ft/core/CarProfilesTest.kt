@@ -10,6 +10,21 @@ import org.mockito.ArgumentMatchers.*
 import org.mockito.Mockito.*
 
 class CarProfilesTest {
+    @Test fun voiceAssistantDefaultsToStockAndIsBoundToEachVehicle() {
+        val i = Installation()
+        val first = i.selected
+        assertEquals(VoiceAssistant.DEFAULT, first.voiceAssistant)
+        first.voiceAssistant = VoiceAssistant.ALICE
+        i.create()
+        assertEquals(VoiceAssistant.DEFAULT, i.selected.voiceAssistant)
+        assertEquals(VoiceAssistant.ALICE, first.voiceAssistant)
+        Backup.restore(i.selected, Backup.write(mapOf("voiceAssistant" to 1)))
+        assertEquals(VoiceAssistant.ALICE, i.selected.voiceAssistant)
+        i.selected.put("voiceAssistant", 99)
+        assertEquals(VoiceAssistant.DEFAULT, i.selected.voiceAssistant)
+        assertEquals(VoiceAssistant.ALICE, first.voiceAssistant)
+    }
+
     @Test fun androidAutoPreparationIsOptInAndBoundToVehicle() {
         val i = Installation()
         val first = i.selected

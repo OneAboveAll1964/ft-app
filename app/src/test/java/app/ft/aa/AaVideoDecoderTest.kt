@@ -12,6 +12,37 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 class AaVideoDecoderTest {
+    @Test fun reattachingSurfaceRequestsFreshPictureEvenWithoutFramesWhileHidden() {
+        val codec = mock(MediaCodec::class.java)
+        val format = mock(MediaFormat::class.java)
+        `when`(codec.dequeueOutputBuffer(any(MediaCodec.BufferInfo::class.java), anyLong())).thenAnswer {
+            Thread.sleep(5)
+            MediaCodec.INFO_TRY_AGAIN_LATER
+        }
+        mockStatic(MediaFormat::class.java).use { formats ->
+            formats.`when`<MediaFormat> { MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1920, 720) }.thenReturn(format)
+            mockStatic(MediaCodec::class.java).use { codecs ->
+                codecs.`when`<MediaCodec> { MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC) }.thenReturn(codec)
+                val decoder = AaVideoDecoder(1920, 720)
+                var redraws = 0
+                decoder.askForAFreshPicture = { redraws++ }
+                try {
+                    decoder.setSurface(mock(Surface::class.java))
+                    decoder.onConfig(byteArrayOf(1, 2, 3))
+                    assertEquals(0, redraws)
+                    decoder.setSurface(null)
+                    verify(codec).stop()
+                    // The phone can stop video immediately on NATIVE focus: no onFrame in between.
+                    decoder.setSurface(mock(Surface::class.java))
+                    assertEquals(1, redraws)
+                    verify(codec, times(2)).start()
+                } finally {
+                    decoder.reset()
+                }
+            }
+        }
+    }
+
     @Test fun lateFormatFromClosedCodecCannotOverwriteNewSessionSizeOrRestartFromOldConfig() {
         val entered = CountDownLatch(1)
         val leave = CountDownLatch(1)

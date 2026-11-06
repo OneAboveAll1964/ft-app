@@ -620,6 +620,11 @@ class CarLifeSession(
             musicAskAt = now
             DiagLog.rx(tag, CarLifeProtocol.name(CarLifeProtocol.CMD_MODULE_CONTROL), raw)
         }
+        if (module == CarLifeProtocol.MODULE_VR && status == 1) {
+            DiagLog.i(tag, "car requested the voice assistant through MODULE_VR")
+            onHardKey?.invoke(84)
+            return
+        }
         if (module != CarLifeProtocol.MODULE_MUSIC || (status != 0 && status != 1)) return
         if (status == 1 && !musicStartSeen) {
             musicStartSeen = true

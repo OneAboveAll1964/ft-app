@@ -157,7 +157,7 @@ object AaMessages {
     fun channelOpenServiceId(b: ByteArray): Int = ProtoReader(b).int(2, -1)
     fun setupConfigIndex(b: ByteArray): Int = ProtoReader(b).int(1, 0)
     fun startSession(b: ByteArray): Int = ProtoReader(b).int(1, 0)
-    fun videoFocusRequestMode(b: ByteArray): Int = ProtoReader(b).int(2, AaProtocol.VIDEO_FOCUS_PROJECTED)
+    fun videoFocusRequestMode(b: ByteArray): Int = ProtoReader(b).int(2, -1)
     fun sensorRequestType(b: ByteArray): Int = ProtoReader(b).int(1, 0)
     fun pingTimestamp(b: ByteArray): Long = ProtoReader(b).long(1, 0L)
     fun audioFocusRequestType(b: ByteArray): Int = ProtoReader(b).int(1, 1)

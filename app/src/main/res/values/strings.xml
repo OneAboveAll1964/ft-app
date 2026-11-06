@@ -488,7 +488,7 @@
     <string name="look_phone_classic">Default</string>
     <string name="look_phone_modern">Alternative</string>
     <string name="aa_show_return_button">Show the FT return button in Android Auto</string>
-    <string name="aa_show_return_button_about">The button returns to FT. In Alternative, it sits beside Android Auto without covering its controls. If hidden, you can show it again from these settings on your phone.</string>
+    <string name="aa_show_return_button_about">The button returns to FT without disconnecting Android Auto. To return without the floating button, try FT/Exit in the Android Auto app menu. You can restore this button in these settings on your phone.</string>
     <string name="aa_back_to_ft">Back to FT</string>
     <string name="iccoa_mic_gain">ICCOA microphone gain</string>
     <string name="iccoa_mic_gain_value">×%1$d</string>
@@ -504,4 +504,17 @@
     <string name="aa_prepare_no_helper">Android Auto helper is not enabled. Continuing connection to the car; enable the helper in connection settings.</string>
     <string name="aa_prepare_not_installed">Android Auto is not installed or is only a placeholder. Continuing connection to the car.</string>
     <string name="aa_prepare_failed">Could not confirm Android Auto server startup. Continuing connection to the car; check Android Auto developer mode or start the server manually.</string>
+    <string name="voice_assistant_title">Voice button assistant</string>
+    <string name="voice_assistant_default">Default (Android Auto / system)</string>
+    <string name="voice_assistant_alice">Alice (Yandex)</string>
+    <string name="voice_assistant_about">Applies to the steering wheel voice button and the Voice action. Default uses the Android Auto assistant (Google) or the phone assistant outside AA. Alice appears in a panel on the car screen through SuperCast; set up SuperCast and Yandex with Alice first. This version uses the phone microphone.</string>
+    <string name="voice_alice_adb_about">The Alice panel uses %1$s (SuperCast), which needs ADB access through Android debugging or root. The default assistant needs no such setup.\n\nWithout root: install ADB on a computer, enable USB debugging on the phone, connect it by cable and approve debugging for that computer. Copy the command below and run it in Windows Command Prompt (cmd). Run it again after restarting the phone. With root, FT starts SuperCast automatically.</string>
+    <string name="voice_alice_test">Test Alice on the phone</string>
+    <string name="voice_alice_unavailable">Could not start Alice. Install and set up Yandex with Alice, then check that the phone permits launching it.</string>
+    <string name="voice_default_unavailable">Could not start the system voice assistant.</string>
+    <string name="voice_alice_panel_starting">Starting Alice…</string>
+    <string name="voice_alice_panel_mic">Uses the phone microphone</string>
+    <string name="voice_alice_panel_helper_error">Could not start the Alice panel. Set up SuperCast on the phone. If FT was updated, restart SuperCast and try again.</string>
+    <string name="voice_alice_panel_display_error">The phone could not create a screen for Alice. Close the panel and try again.</string>
+    <string name="voice_alice_panel_moved">Yandex did not open Alice on the car screen. Close the panel, unlock the phone and try again.</string>
 </resources>

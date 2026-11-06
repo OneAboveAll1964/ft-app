@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -154,14 +156,29 @@ fun SuperCastSettings() {
         title = stringResource(R.string.supercast_way_computer),
         body = stringResource(R.string.supercast_way_computer_body)
     ) {
-        val command = remember { Helper.computerCommand(SuperCast.token) }
-        Text(command, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-        TextButton(onClick = {
-            context.getSystemService(ClipboardManager::class.java)
-                ?.setPrimaryClip(ClipData.newPlainText("FT", command))
-            Toast.makeText(context, context.getString(R.string.supercast_copy_command), Toast.LENGTH_SHORT).show()
-        }) { Text(stringResource(R.string.supercast_copy_command)) }
+        SuperCastComputerCommand()
     }
+}
+
+@Composable
+internal fun SuperCastComputerCommand() {
+    val context = LocalContext.current
+    var command by remember { mutableStateOf(Helper.computerCommand(SuperCast.token)) }
+    LifecycleResumeEffect(Unit) {
+        command = Helper.computerCommand(SuperCast.token)
+        onPauseOrDispose { }
+    }
+    SelectionContainer {
+        Text(command, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+    }
+    TextButton(onClick = {
+        // The helper token may have changed since this screen was opened.
+        val current = Helper.computerCommand(SuperCast.token)
+        command = current
+        context.getSystemService(ClipboardManager::class.java)
+            ?.setPrimaryClip(ClipData.newPlainText("FT", current))
+        Toast.makeText(context, context.getString(R.string.supercast_copy_command), Toast.LENGTH_SHORT).show()
+    }) { Text(stringResource(R.string.supercast_copy_command)) }
 }
 
 @Composable

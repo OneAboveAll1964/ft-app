@@ -485,7 +485,7 @@
     <string name="look_phone_classic">Default</string>
     <string name="look_phone_modern">Alternative</string>
     <string name="aa_show_return_button">Show the FT return button in Android Auto</string>
-    <string name="aa_show_return_button_about">The button returns to FT. In Alternative, it sits beside Android Auto without covering its controls. If hidden, you can show it again from these settings on your phone.</string>
+    <string name="aa_show_return_button_about">The button returns to FT without disconnecting Android Auto. To return without the floating button, try FT/Exit in the Android Auto app menu. You can restore this button in these settings on your phone.</string>
     <string name="aa_back_to_ft">Back to FT</string>
     <string name="iccoa_mic_gain">ICCOA microphone gain</string>
     <string name="iccoa_mic_gain_value">×%1$d</string>
@@ -503,4 +503,17 @@
     <string name="aa_prepare_failed">Could not confirm Android Auto server startup. Continuing connection to the car; check Android Auto developer mode or start the server manually.</string>
     <string name="aa_starter_service_label">FT — Android Auto server</string>
     <string name="aa_starter_service_desc">During a short server-start request, reads Android Auto settings and selects Start head unit server. Returns to FT when finished. Cannot inject gestures. Enabled separately from FT car touch.</string>
+    <string name="voice_assistant_title">یاریدەدەری دوگمەی دەنگ</string>
+    <string name="voice_assistant_default">بنەڕەت (Android Auto / سیستەم)</string>
+    <string name="voice_assistant_alice">ئەلیس (Yandex)</string>
+    <string name="voice_assistant_about">بۆ دوگمەی دەنگی سوکان و کرداری دەنگ. هەڵبژاردەی بنەڕەتی یاریدەدەری Android Auto (Google) بەکاردەهێنێت، لە دەرەوەی AA یاریدەدەری مۆبایل. ئەلیس لە پانێڵێک لە شاشەی ئۆتۆمبێل بە SuperCast دەردەکەوێت. سەرەتا SuperCast و Yandex لەگەڵ ئەلیس ڕێک بخە. ئەم وەشانە مایکرۆفۆنی مۆبایل بەکاردەهێنێت.</string>
+    <string name="voice_alice_adb_about">پانێڵی ئەلیس %1$s (SuperCast) بەکاردەهێنێت. پێویستی بە دەستگەیشتنی ADB لە ڕێگەی دیباگی Android یان root هەیە. یاریدەدەری بنەڕەتی پێویستی بەم ڕێکخستنە نییە.\n\nبێ root: لە کۆمپیوتەر ADB دابمەزرێنە، USB debugging لە مۆبایل چالاک بکە، بە کابڵ بیبەستەوە و ڕێگە بە دیباگی ئەم کۆمپیوتەرە بدە. فەرمانی خوارەوە کۆپی بکە و لە Windows Command Prompt (cmd) جێبەجێی بکە. دوای ڕیستارتی مۆبایل دووبارەی بکەرەوە. بە root، FT خۆکارانە SuperCast دەست پێ دەکات.</string>
+    <string name="voice_alice_test">تاقیکردنەوەی ئەلیس لە مۆبایل</string>
+    <string name="voice_alice_unavailable">ئەلیس نەکرایەوە. Yandex لەگەڵ ئەلیس دابمەزرێنە و ڕێکی بخە، پشکنە تەلەفۆن ڕێگە بە کردنەوەی بەرنامەکە دەدات.</string>
+    <string name="voice_default_unavailable">یاریدەدەری دەنگی سیستەم نەکرایەوە.</string>
+    <string name="voice_alice_panel_starting">ئەلیس دەست پێ دەکات…</string>
+    <string name="voice_alice_panel_mic">مایکرۆفۆنی مۆبایل بەکاردێت</string>
+    <string name="voice_alice_panel_helper_error">پانێڵی ئەلیس دەستی پێ نەکرد. SuperCast لە مۆبایل ڕێک بخە. ئەگەر FT نوێ کراوەتەوە، SuperCast دووبارە دەست پێ بکە و هەوڵ بدەوە.</string>
+    <string name="voice_alice_panel_display_error">مۆبایل نەیتوانی شاشەیەک بۆ ئەلیس دروست بکات. پانێڵەکە دابخە و هەوڵ بدەوە.</string>
+    <string name="voice_alice_panel_moved">Yandex ئەلیسی لە شاشەی ئۆتۆمبێل نەکردەوە. پانێڵەکە دابخە، قفڵی مۆبایل بکەرەوە و هەوڵ بدەوە.</string>
 </resources>

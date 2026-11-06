@@ -486,7 +486,7 @@
     <string name="look_phone_classic">Стандартное</string>
     <string name="look_phone_modern">Альтернативное</string>
     <string name="aa_show_return_button">Показывать кнопку возврата в FT в Android Auto</string>
-    <string name="aa_show_return_button_about">Кнопка возвращает в FT. В альтернативном оформлении она размещается рядом с Android Auto и не перекрывает его элементы. Если скрыть её, вернуть кнопку можно в этих настройках на телефоне.</string>
+    <string name="aa_show_return_button_about">Кнопка возвращает в FT без отключения Android Auto. Для возврата без плавающей кнопки попробуйте пункт FT/Выход в меню приложений Android Auto. Вернуть кнопку можно в этих настройках на телефоне.</string>
     <string name="aa_back_to_ft">Вернуться в FT</string>
     <string name="iccoa_mic_gain">Усиление микрофона ICCOA</string>
     <string name="iccoa_mic_gain_value">×%1$d</string>
@@ -502,4 +502,17 @@
     <string name="aa_prepare_no_helper">Помощник запуска Android Auto не включён. Подключение к машине продолжается; включите помощник в настройках подключения.</string>
     <string name="aa_prepare_not_installed">Android Auto не установлен или доступна только заглушка. Подключение к машине продолжается.</string>
     <string name="aa_prepare_failed">Запуск сервера Android Auto не подтверждён. Подключение к машине продолжается; проверьте режим разработчика Android Auto или запустите сервер вручную.</string>
+    <string name="voice_assistant_title">Ассистент голосовой кнопки</string>
+    <string name="voice_assistant_default">Штатный (Android Auto / системный)</string>
+    <string name="voice_assistant_alice">Алиса (Яндекс)</string>
+    <string name="voice_assistant_about">Для голосовой кнопки руля и действия «Голос». Штатный — ассистент Android Auto (Google), вне AA — системный. Алиса появляется в панели на экране машины через SuperCast. Сначала настройте SuperCast и «Яндекс — с Алисой». В этой версии используется микрофон телефона.</string>
+    <string name="voice_alice_adb_about">Панель Алисы использует «%1$s» (SuperCast). Нужен ADB — доступ через отладку Android — либо root. Со штатным ассистентом эта настройка не требуется.\n\nБез root: установите ADB на компьютере, включите на телефоне «Отладка по USB», подключите его кабелем и разрешите отладку для этого компьютера. Скопируйте команду ниже и выполните её в командной строке Windows (cmd). После перезагрузки телефона выполните команду снова. С root FT запускает SuperCast автоматически.</string>
+    <string name="voice_alice_test">Проверить Алису на телефоне</string>
+    <string name="voice_alice_unavailable">Не удалось вызвать Алису. Установите и настройте «Яндекс — с Алисой» и проверьте, разрешает ли телефон запуск приложения.</string>
+    <string name="voice_default_unavailable">Не удалось вызвать системного голосового ассистента.</string>
+    <string name="voice_alice_panel_starting">Запускаем Алису…</string>
+    <string name="voice_alice_panel_mic">Используется микрофон телефона</string>
+    <string name="voice_alice_panel_helper_error">Не удалось запустить панель Алисы. Настройте SuperCast на телефоне. Если FT обновлялся, перезапустите SuperCast и попробуйте снова.</string>
+    <string name="voice_alice_panel_display_error">Телефон не смог создать экран для Алисы. Закройте панель и попробуйте снова.</string>
+    <string name="voice_alice_panel_moved">Яндекс не открыл Алису на экране машины. Закройте панель, разблокируйте телефон и попробуйте снова.</string>
 </resources>

@@ -2,12 +2,27 @@ package app.ft.carlife
 
 import android.content.Context
 import app.ft.core.Prefs
+import app.ft.core.ProtoReader
+import app.ft.core.ProtoWriter
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
 import org.mockito.Mockito.*
 
 class CarLifeVoiceSessionTest {
+    @Test fun vrModuleStartUsesTheVoiceKeyAndStopDoesNotRetriggerIt() = runTest {
+        val session = CarLifeSession(mock(Context::class.java), mock(CarLifeLink::class.java), mock(Prefs::class.java), backgroundScope)
+        val keys = mutableListOf<Int>()
+        session.onHardKey = { keys += it }
+        val method = CarLifeSession::class.java.getDeclaredMethod("onModuleControl", ProtoReader::class.java, ByteArray::class.java).apply { isAccessible = true }
+        for (status in listOf(1, 0, 2)) {
+            val payload = ProtoWriter().int32(1, CarLifeProtocol.MODULE_VR).int32(2, status).toByteArray()
+            method.invoke(session, ProtoReader(payload), payload)
+        }
+        assertEquals(listOf(84), keys)
+        session.stop()
+    }
+
     @Test fun queuedVoiceCannotUseAReplacementCommandEvenBeforeTheSessionResetCallback() = runTest {
         val link = mock(WifiChannelLink::class.java)
         `when`(link.connected).thenReturn(true)

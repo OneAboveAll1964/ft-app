@@ -19,6 +19,8 @@ import app.ft.MainActivity
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.aa.AaTouchViewport
+import app.ft.core.CarAssistantPanel
+import app.ft.core.CarVoiceAssistant
 import app.ft.core.CarAudioBus
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
@@ -64,6 +66,11 @@ class IccoaProjection(
 ) : CarControls.Backend {
     private val app get() = FTApp.instance
     private val main = Handler(Looper.getMainLooper())
+    private val voiceAssistant by lazy {
+        CarVoiceAssistant(context, { prefs }, { state.value.aaOverlay }, showAlice = {
+            if (active) CarAssistantPanel.toggle(this)
+        }) { AaHeadUnitService.current?.sendKey(84) }
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val display = CarDisplay(context)
     private val mirror = PhoneMirror()
@@ -170,7 +177,7 @@ class IccoaProjection(
         val (initialX, y) = display.toContent(raw.x, raw.y)
         val second = if (raw.x2 >= 0 && raw.y2 >= 0) display.toContent(raw.x2, raw.y2) else -1 to -1
         // FT owns its UI hit testing. AA and phone mirror have independent touch mapping.
-        val isFtUi = !state.value.aaOverlay && !state.value.mirroring
+        val isFtUi = !CarAssistantPanel.isOpen(this) && !state.value.aaOverlay && !state.value.mirroring
         if (isFtUi && CarTouchCalibration.consume(context, raw.action, initialX, y, prefs.profileId)) return@onMain
         // Apply the stored HU X/Y calibration before routing FT, mirror and AA touch.
         val applyCalibration = true
@@ -179,7 +186,8 @@ class IccoaProjection(
         val (mappedX2, mappedY2) = if (applyCalibration && second.first >= 0 && second.second >= 0)
             CarTouchCalibration.correct(context, second.first, second.second, display.width, display.height, prefs.profileId) else second
         val t = raw.copy(x = mappedX, y = mappedY, x2 = mappedX2, y2 = mappedY2)
-        if (t.action == CarTouch.DOWN) touchFt = CarTouchZones.hit(mappedX, mappedY)
+        val assistantTouch = CarAssistantPanel.routesTouch(this, t.action)
+        if (t.action == CarTouch.DOWN) touchFt = assistantTouch || CarTouchZones.hit(mappedX, mappedY)
         if (touchFt) {
             if (t.action == CarTouch.DOWN) DiagLog.i("ICCOA", "touch route=FT content=$mappedX,$mappedY")
             display.dispatchTouch(t)
@@ -231,11 +239,14 @@ class IccoaProjection(
 
     fun key(code: Int) = onMain {
         if (!active) return@onMain
+        if ((code == 3 || code == 4) && CarAssistantPanel.close(this)) return@onMain
         if (CarTouchCalibration.state.value.step != 0 && (code == 3 || code == 4)) {
             CarTouchCalibration.cancel()
             return@onMain
         }
-        if (state.value.aaOverlay) {
+        if (code == 84 || code == 219 || code == 231) {
+            voiceAssistant.press()
+        } else if (state.value.aaOverlay) {
             AaHeadUnitService.current?.sendKey(code)
         } else when (code) {
             3 -> { goHome(); keys.tryEmit(code) }
@@ -401,15 +412,22 @@ class IccoaProjection(
         }
         aaJob?.cancel()
         aaJob = scope.launch {
+            var lastConnected: Boolean? = null
             AaHeadUnitService.state.collect { aa ->
                 val connected = aa.connected
-                val changed = mutableState.value.aaOverlay != connected
-                mutableState.update { it.copy(aaOverlay = connected) }
-                if (changed) onAaConnectionChanged(connected)
+                if (mutableState.value.aaOverlay != aa.showProjection) {
+                    DiagLog.i("ICCOA", "AA visible=${aa.showProjection} connected=$connected focus=${aa.videoFocus}")
+                    mutableState.update { it.copy(aaOverlay = aa.showProjection) }
+                }
+                if (lastConnected != connected) {
+                    lastConnected = connected
+                    onAaConnectionChanged(connected)
+                }
             }
         }
         aaStartJob?.cancel()
-        aaStartJob = scope.launch {
+        val reused = AaHeadUnitService.requestVideoFocus(true, "ICCOA start")
+        aaStartJob = if (reused) null else scope.launch {
             kotlinx.coroutines.runInterruptible(Dispatchers.IO) { AaKeep.switchOn(context) }
             delay(1500)
             requestAaConnection()
@@ -473,7 +491,10 @@ class IccoaProjection(
     }
 
     override fun goToCarHome() = onMain { if (active) onCarHome() }
-    override fun goHome() = onMain { hideMirror(); stopAa() }
+    override fun goHome() = onMain {
+        hideMirror()
+        if (!AaHeadUnitService.requestVideoFocus(false, "ICCOA FT button")) stopAa()
+    }
 
     private fun releaseProjection(stop: Boolean = true) {
         mirrorJob?.cancel()
@@ -491,6 +512,7 @@ class IccoaProjection(
 
     fun stop() = onMain { stopInternal() }
     private fun stopInternal() {
+        CarAssistantPanel.close(this)
         CarTouchCalibration.cancel()
         MirrorTouchCalibration.cancel()
         active = false

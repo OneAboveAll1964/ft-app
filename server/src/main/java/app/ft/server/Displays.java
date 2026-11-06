@@ -13,6 +13,7 @@ public final class Displays {
     private static final int PRESENTATION = 1 << 1;
     private static final int OWN_CONTENT_ONLY = 1 << 3;
     private static final int SUPPORTS_TOUCH = 1 << 6;
+    private static final int DESTROY_CONTENT_ON_REMOVAL = 1 << 8;
     private static final int TRUSTED = 1 << 10;
     private static final int OWN_DISPLAY_GROUP = 1 << 11;
     private static final int ALWAYS_UNLOCKED = 1 << 12;
@@ -25,6 +26,7 @@ public final class Displays {
         public int height;
         public String packageName;
         public boolean fresh;
+        public AlicePanel assistant;
         boolean shown = true;
 
         Pane(String name, VirtualDisplay display, int width, int height) {
@@ -46,6 +48,10 @@ public final class Displays {
     }
 
     public synchronized Pane open(String name, Surface surface, int width, int height, int dpi) {
+        return open(name, surface, width, height, dpi, false);
+    }
+
+    public synchronized Pane open(String name, Surface surface, int width, int height, int dpi, boolean temporary) {
         Pane existing = panes.get(name);
         if (existing != null) {
             existing.fresh = false;
@@ -63,7 +69,7 @@ public final class Displays {
             }
             return existing;
         }
-        VirtualDisplay display = create(name, surface, width, height, dpi);
+        VirtualDisplay display = create(name, surface, width, height, dpi, temporary);
         if (display == null) {
             return null;
         }
@@ -147,7 +153,7 @@ public final class Displays {
         }
     }
 
-    private VirtualDisplay create(String name, Surface surface, int width, int height, int dpi) {
+    private VirtualDisplay create(String name, Surface surface, int width, int height, int dpi, boolean temporary) {
         DisplayManager manager = displayManager();
         if (manager == null) {
             Log.w("no display manager");
@@ -163,7 +169,7 @@ public final class Displays {
         Throwable last = null;
         for (int flags : attempts) {
             try {
-                VirtualDisplay display = manager.createVirtualDisplay("ft-" + name, width, height, dpi, surface, flags);
+                VirtualDisplay display = manager.createVirtualDisplay("ft-" + name, width, height, dpi, surface, flags | (temporary ? DESTROY_CONTENT_ON_REMOVAL : 0));
                 if (display != null) {
                     Log.i("display made with flags 0x" + Integer.toHexString(flags));
                     return display;
@@ -215,6 +221,7 @@ public final class Displays {
         if (pane == null) {
             return;
         }
+        if (pane.assistant != null) pane.assistant.close();
         try {
             pane.display.release();
         } catch (Throwable ignored) {
@@ -225,6 +232,7 @@ public final class Displays {
 
     public synchronized void closeAll() {
         for (Pane pane : panes.values()) {
+            if (pane.assistant != null) pane.assistant.close();
             try {
                 pane.display.release();
             } catch (Throwable ignored) {

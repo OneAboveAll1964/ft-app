@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 176
-        versionName = "3.9.61-test-updates"
+        versionCode = 179
+        versionName = "3.9.64-alice-panel"
     }
 
     signingConfigs {

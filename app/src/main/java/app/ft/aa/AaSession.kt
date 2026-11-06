@@ -18,6 +18,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 private val OFF_MAIN = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ft-aa-main-sends").apply { isDaemon = true } }
 
@@ -28,11 +30,17 @@ class AaSession(
     private val prefs: Prefs,
     private val scope: CoroutineScope,
     private val decoder: AaVideoDecoder,
+    private val focusOwner: AaVideoFocusOwner = AaVideoFocusOwner(),
     private val onClosed: (String) -> Unit
 ) {
     enum class Phase { CONNECTED, VERSIONED, HANDSHAKING, AUTHENTICATED, DISCOVERED, STREAMING }
 
     private val tag = "AA"
+    private val diagnosticId = nextDiagnosticId.incrementAndGet()
+    private val diagnosticSince = android.os.SystemClock.elapsedRealtime()
+    private val traffic = ConcurrentHashMap<Int, AtomicLong>()
+    private val lastPacket = ConcurrentHashMap<Int, Long>()
+    private var focusWatch: Job? = null
     private val crypto = AaCrypto(context)
     private val assembler = AaFraming.Assembler { crypto.decrypt(it) }
     private val outLock = Any()
@@ -46,6 +54,8 @@ class AaSession(
             job?.cancel()
         },
         cleanup = { reason ->
+            focusWatch?.cancel()
+            projectionLog("CLOSED reason=$reason")
             carGpsSubscribed = false
             carGpsJob?.cancel(); carGpsJob = null
             microphoneInput.close()
@@ -75,7 +85,18 @@ class AaSession(
         private set
     private val _deviceName = MutableStateFlow("")
     val deviceName: StateFlow<String> = _deviceName
-    private val openChannels = HashSet<Int>()
+    private val openChannels = ConcurrentHashMap.newKeySet<Int>()
+    private val focusControl = AaVideoFocusControl(
+        available = { lifecycle.running && _phase.value >= Phase.DISCOVERED && AaProtocol.CH_VIDEO in openChannels },
+        indicate = { focus, unrequested ->
+            sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION,
+                AaMessages.videoFocusIndication(focus.mode, unrequested))
+            projectionLog("TX VIDEO_FOCUS_INDICATION mode=$focus unrequested=$unrequested")
+            lifecycle.running
+        },
+        owner = focusOwner
+    )
+    val videoFocus: StateFlow<AaVideoFocus> = focusControl.state
     private val navigation = AaNavigation()
     private val music = AaMusic()
     private val mic = AaMicrophone { }
@@ -143,6 +164,13 @@ class AaSession(
     private fun dispatch(m: AaFraming.Message) {
         val id = m.id
         val body = m.body
+        if (!m.control && (m.channel == AaProtocol.CH_NAVIGATION ||
+                ((m.channel == AaProtocol.CH_VIDEO || m.channel == AaProtocol.CH_MEDIA_AUDIO ||
+                    m.channel == AaProtocol.CH_SPEECH_AUDIO || m.channel == AaProtocol.CH_SYSTEM_AUDIO) &&
+                    (id == AaProtocol.AV_MEDIA_INDICATION || id == AaProtocol.AV_MEDIA_WITH_TIMESTAMP)))) {
+            traffic.computeIfAbsent(m.channel) { AtomicLong() }.incrementAndGet()
+            lastPacket[m.channel] = android.os.SystemClock.elapsedRealtime()
+        }
         if (m.channel == AaProtocol.CH_CONTROL || m.control) {
             handleControl(m.channel, id, body)
             return
@@ -222,18 +250,21 @@ class AaSession(
             AaProtocol.PING_RESPONSE -> Unit
             AaProtocol.AUDIO_FOCUS_REQUEST -> {
                 val req = AaMessages.audioFocusRequestType(body)
+                projectionLog("RX AUDIO_FOCUS_REQUEST type=$req")
                 val state = if (req == AaProtocol.AUDIO_REQUEST_RELEASE) AaProtocol.AUDIO_FOCUS_LOSS else AaProtocol.AUDIO_FOCUS_GAIN
                 sendEnc(AaProtocol.CH_CONTROL, AaProtocol.AUDIO_FOCUS_NOTIFICATION, AaMessages.audioFocusNotification(state))
             }
             AaProtocol.NAV_FOCUS_REQUEST -> sendEnc(AaProtocol.CH_CONTROL, AaProtocol.NAV_FOCUS_NOTIFICATION, AaMessages.navFocusNotification(AaProtocol.NAV_FOCUS_PROJECTED))
             AaProtocol.BYEBYE_REQUEST -> {
                 remoteBye = true
+                projectionLog("RX BYEBYE_REQUEST reason=${AaMessages.byeByeReason(body)}")
                 DiagLog.i(tag, "phone bye-bye reason=${AaMessages.byeByeReason(body)}")
                 sendEnc(AaProtocol.CH_CONTROL, AaProtocol.BYEBYE_RESPONSE, AaMessages.byeByeResponse())
                 close("bye-bye")
             }
             AaProtocol.CHANNEL_CLOSE_NOTIFICATION -> {
                 openChannels -= channel
+                projectionLog("RX CHANNEL_CLOSE ${AaProtocol.channelName(channel)}")
                 if (channel == AaProtocol.CH_SENSOR) {
                     carGpsSubscribed = false
                     carGpsJob?.cancel(); carGpsJob = null
@@ -252,10 +283,45 @@ class AaSession(
     }
 
     fun askForAFreshPicture() {
-        if (_phase.value != Phase.STREAMING) return
-        runCatching {
-            sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, true))
-        }.onFailure { DiagLog.w(tag, "could not ask Android Auto for a fresh picture: ${it.message}") }
+        lifecycle.dispatch {
+            projectionLog("fresh picture accepted=${focusControl.freshPicture()}")
+        }
+    }
+
+    /** Queue socket work off the UI thread. False means there is no reusable video channel. */
+    fun requestVideoFocus(projected: Boolean, source: String): Boolean {
+        if (!lifecycle.running || _phase.value < Phase.DISCOVERED || AaProtocol.CH_VIDEO !in openChannels) return false
+        scope.launch(Dispatchers.IO) {
+            lifecycle.dispatch {
+                val focus = if (projected) AaVideoFocus.PROJECTED else AaVideoFocus.NATIVE
+                val accepted = focusControl.request(focus, true)
+                observeProjection("local source=$source target=$focus accepted=$accepted")
+            }
+        }
+        return true
+    }
+
+    private fun projectionLog(event: String) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val packets = listOf(AaProtocol.CH_VIDEO, AaProtocol.CH_MEDIA_AUDIO, AaProtocol.CH_SPEECH_AUDIO,
+            AaProtocol.CH_SYSTEM_AUDIO, AaProtocol.CH_NAVIGATION).joinToString(" ") { channel ->
+            val age = lastPacket[channel]?.let { now - it }
+            "${AaProtocol.channelName(channel)}=${traffic[channel]?.get() ?: 0}/last:${age ?: "none"}ms"
+        }
+        DiagLog.i("AaFocus", "#$diagnosticId +${now - diagnosticSince}ms $event; phase=${_phase.value} " +
+            "focus=${videoFocus.value} channels=${openChannels.sorted()} $packets; ${decoder.diagnosticState()}")
+    }
+
+    private fun observeProjection(event: String) {
+        projectionLog(event)
+        focusWatch?.cancel()
+        focusWatch = scope.launch(Dispatchers.IO) {
+            for (wait in listOf(1_000L, 4_000L, 10_000L)) {
+                delay(wait)
+                if (!lifecycle.running) return@launch
+                projectionLog("follow-up $event")
+            }
+        }
     }
 
     private fun handleVideo(id: Int, body: ByteArray) {
@@ -263,7 +329,7 @@ class AaSession(
             AaProtocol.AV_SETUP_REQUEST -> {
                 DiagLog.i(tag, "video setup config=${AaMessages.setupConfigIndex(body)}")
                 sendEnc(AaProtocol.CH_VIDEO, AaProtocol.AV_SETUP_RESPONSE, AaMessages.avSetupResponse())
-                sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, false))
+                focusControl.acknowledge()
             }
             AaProtocol.AV_START_INDICATION -> {
                 hasStreamed = true
@@ -274,12 +340,14 @@ class AaSession(
                 decoder.askForAFreshPicture = { scope.launch { askForAFreshPicture() } }
                 _phase.value = Phase.STREAMING
                 DiagLog.i(tag, "video start session=$videoSession")
-                sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(AaProtocol.VIDEO_FOCUS_PROJECTED, false))
+                projectionLog("RX video AV_START session=$videoSession")
+                focusControl.acknowledge()
             }
             AaProtocol.AV_STOP_INDICATION -> {
                 DiagLog.i(tag, "video stop")
                 decoder.stop()
                 _phase.value = Phase.DISCOVERED
+                projectionLog("RX video AV_STOP")
             }
             AaProtocol.AV_MEDIA_INDICATION -> {
                 DiagLog.i(tag, "video codec config ${body.size} bytes")
@@ -297,10 +365,17 @@ class AaSession(
             }
             AaProtocol.VIDEO_FOCUS_REQUEST -> {
                 val mode = AaMessages.videoFocusRequestMode(body)
-                sendEnc(AaProtocol.CH_VIDEO, AaProtocol.VIDEO_FOCUS_INDICATION, AaMessages.videoFocusIndication(mode, false))
+                val request = ProtoReader(body)
+                projectionLog("RX VIDEO_FOCUS_REQUEST mode=$mode display=${request.int(1, -1)} reason=${request.int(3, -1)}")
+                val accepted = focusControl.phoneRequest(mode)
+                observeProjection("phone focus mode=$mode accepted=$accepted")
             }
             else -> DiagLog.w(tag, "unhandled video ${AaProtocol.avName(id)}")
         }
+    }
+
+    private companion object {
+        val nextDiagnosticId = AtomicLong()
     }
 
     private fun handleInput(id: Int, body: ByteArray) {
@@ -383,10 +458,12 @@ class AaSession(
                 audioSessions[channel] = AaMessages.startSession(body)
                 audioMeasured -= channel
                 CarAudioBus.begin(channel)
+                projectionLog("RX ${AaProtocol.channelName(channel)} AV_START")
                 DiagLog.i(tag, "${AaProtocol.channelName(channel)} started")
             }
             AaProtocol.AV_STOP_INDICATION -> {
                 CarAudioBus.end(channel)
+                projectionLog("RX ${AaProtocol.channelName(channel)} AV_STOP")
                 DiagLog.i(tag, "${AaProtocol.channelName(channel)} stopped")
             }
             AaProtocol.AV_MEDIA_WITH_TIMESTAMP, AaProtocol.AV_MEDIA_INDICATION -> {

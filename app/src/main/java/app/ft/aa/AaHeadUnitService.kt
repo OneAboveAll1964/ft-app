@@ -45,8 +45,11 @@ data class AaState(
     val bluetooth: String = "idle",
     val selfServer: Boolean = false,
     val hotspot: HotspotInfo? = null,
-    val display: AaDisplayConfig? = null
-)
+    val display: AaDisplayConfig? = null,
+    val videoFocus: AaVideoFocus = AaVideoFocus.PROJECTED
+) {
+    val showProjection: Boolean get() = connected && videoFocus == AaVideoFocus.PROJECTED
+}
 
 class AaHeadUnitService : Service() {
     companion object {
@@ -58,6 +61,7 @@ class AaHeadUnitService : Service() {
 
         private val _state = MutableStateFlow(AaState())
         val state: StateFlow<AaState> = _state
+        private val videoFocusOwner = AaVideoFocusOwner()
         private val _music = MutableStateFlow(app.ft.core.MusicInfo())
         val music: StateFlow<app.ft.core.MusicInfo> = _music
         internal fun publishMusic(info: app.ft.core.MusicInfo) { _music.value = info }
@@ -92,6 +96,12 @@ class AaHeadUnitService : Service() {
 
         fun feedCarMicrophone(pcm: ByteArray) {
             current?.feedCarMicrophone(pcm)
+        }
+
+        /** Remember explicit UI intent even while discovery/reconnect has no usable channel. */
+        fun requestVideoFocus(projected: Boolean, source: String): Boolean {
+            videoFocusOwner.select(if (projected) AaVideoFocus.PROJECTED else AaVideoFocus.NATIVE)
+            return current?.requestVideoFocus(projected, source) == true
         }
 
         fun stop(context: Context) {
@@ -245,7 +255,7 @@ class AaHeadUnitService : Service() {
                 val sessionJob = SupervisorJob(scope.coroutineContext[Job])
                 val sessionScope = CoroutineScope(scope.coroutineContext + sessionJob)
                 lateinit var session: AaSession
-                session = AaSession(this, s.getInputStream(), s.getOutputStream(), prefs, sessionScope, dec) { reason ->
+                session = AaSession(this, s.getInputStream(), s.getOutputStream(), prefs, sessionScope, dec, videoFocusOwner) { reason ->
                     val details = "#$id $source ${SystemClock.elapsedRealtime() - since}ms: $reason; ${phoneState()}"
                     DiagLog.i(tag, "phone session over: $details")
                     runCatching { s.close() }
@@ -254,7 +264,7 @@ class AaHeadUnitService : Service() {
                         disconnectHelp.closed(session.hasStreamed, reason, enabled && prefs.autoConnect, session.remoteBye)
                         lastDisconnect = "${java.util.Date()} $details"
                         current = null
-                        _state.update { it.copy(connected = false, phase = null, deviceName = "", selfServer = false, display = null) }
+                        _state.update { it.copy(connected = false, phase = null, deviceName = "", selfServer = false, display = null, videoFocus = session.videoFocus.value) }
                         if (enabled) {
                             updateNotification(Lang.str(R.string.note_aa_ready))
                             reconnect.wake()
@@ -275,11 +285,16 @@ class AaHeadUnitService : Service() {
                 sessionScope.launch {
                     session.deviceName.collect { n -> connections.withCurrent(session) { _state.update { it.copy(deviceName = n) } } }
                 }
+                sessionScope.launch {
+                    session.videoFocus.collect { focus ->
+                        connections.withCurrent(session) { _state.update { it.copy(videoFocus = focus) } }
+                    }
+                }
                 DiagLog.i(tag, "session #$id connected ($source); ${phoneState()}")
                 session
             }) { session ->
                 current = session
-                _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED, deviceName = "", selfServer = selfServer, display = null) }
+                _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED, deviceName = "", selfServer = selfServer, display = null, videoFocus = session.videoFocus.value) }
                 session.start()
             }
         }.getOrElse {
@@ -314,6 +329,7 @@ class AaHeadUnitService : Service() {
         bt = null
         decoder?.reset()
         decoder = null
+        videoFocusOwner.select(AaVideoFocus.PROJECTED)
         _state.value = AaState()
     }
 

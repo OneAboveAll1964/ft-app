@@ -207,6 +207,8 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var carNightBackground: String get() = str("carNightBackground", "black"); set(v) = set("carNightBackground", v)
     var carNightAccent: Int get() = int("carNightAccent", 0); set(v) = set("carNightAccent", v)
 
+    var voiceAssistant: VoiceAssistant get() = VoiceAssistant.fromStored(int("voiceAssistant", 0)); set(v) = set("voiceAssistant", v.stored)
+
     var wheelLongNext: Int get() = int("wheelLongNext", 0); set(v) = set("wheelLongNext", v)
     var wheelLongPrev: Int get() = int("wheelLongPrev", 0); set(v) = set("wheelLongPrev", v)
     var gearReverse: Int get() = int("gearReverse", 1); set(v) = set("gearReverse", v)
@@ -246,7 +248,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
             "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio", "iccoaMicGain", "directions",
             "carName", "autoConnect", "carProtocol", "linkMode", "carP2pName", "carBtName", "carBtAddress",
             "carBtReconnect", "carLifeVehicleAddress", "carLifeVehicleName", "carLifeWifiAddress", "carLifeVehicleRevision",
-            "carWpsPin", "carJoinTimeoutSeconds", "swapTrackKeys", "wheelLongNext", "wheelLongPrev",
+            "carWpsPin", "carJoinTimeoutSeconds", "swapTrackKeys", "wheelLongNext", "wheelLongPrev", "voiceAssistant",
             "gearReverse", "gearPark", "gearReverseSound", "gearParkSound", "gearReverseLevel", "gearParkLevel",
             "pkgMaps", "pkgMusic", "pkgVideo", "pkgPhone", "openOnConnect", "openOnConnectSecond",
             "carBackground", "carAccent", "carTiles", "carClock24", "carShowLink", "carSongInfo",

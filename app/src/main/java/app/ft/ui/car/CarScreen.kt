@@ -176,10 +176,19 @@ fun CarScreen() {
 private fun CarRoot(style: CarStyle) {
     val state by CarControls.state.collectAsState()
     val aa by AaHeadUnitService.state.collectAsState()
+    val assistant by app.ft.core.CarAssistantPanel.state.collectAsState()
     val touchCal by CarTouchCalibration.state.collectAsState()
     val alternative by PhoneStyle.modern.collectAsState()
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
+    var wasAaVisible by remember { mutableStateOf(state.aaOverlay) }
+    LaunchedEffect(state.aaOverlay) {
+        if (wasAaVisible && !state.aaOverlay) {
+            view = CarView.LAUNCHER
+            nowPlaying = false
+        }
+        wasAaVisible = state.aaOverlay
+    }
     var panes by remember { mutableStateOf<List<CarPane>>(emptyList()) }
     var dockApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var castFull by remember { mutableStateOf(false) }
@@ -265,7 +274,9 @@ private fun CarRoot(style: CarStyle) {
     }
     LaunchedEffect(Unit) {
         CarControls.screenKeys.collect { key ->
+            val panel = app.ft.core.CarAssistantPanel.state.value
             when {
+                panel != null && (key == 3 || key == 4) -> app.ft.core.CarAssistantPanel.dismiss(panel)
                 key == 3 -> { view = CarView.LAUNCHER; nowPlaying = false }
                 castFull && view == CarView.SUPERCAST -> castFull = false
                 view == CarView.MUSIC && nowPlaying -> nowPlaying = false
@@ -394,6 +405,7 @@ private fun CarRoot(style: CarStyle) {
                     CornerPill(position, onClick = returnHome)
                 }
             }
+            assistant?.let { request -> key(request.id) { LeftToRight { AlicePanel(request) } } }
         }
     }
 }

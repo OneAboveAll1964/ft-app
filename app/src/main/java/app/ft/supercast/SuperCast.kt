@@ -104,6 +104,21 @@ object SuperCast {
         return answer.getInt("display", -1)
     }
 
+    /** Null means the helper accepted the launch; otherwise returns a diagnostic error. */
+    fun openAlicePane(name: String, surface: Surface, width: Int, height: Int, dpi: Int): String? {
+        val answer = callWith(surface, Bundle().apply {
+            putString("do", "assistant-open")
+            putString("name", name)
+            putInt("width", width)
+            putInt("height", height)
+            putInt("dpi", dpi)
+        }) ?: return "helper"
+        return if (answer.getBoolean("ok")) null else answer.getString("error", "display")
+    }
+
+    fun alicePaneStatus(name: String): String =
+        ask("assistant-status") { putString("name", name) }?.getString("state") ?: "helper"
+
     fun closePane(name: String) {
         ask("close") { putString("name", name) }
     }
@@ -126,6 +141,24 @@ object SuperCast {
                 runCatching(block).onFailure { DiagLog.w(TAG, "helper call failed: ${it.message}") }
             }
         } }
+    }
+
+    /** Release borrowed surfaces even when a helper generation has been cancelled. */
+    fun surfaceLater(surface: Surface, block: (Surface) -> Unit) {
+        val expected = generation.get()
+        try {
+            queue.execute {
+                try {
+                    if (generation.get() == expected) block(surface)
+                } catch (e: Exception) {
+                    DiagLog.w(TAG, "surface call failed: " + e.message)
+                } finally {
+                    surface.release()
+                }
+            }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            surface.release()
+        }
     }
 
     private val touchThread = java.util.concurrent.Executors.newSingleThreadExecutor { task ->

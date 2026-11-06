@@ -34,6 +34,9 @@ import app.ft.aa.AaInstaller
 import app.ft.aa.AaTouchViewport
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
+import app.ft.aa.AaVideoFocus
+import app.ft.core.CarAssistantPanel
+import app.ft.core.CarVoiceAssistant
 import app.ft.core.CarAudioBus
 import app.ft.core.CarBluetoothReconnect
 import app.ft.core.DiagLog
@@ -529,6 +532,11 @@ class CarLifeService : Service() {
     private val savedVolume get() = phoneVolume.saved
     private val app get() = application as FTApp
     private lateinit var prefs: Prefs
+    private val voiceAssistant by lazy {
+        CarVoiceAssistant(this, { prefs }, { _state.value.aaOverlay }, showAlice = {
+            if (carDisplay.active.value) CarAssistantPanel.toggle(this)
+        }) { AaHeadUnitService.current?.sendKey(84) }
+    }
     private val beacon by lazy { CarBeacon(scope, { beaconTargets() }, { carGroupOwner() }, { helloForCar() }) }
     private val hotspotClients by lazy {
         HotspotClients(scope, { NetUtil.hotspotAddresses(this) }, { mode == 0 && wifiLink?.connected != true }) { list -> onHotspotClients(list) }
@@ -1213,6 +1221,7 @@ class CarLifeService : Service() {
     }
 
     private fun stopLink() {
+        CarAssistantPanel.close(this)
         stopAndroidAuto("the car link closed")
         mirrorClose()
         p2pWatch?.cancel()
@@ -1756,7 +1765,8 @@ class CarLifeService : Service() {
         }
         DiagLog.i(tag, "bridging this phone's Android Auto onto the car, waiting for it to start projecting")
         aaStartJob?.cancel()
-        aaStartJob = scope.launch {
+        val reused = AaHeadUnitService.requestVideoFocus(true, "CarLife start")
+        aaStartJob = if (reused) null else scope.launch {
             if (!AaInstaller.serverRunning(prefs.aaSelfPort)) {
                 DiagLog.i(tag, if (Root.granted) "starting Android Auto's head unit server with root" else "starting Android Auto's head unit server through accessibility")
                 runInterruptible(Dispatchers.IO) { AaKeep.switchOn(this@CarLifeService) }
@@ -1766,25 +1776,36 @@ class CarLifeService : Service() {
         }
         aaWatch?.cancel()
         aaWatch = scope.launch {
-            var shown = false
-            resumedMedia = false
+            var shown = _state.value.aaOverlay
+            resumedMedia = reused
             AaHeadUnitService.state.collect { s ->
                 if (s.phase == AaSession.Phase.STREAMING && !resumedMedia) {
                     resumedMedia = true
+                    val session = AaHeadUnitService.current
                     scope.launch {
                         delay(2500)
-                        DiagLog.i(tag, "asking Android Auto to pick up where it left off")
-                        AaHeadUnitService.current?.sendKey(126)
+                        if (session != null && AaHeadUnitService.current === session &&
+                            session.videoFocus.value == AaVideoFocus.PROJECTED) {
+                            DiagLog.i(tag, "asking Android Auto to pick up where it left off")
+                            session.sendKey(126)
+                        }
                     }
                 }
                 if (s.connected) {
                     aaReturn?.cancel()
                     aaReturn = null
-                    if (!_state.value.aaOverlay) {
+                    if (s.showProjection && !_state.value.aaOverlay) {
                         DiagLog.i(tag, "Android Auto is projecting, showing it on the car")
                         shown = true
                         aaOverlay(true)
+                    } else if (!s.showProjection && _state.value.aaOverlay) {
+                        DiagLog.i(tag, "Android Auto yielded video focus, returning to FT without disconnecting")
+                        aaOverlay(false)
                     }
+                } else if (s.videoFocus == AaVideoFocus.NATIVE) {
+                    aaReturn?.cancel()
+                    aaReturn = null
+                    if (_state.value.aaOverlay) aaOverlay(false)
                 } else if (shown && aaReturn?.isActive != true) {
                     aaReturn = scope.launch {
                         DiagLog.i(tag, "Android Auto went quiet, waiting for it to come back")
@@ -1811,8 +1832,9 @@ class CarLifeService : Service() {
         val (x, y) = carDisplay.toContent(raw.x, raw.y)
         val second = if (raw.x2 >= 0 && raw.y2 >= 0) carDisplay.toContent(raw.x2, raw.y2) else -1 to -1
         val t = raw.copy(x = x, y = y, x2 = second.first, y2 = second.second)
+        val assistantTouch = CarAssistantPanel.routesTouch(this, t.action)
         if (t.action == CarTouch.DOWN) {
-            touchFt = CarTouchZones.hit(x, y)
+            touchFt = assistantTouch || CarTouchZones.hit(x, y)
             DiagLog.i(tag, "car touched ${raw.x},${raw.y} of its picture, ${x},${y} on FT's screen")
         }
         if (touchFt) {
@@ -2193,17 +2215,16 @@ class CarLifeService : Service() {
             WheelAction.MAPS -> launch(prefs.mapsPackage)
             WheelAction.PHONE_SCREEN -> phoneScreen()
             WheelAction.PLAY_PAUSE -> mediaKey(85)
-            WheelAction.VOICE -> {
-                val aa = AaHeadUnitService.current
-                if (_state.value.aaOverlay && aa != null) aa.sendKey(84)
-                else runCatching {
-                    startActivity(Intent(Intent.ACTION_VOICE_COMMAND).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }.onFailure { DiagLog.w(tag, "no voice assistant to open: ${it.message}") }
-            }
+            WheelAction.VOICE -> voiceAssistant.press()
         }
     }
 
     private fun handleHardKey(key: Int, mapped: Int) {
+        if ((mapped == 3 || mapped == 4) && CarAssistantPanel.close(this)) return
+        if (mapped == 84) {
+            voiceAssistant.press()
+            return
+        }
         val st = _state.value
         when {
             st.aaOverlay -> {
@@ -2558,6 +2579,7 @@ class CarLifeService : Service() {
 
     private fun home() {
         mirrorStop()
+        if (AaHeadUnitService.requestVideoFocus(false, "CarLife FT button")) return
         stopAndroidAuto("you went back to FT")
     }
 

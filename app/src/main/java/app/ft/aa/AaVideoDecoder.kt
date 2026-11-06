@@ -48,6 +48,11 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
     @Volatile private var missed = 0
     @Volatile var askForAFreshPicture: (() -> Unit)? = null
 
+    // Snapshot only: avoid taking the codec lock while logging from the session gate.
+    internal fun diagnosticState(): String = "decoder running=${running.get()} generation=$generation " +
+        "surface=${surface != null} valid=${runCatching { surface?.isValid }.getOrNull()} " +
+        "config=${config != null} drawn=${frames.value} missed=$missed"
+
     init {
         if (mediaTek) {
             DiagLog.i(tag, "this phone has a MediaTek chip (${Build.HARDWARE}), so FT makes a fresh decoder whenever the car screen changes")
@@ -62,6 +67,7 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
             if (s != null) DiagLog.i(tag, "Android Auto's picture is drawn on the car screen")
             else if (had) DiagLog.i(tag, "Android Auto's picture has nowhere to be drawn")
             if (s == null) {
+                if (had) missed++
                 stopLocked()
                 return
             }
@@ -181,6 +187,7 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
 
     private fun drainLoop(c: MediaCodec, mine: Long) {
         val info = MediaCodec.BufferInfo()
+        var firstFrame = true
         while (running.get() && generation == mine) {
             try {
                 val idx = c.dequeueOutputBuffer(info, 20_000)
@@ -189,6 +196,10 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
                     if (idx >= 0) {
                         c.releaseOutputBuffer(idx, true)
                         _frames.value = _frames.value + 1
+                        if (firstFrame) {
+                            firstFrame = false
+                            DiagLog.i(tag, "first decoded output generation=$mine; ${diagnosticState()}")
+                        }
                     } else if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                         shown(c.outputFormat)
                     }

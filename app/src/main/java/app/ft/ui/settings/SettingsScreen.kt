@@ -83,6 +83,9 @@ import app.ft.aa.AaInstaller
 import app.ft.aa.AaSwitch
 import app.ft.aa.AaStarterAccessibilityService
 import app.ft.core.CarAudioBus
+import app.ft.core.CarVoiceAssistant
+import app.ft.core.Prefs
+import app.ft.core.VoiceAssistant
 import app.ft.core.CarProtocol
 import app.ft.ui.components.CarProtocolSetting
 import app.ft.ui.components.BluetoothCallsSetting
@@ -256,6 +259,7 @@ private fun PageContent(page: SettingsPage) {
         SettingsPage.CAR -> {
             val protocol = CarProtocolSetting()
             AaPreparationSetting()
+            VoiceAssistantSetting(p)
             BoolSetting(stringResource(R.string.car_bt_reconnect), p.carBtReconnect,
                 detail = stringResource(R.string.car_bt_reconnect_about)) { p.carBtReconnect = it }
             if (protocol == CarProtocol.ICCOA) {
@@ -640,6 +644,31 @@ private fun videoSummary(plan: VideoPlan): String = stringResource(R.string.pict
     java.text.NumberFormat.getNumberInstance().apply { maximumFractionDigits = 2 }.format(plan.bitrate / 1_000_000.0))
 
 private const val DEFAULT_FLOOR = 22
+
+@Composable
+private fun VoiceAssistantSetting(prefs: Prefs) {
+    var chosen by remember(prefs) { mutableStateOf(prefs.voiceAssistant) }
+    val context = LocalContext.current
+    val preview = remember(context, prefs) { CarVoiceAssistant(context, { prefs }, { false }) {} }
+    PickSetting(
+        stringResource(R.string.voice_assistant_title),
+        listOf(Option(stringResource(R.string.voice_assistant_default)), Option(stringResource(R.string.voice_assistant_alice))),
+        VoiceAssistant.entries.indexOf(chosen),
+        about = stringResource(R.string.voice_assistant_about)
+    ) { index ->
+        chosen = VoiceAssistant.entries[index]
+        prefs.voiceAssistant = chosen
+    }
+    if (chosen == VoiceAssistant.ALICE) {
+        Text(
+            stringResource(R.string.voice_alice_adb_about, stringResource(R.string.settings_supercast_title)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SuperCastComputerCommand()
+        TextButton(onClick = { preview.press() }) { Text(stringResource(R.string.voice_alice_test)) }
+    }
+}
 
 @Composable
 private fun WheelSetting(label: String, initial: Int, onChange: (Int) -> Unit) {
