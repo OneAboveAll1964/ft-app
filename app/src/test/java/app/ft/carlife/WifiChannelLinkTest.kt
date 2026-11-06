@@ -94,7 +94,8 @@ class WifiChannelLinkTest {
             assertTrue(second > first)
             assertFalse(withContext(admission) { link.retryCommand(first) })
             assertTrue(link.connected)
-            assertTrue(link.send(CarLifeProtocol.CH_CMD, byteArrayOf(42)))
+            assertFalse(link.sendForCommand(first, CarLifeProtocol.CH_CMD, byteArrayOf(99)))
+            assertTrue(link.sendForCommand(second, CarLifeProtocol.CH_CMD, byteArrayOf(42)))
             assertEquals(42, replacement.getInputStream().read())
             // Also drains the old reader's disconnect callback on the admission dispatcher.
             withContext(admission) { assertTrue(link.connected) }

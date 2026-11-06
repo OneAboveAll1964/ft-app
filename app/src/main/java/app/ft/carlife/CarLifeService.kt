@@ -288,7 +288,7 @@ class CarLifeService : Service() {
     private var aaStartJob: Job? = null
     private lateinit var carDisplay: CarDisplay
     private val mirror = PhoneMirror()
-    private var session: CarLifeSession? = null
+    @Volatile private var session: CarLifeSession? = null
     private var sessionLink: CarLifeLink? = null
     @Volatile private var wifiCommandGroup: Pair<CarFinder, Long>? = null
     private val navigationPreferenceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -312,6 +312,7 @@ class CarLifeService : Service() {
     @Volatile private var mirrorJob: Job? = null
     private var ipJob: Job? = null
     private val startupWatch = CarLifeStartupWatch()
+    private val peerWatch = WirelessPeerWatch()
     private var startupRetry: Job? = null
     private var aaWatch: Job? = null
     @Volatile private var mode = -1
@@ -444,7 +445,8 @@ class CarLifeService : Service() {
         }.apply { isDaemon = true; priority = Thread.MAX_PRIORITY; name = "ft-car-audio-out"; start() }
     }
 
-    private class VoiceCmd(val kind: Int, val rate: Int = 0, val channels: Int = 0, val pcm: ByteArray? = null)
+    private class VoiceCmd(val kind: Int, val rate: Int = 0, val channels: Int = 0,
+                         val pcm: ByteArray? = null, val output: CarLifeVoice? = null)
     private val voiceQueued = java.util.concurrent.atomic.AtomicLong(0)
     private val voiceOut = java.util.concurrent.LinkedBlockingQueue<VoiceCmd>()
     @Volatile private var voiceWriter: Thread? = null
@@ -460,30 +462,32 @@ class CarLifeService : Service() {
 
     private fun queueVoice(c: VoiceCmd) {
         startVoiceWriter()
-        voiceOut.offer(c)
+        voiceOut.offer(VoiceCmd(c.kind, c.rate, c.channels, c.pcm, session?.voiceOutput))
     }
 
+    @Synchronized
     private fun startVoiceWriter() {
         if (voiceWriter?.isAlive == true) return
         voiceWriter = Thread {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
             try {
                 while (true) {
-                    val c = voiceOut.poll(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    val c = voiceOut.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    session?.voiceOutput?.tick()
                     if (c == null) {
                         CarAudioBus.tick()
                         continue
                     }
                     c.pcm?.let { voiceQueued.addAndGet(-it.size.toLong()) }
-                    val s = session ?: continue
+                    val output = c.output ?: continue
                     when (c.kind) {
                         VOICE_START -> {
-                            s.sendVoiceStart(c.rate, c.channels)
+                            output.begin(c.rate, c.channels)
                             DiagLog.i(tag, "voice on the car's own voice channel, ${c.rate} Hz")
                         }
-                        VOICE_DATA -> c.pcm?.let { s.sendVoice(it) }
+                        VOICE_DATA -> c.pcm?.let { output.data(it) }
                         else -> {
-                            s.sendVoiceEnd()
+                            output.end()
                             DiagLog.i(tag, "voice finished")
                         }
                     }
@@ -1042,6 +1046,7 @@ class CarLifeService : Service() {
         p2pWatch?.cancel()
         startupRetry?.cancel()
         startupWatch.reset()
+        peerWatch.reset()
         directStartedAt = android.os.SystemClock.elapsedRealtime()
         blockerNote = ""
         lastOtherWifi = -1
@@ -1051,7 +1056,10 @@ class CarLifeService : Service() {
             while (mode == 1) {
                 delay(2000)
                 withContext(Dispatchers.Main) { checkWirelessStartup(android.os.SystemClock.elapsedRealtime()) }
-                if (wifiLink?.connected == true) continue
+                if (wifiLink?.connected == true) {
+                    withContext(Dispatchers.Main) { peerWatch.reset() }
+                    continue
+                }
                 if (ticks++ % 5 == 0) checkDirectBlockers()
                 askCarAgain()
                 // Only finder may approve a group as the car's transport.
@@ -1164,16 +1172,44 @@ class CarLifeService : Service() {
         step(note)
     }
 
-    private fun askCarAgain() {
-        val name = _state.value.carWifi ?: return
-        if (mode != 1 || !bt.open || _state.value.wifiDirect || wifiLink?.connected == true) return
-        val now = android.os.SystemClock.elapsedRealtime()
-        val inSight = finder?.inSight(name) == true
-        if (inSight || carSeenAt == 0L) carSeenAt = now
-        if (!JoinWatch.askCarAgain(now - carSeenAt, inSight)) return
-        DiagLog.i(tag, "WiFi + BL: the car's WiFi Direct '$name' has not shown up for ${(now - carSeenAt) / 1000}s, asking the car for it again over bluetooth")
-        carSeenAt = now
-        wireless.askName()
+    private fun canRecoverMissingPeer(f: CarFinder, name: String, generation: Long): Boolean =
+        mode == 1 && finder === f && bt.open && bt.connectionGeneration == generation &&
+            wirelessBluetoothGeneration == generation && _state.value.carWifi == name &&
+            !_state.value.wifiDirect && wifiLink?.connected != true && !f.joined &&
+            !f.preparingRetry && startupRetry?.isActive != true && !f.inSight(name) &&
+            session?.projecting != true
+
+    internal suspend fun askCarAgain(now: Long = android.os.SystemClock.elapsedRealtime()) {
+        val request = withContext(Dispatchers.Main) {
+            val f = finder
+            val name = _state.value.carWifi
+            val generation = wirelessBluetoothGeneration
+            if (f == null || name == null) {
+                peerWatch.reset()
+                return@withContext null
+            }
+            val action = peerWatch.next(generation, name, canRecoverMissingPeer(f, name, generation),
+                now) ?: return@withContext null
+            if (action == WirelessPeerWatch.Action.RECONNECT_BLUETOOTH) {
+                // Main also admits peers/groups/CMD. No working transport can
+                // be admitted between this last check and retiring the socket.
+                if (canRecoverMissingPeer(f, name, generation)) {
+                    DiagLog.w(tag, "WiFi + BL: '$name' is still absent after four name requests; reopening the Bluetooth conversation")
+                    bt.disconnect(generation)
+                }
+                null
+            } else Triple(f, name, generation)
+        } ?: return
+        withContext(Dispatchers.IO) {
+            val job = currentCoroutineContext()
+            synchronized(wireless) {
+                job.ensureActive()
+                if (canRecoverMissingPeer(request.first, request.second, request.third)) {
+                    DiagLog.i(tag, "WiFi + BL: '${request.second}' is absent, asking for a fresh name over bluetooth")
+                    wireless.askName()
+                }
+            }
+        }
     }
 
     private fun stopLink() {
@@ -1184,6 +1220,7 @@ class CarLifeService : Service() {
         startupRetry?.cancel()
         startupRetry = null
         startupWatch.reset()
+        peerWatch.reset()
         beacon.stop()
         discovery.stop()
         // Cancel pending retry preparation before closing/resetting its transport.
@@ -1864,7 +1901,6 @@ class CarLifeService : Service() {
 
     private fun onCarRaisedWifiDirect(name: String) {
         if (mode != 1) return
-        carSeenAt = android.os.SystemClock.elapsedRealtime()
         prefs.carP2pName = name
         _state.update { it.copy(carWifi = name) }
         if (wifiLink?.connected == true) {
@@ -2817,7 +2853,6 @@ class CarLifeService : Service() {
     @Volatile private var blockerNote = ""
     @Volatile private var lastOtherWifi = -1
     @Volatile private var hotspotStoppedForDirect = false
-    @Volatile private var carSeenAt = 0L
     @Volatile private var usbStartedAt = 0L
     @Volatile private var usbQuietUntil = 0L
     private var lastUsb = ""

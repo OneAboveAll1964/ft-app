@@ -19,6 +19,19 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class CarBluetoothTest {
+    @Test fun retiringAStalledConversationKeepsTheListenerAndRejectsAnOldGeneration() = fixture(connect = true) { f ->
+        f.bt.start()
+        await(f.reading)
+        val generation = f.bt.connectionGeneration
+        assertFalse(f.bt.disconnect(generation - 1))
+        verify(f.client, never()).close()
+        assertTrue(f.bt.disconnect(generation))
+        await(f.clientClosed)
+        await(f.listeningAgain)
+        assertTrue(f.job.isActive)
+        verify(f.client, times(1)).close()
+    }
+
     @Test fun cancellingScopeClosesBothBlockingAcceptsWithoutStop() = fixture { f ->
         f.bt.start()
         await(f.accepting)

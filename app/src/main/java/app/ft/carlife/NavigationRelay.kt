@@ -29,10 +29,16 @@ class NavigationRelay(
     fun enable(on: Boolean) = change { enabled = on; publish() }
     fun voice(on: Boolean) = change { voice = on; updateModule() }
     /** Only the dedicated voice writer waits here; AA and shutdown never wait for I/O. */
-    fun voiceAndWait(on: Boolean) {
+    fun voiceAndWait(on: Boolean, current: () -> Boolean = { true }) {
         val done = CountDownLatch(1)
         try {
             change {
+                // Reset uses the same lock. A voice command queued before it
+                // must not reclaim NAVI in the replacement session.
+                if (!current()) {
+                    done.countDown()
+                    return@change
+                }
                 voice = on
                 updateModule()
                 voiceWaiters += done

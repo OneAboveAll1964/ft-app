@@ -19,7 +19,7 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 175
+        versionCode = 176
         versionName = "3.9.61-test-updates"
     }
 

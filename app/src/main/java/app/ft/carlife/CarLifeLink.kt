@@ -266,6 +266,15 @@ class WifiChannelLink(
         return writer.send(inner, asynchronous = onCarLifeMainThread())
     }
 
+    /** Capture the writer under the same lock as the command identity. */
+    internal fun sendForCommand(generation: Long, channel: Int, inner: ByteArray): Boolean {
+        val writer = synchronized(sockets) {
+            if (cmdGeneration.toLong() != generation || !sockets.containsKey(CarLifeProtocol.CH_CMD)) return false
+            writers[channel]
+        } ?: return false
+        return writer.send(inner, asynchronous = onCarLifeMainThread())
+    }
+
     private fun write(channel: Int, s: Socket, inner: ByteArray): Boolean {
         return try {
             val o = s.getOutputStream()

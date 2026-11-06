@@ -64,6 +64,17 @@ class CarBluetooth(context: Context, private val prefs: Prefs, private val scope
         listener = null
     }
 
+    /** Retire only the stalled conversation, keeping the accept loop alive. */
+    fun disconnect(generation: Long): Boolean {
+        val (owner, socket) = synchronized(this) {
+            if (connectionGeneration != generation) return false
+            val owner = listener ?: return false
+            owner to (owner.socket ?: return false)
+        }
+        owner.release(socket)
+        return true
+    }
+
     fun send(bytes: ByteArray, generation: Long = connectionGeneration): Boolean {
         val s = synchronized(this) {
             if (connectionGeneration != generation) return false

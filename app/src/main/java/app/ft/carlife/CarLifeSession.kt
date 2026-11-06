@@ -80,6 +80,8 @@ class CarLifeSession(
     private var screenWatch: BroadcastReceiver? = null
     private val crypto = CarLifeCrypto()
     @Volatile private var matched = false
+    @Volatile internal var voiceOutput: CarLifeVoice? = null
+        private set
     @Volatile private var initSeen = false
     @Volatile private var videoReady = false
     private var videoRequest: Triple<Int, Int, Int>? = null
@@ -146,6 +148,7 @@ class CarLifeSession(
     }
 
     private fun reset() {
+        voiceOutput = null
         videoProfile = null
         projecting = false
         gear = -1
@@ -203,19 +206,27 @@ class CarLifeSession(
         link.send(CarLifeProtocol.CH_MEDIA, CarLifeFraming.stream(serviceId, body))
     }
 
-    fun sendVoiceStart(rate: Int, channels: Int) {
-        val r = if (rate in 4000..48000) rate else 16000
-        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_INIT, ProtoWriter().int32(1, r).int32(2, channels.coerceIn(1, 2)).int32(3, 16).toByteArray()))
-        navigation.voiceAndWait(true)
-    }
-
-    fun sendVoice(pcm: ByteArray) {
-        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_DATA, crypto.encryptOut(pcm)))
-    }
-
-    fun sendVoiceEnd() {
-        link.send(CarLifeProtocol.CH_TTS, CarLifeFraming.stream(CarLifeProtocol.TTS_END, ByteArray(0)))
-        navigation.voiceAndWait(false)
+    private fun openVoiceOutput() {
+        val wifi = link as? WifiChannelLink
+        val generation = wifi?.commandGeneration
+        lateinit var output: CarLifeVoice
+        val current = { voiceOutput === output && matched && link.connected &&
+            (wifi == null || wifi.commandGeneration == generation) }
+        output = CarLifeVoice(
+            now = android.os.SystemClock::elapsedRealtime,
+            current = current,
+            navigation = { on -> navigation.voiceAndWait(on, current) },
+            send = { id, payload ->
+                if (current()) {
+                    val body = if (id == CarLifeProtocol.TTS_DATA) crypto.encryptOut(payload) else payload
+                    val packet = CarLifeFraming.stream(id, body)
+                    if (wifi != null) wifi.sendForCommand(generation!!, CarLifeProtocol.CH_TTS, packet)
+                    else link.send(CarLifeProtocol.CH_TTS, packet)
+                }
+            },
+            wireless = wifi != null
+        )
+        voiceOutput = output
     }
 
     @Volatile private var carMicOn = false
@@ -531,6 +542,7 @@ class CarLifeSession(
         DiagLog.i(tag, "HU protocol $major.$minor")
         cmd(CarLifeProtocol.CMD_PROTOCOL_VERSION_MATCH_STATUS, ProtoWriter().int32(1, 1).toByteArray())
         matched = true
+        openVoiceOutput()
         initSeen = false
         carAskedRate = false
         streamStartedAt = 0L

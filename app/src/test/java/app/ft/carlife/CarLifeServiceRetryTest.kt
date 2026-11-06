@@ -288,6 +288,49 @@ class CarLifeServiceRetryTest {
         verify(h.finder).retry()
     }
 
+    @Test fun anAbsentPeerGetsFourIoRequestsThenOnlyItsBluetoothConversationIsRetired() = startupCheck { h ->
+        h.state.value = h.state.value.copy(carWifi = "CarLife")
+        val writer = AtomicReference<Thread>()
+        val mainThread = Thread.currentThread()
+        doAnswer { writer.set(Thread.currentThread()); null }.`when`(h.wireless).askName()
+        for (at in listOf(0L, 2_000L, 7_000L, 17_000L, 27_000L, 37_000L, 100_000L)) {
+            h.service.askCarAgain(at)
+        }
+        assertNotSame(mainThread, writer.get())
+        verify(h.wireless, times(4)).askName()
+        verify(h.bt).disconnect(7L)
+        verify(h.bt, never()).stop()
+        verify(h.finder, never()).stop()
+        verify(h.link, never()).stop()
+    }
+
+    @Test fun recoveryCannotRetireBluetoothAfterAnyConnectionProgressOrReplacement() = startupCheck { h ->
+        h.state.value = h.state.value.copy(carWifi = "CarLife")
+        val protect = listOf<() -> Unit>(
+            { `when`(h.finder.inSight("CarLife")).thenReturn(true) },
+            { `when`(h.finder.joined).thenReturn(true) },
+            { `when`(h.finder.preparingRetry).thenReturn(true) },
+            { `when`(h.link.connected).thenReturn(true) },
+            { `when`(h.session.projecting).thenReturn(true) },
+            { h.state.value = h.state.value.copy(wifiDirect = true) },
+            { `when`(h.bt.connectionGeneration).thenReturn(8L) }
+        )
+        for (guard in protect) {
+            `when`(h.finder.inSight("CarLife")).thenReturn(false)
+            `when`(h.finder.joined).thenReturn(false)
+            `when`(h.finder.preparingRetry).thenReturn(false)
+            `when`(h.link.connected).thenReturn(false)
+            `when`(h.session.projecting).thenReturn(false)
+            `when`(h.bt.connectionGeneration).thenReturn(7L)
+            h.state.value = h.state.value.copy(wifiDirect = false)
+            h.peerWatch.reset()
+            for (at in listOf(0L, 2_000L, 7_000L, 17_000L, 27_000L)) h.service.askCarAgain(at)
+            guard()
+            h.service.askCarAgain(37_000L)
+        }
+        verify(h.bt, never()).disconnect(anyLong())
+    }
+
     private fun anyWaiting(): () -> Boolean = any<() -> Boolean>() ?: { true }
 
     private fun startupCheck(block: suspend TestScope.(StartupHarness) -> Unit) = runTest {
@@ -309,6 +352,7 @@ class CarLifeServiceRetryTest {
         val sessionState = MutableStateFlow<CarLifeSession.State>(CarLifeSession.State.Idle)
         val state = stateFlow()
         val watch = CarLifeStartupWatch()
+        val peerWatch = WirelessPeerWatch()
         init {
             state.value = state.value.copy(wifiDirect = false, waitingForShare = false)
             set(service, "tag", "CarLifeRetryTest")
@@ -318,6 +362,7 @@ class CarLifeServiceRetryTest {
             set(service, "wifiLink", link)
             set(service, "session", session)
             set(service, "startupWatch", watch)
+            set(service, "peerWatch", peerWatch)
             set(service, "bt\$delegate", lazyOf(bt))
             set(service, "wireless\$delegate", lazyOf(wireless))
             set(service, "wirelessBluetoothGeneration", 7L)

@@ -10,7 +10,6 @@ object JoinWatch {
     const val GROUP_DETAILS_MS = 5_000L
     const val RENEW_EVERY = 3
     const val DISCOVER_EVERY_MS = 5_000L
-    const val ASK_AGAIN_MS = 30_000L
 
     enum class Next { WAIT, RETRY }
 
@@ -30,5 +29,4 @@ object JoinWatch {
         else -> STALL_MS
     }
 
-    fun askCarAgain(unseenMs: Long, carInSight: Boolean): Boolean = !carInSight && unseenMs >= ASK_AGAIN_MS
 }

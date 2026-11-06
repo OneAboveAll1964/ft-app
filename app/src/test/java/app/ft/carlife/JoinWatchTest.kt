@@ -45,13 +45,6 @@ class JoinWatchTest {
     }
 
     @Test
-    fun theCarIsAskedAgainOnlyAfterThirtySecondsOutOfSight() {
-        assertFalse(JoinWatch.askCarAgain(29_999, carInSight = false))
-        assertTrue(JoinWatch.askCarAgain(30_000, carInSight = false))
-        assertFalse(JoinWatch.askCarAgain(90_000, carInSight = true))
-    }
-
-    @Test
     fun configuredTimeoutsAllowTheFullWaitThenRetry() {
         for (seconds in JoinWatch.TIMEOUT_SECONDS + listOf(1, 6, 17, 90, 120, 600)) {
             val timeout = seconds * 1_000L
