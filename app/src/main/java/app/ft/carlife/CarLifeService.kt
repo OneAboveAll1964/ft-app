@@ -32,6 +32,7 @@ import app.ft.ShareActivity
 import app.ft.aa.AaKeep
 import app.ft.aa.AaInstaller
 import app.ft.aa.AaTouchViewport
+import app.ft.aa.AaTouchGestureViewport
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.aa.AaVideoFocus
@@ -1827,6 +1828,8 @@ class CarLifeService : Service() {
         }
     }
 
+    private val aaGestureViewport = AaTouchGestureViewport()
+
     private fun routeTouch(raw: CarTouch) {
         val st = _state.value
         val (x, y) = carDisplay.toContent(raw.x, raw.y)
@@ -1838,6 +1841,7 @@ class CarLifeService : Service() {
             DiagLog.i(tag, "car touched ${raw.x},${raw.y} of its picture, ${x},${y} on FT's screen")
         }
         if (touchFt) {
+            aaGestureViewport.reset()
             carDisplay.dispatchTouch(t)
             return
         }
@@ -1847,16 +1851,21 @@ class CarLifeService : Service() {
         }
         val aa = AaHeadUnitService.current
         if (st.aaOverlay && aa != null && aa.phase.value >= AaSession.Phase.DISCOVERED) {
-            if (action < 0) return
+            if (action < 0) {
+                aaGestureViewport.reset()
+                return
+            }
             val p = prefs
-            val viewport = AaTouchViewport.bounds ?: return
-            if (action == CarTouch.DOWN) touchBeside = !viewport.contains(x, y)
-            if (touchBeside) return
             val display = aa.displayConfig
-            val point = viewport.map(x, y, display?.width ?: p.aaWidth, display?.height ?: p.aaHeight)
+            val point = aaGestureViewport.map(
+                action, x, y, AaTouchViewport.bounds,
+                display?.width ?: p.aaWidth, display?.height ?: p.aaHeight
+            ) ?: return
             aa.sendTouch(point.first, point.second, action)
             return
         }
+        // The mirror/FT route may resume without a new AA DOWN.
+        aaGestureViewport.reset()
         if (st.mirroring) {
             val svc = FTTouchService.instance
             if (svc != null && mirror.active) {
@@ -2270,6 +2279,7 @@ class CarLifeService : Service() {
     }
 
     private fun aaOverlay(on: Boolean) {
+        if (_state.value.aaOverlay != on) aaGestureViewport.reset()
         if (on) mirrorStop()
         _state.update { it.copy(aaOverlay = on) }
         DiagLog.i(tag, "android auto overlay ${if (on) "on" else "off"}")
@@ -2358,6 +2368,7 @@ class CarLifeService : Service() {
             return
         }
         if (ticket != launchTicket.get()) return
+        aaGestureViewport.reset() // AA -> mirror may occur without a touch event.
         _state.update { it.copy(aaOverlay = false, mirroring = true, mirrorPackage = pkg) }
         watchTurning()
         mirrorJob?.cancel()
