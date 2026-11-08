@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 
 object AaVideoSink {
     private val _surface = MutableStateFlow<Surface?>(null)
@@ -36,6 +37,9 @@ object AaVideoSink {
 class AaVideoDecoder(private val width: Int, private val height: Int) {
     private val tag = "AaDecoder"
     private val lock = Any()
+    // Acquired under lock when beginning output work; held without lock while rendering.
+    // stopLocked acquires it before destroying the codec, preventing use-after-release.
+    private val outputLock = ReentrantLock()
     private val running = AtomicBoolean(false)
     private val _frames = MutableStateFlow(0L)
     val frames: StateFlow<Long> = _frames
@@ -169,13 +173,16 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
             slot = c.dequeueInputBuffer(20_000)
             if (slot < 0) return
             val buf = c.getInputBuffer(slot)
+            // A recycled codec ByteBuffer may retain a nonzero position/limit.
+            // Capacity, not pre-clear remaining(), determines whether the
+            // complete H.264 access unit fits after resetting its window.
+            buf?.clear()
             if (buf == null || data.size > buf.remaining()) {
                 if (buf != null) DiagLog.w(tag, "a ${data.size} byte picture did not fit the decoder, skipping it")
                 c.queueInputBuffer(slot, 0, 0, ptsUs, 0)
                 given = true
                 return
             }
-            buf.clear()
             buf.put(data)
             c.queueInputBuffer(slot, 0, data.size, ptsUs, if (isConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0)
             given = true
@@ -191,17 +198,28 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         while (running.get() && generation == mine) {
             try {
                 val idx = c.dequeueOutputBuffer(info, 20_000)
-                synchronized(lock) {
-                    if (!running.get() || generation != mine || codec !== c) return
-                    if (idx >= 0) {
+                if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    // Format publication remains atomic with reset/generation changes.
+                    synchronized(lock) {
+                        if (!running.get() || generation != mine || codec !== c) return
+                        shown(c.outputFormat)
+                    }
+                } else if (idx >= 0) {
+                    // Lock order: lock -> outputLock. Do not reacquire lock while
+                    // outputLock is held: stopLocked takes lock before outputLock.
+                    synchronized(lock) {
+                        if (!running.get() || generation != mine || codec !== c) return
+                        outputLock.lock()
+                    }
+                    try {
                         c.releaseOutputBuffer(idx, true)
                         _frames.value = _frames.value + 1
                         if (firstFrame) {
                             firstFrame = false
                             DiagLog.i(tag, "first decoded output generation=$mine; ${diagnosticState()}")
                         }
-                    } else if (idx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        shown(c.outputFormat)
+                    } finally {
+                        outputLock.unlock()
                     }
                 }
             } catch (t: Throwable) {
@@ -239,8 +257,13 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         if (!running.getAndSet(false) && old == null) return
         codec = null
         drain = null
-        runCatching { old?.stop() }
-        runCatching { old?.release() }
+        outputLock.lock()
+        try {
+            runCatching { old?.stop() }
+            runCatching { old?.release() }
+        } finally {
+            outputLock.unlock()
+        }
     }
 
     fun stop() {
