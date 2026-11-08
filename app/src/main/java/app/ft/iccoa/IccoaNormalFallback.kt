@@ -29,3 +29,10 @@ internal class IccoaNormalFallback {
         startedAtMs = 0L
     }
 }
+
+/** A user-started Quick-to-Normal retry must not depend on auto-connect. */
+internal object IccoaNormalFallbackAdmission {
+    fun allows(autoConnectEnabled: Boolean, pendingNormalFallback: Boolean,
+               protocolIsIccoa: Boolean, serviceRunning: Boolean): Boolean =
+        protocolIsIccoa && serviceRunning && (autoConnectEnabled || pendingNormalFallback)
+}

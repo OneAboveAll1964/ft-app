@@ -10,7 +10,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class AudioCapture internal constructor(
     private val createRecord: (MediaProjection) -> AudioRecord,
-    private val onPcm: (ByteArray) -> Unit
+    private val onPcm: (ByteArray) -> Unit,
+    private val pauseAfterEmptyRead: () -> Unit = { Thread.sleep(10) }
 ) {
     constructor(onPcm: (ByteArray) -> Unit) : this(::buildRecord, onPcm)
 
@@ -61,7 +62,13 @@ class AudioCapture internal constructor(
                     DiagLog.w(tag, "audio capture read failed: $n")
                     break
                 }
-                if (n == 0) continue
+                // A zero-byte native read can return immediately. Bound retries
+                // without sending silence or holding the capture/stop monitor.
+                if (n == 0) {
+                    if (capture !== owner) break
+                    pauseAfterEmptyRead()
+                    continue
+                }
                 // Serialize publication with stop: a late native read must not send
                 // PCM or update the new capture's activity timestamps.
                 synchronized(this) {
@@ -100,12 +107,23 @@ class AudioCapture internal constructor(
     }
 
     companion object {
+        /**
+         * Android 10+ third-party playback capture permits only MEDIA, GAME and
+         * UNKNOWN. NAVIGATION_GUIDANCE (12) is not capturable even when requested
+         * through addMatchingUsage; app/track capture policy can further deny it.
+         * Keep this explicit allowlist independent of AA's own speech channel.
+         * AOSP android12-release AudioPlaybackCaptureConfiguration.java.
+         */
+        internal val capturableUsages: List<Int> = listOf(
+            AudioAttributes.USAGE_MEDIA,
+            AudioAttributes.USAGE_GAME,
+            AudioAttributes.USAGE_UNKNOWN
+        )
+
         private fun buildRecord(projection: MediaProjection): AudioRecord {
-            val config = AudioPlaybackCaptureConfiguration.Builder(projection)
-                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                .build()
+            val builder = AudioPlaybackCaptureConfiguration.Builder(projection)
+            capturableUsages.forEach(builder::addMatchingUsage)
+            val config = builder.build()
             val format = AudioFormat.Builder()
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                 .setSampleRate(48000)
