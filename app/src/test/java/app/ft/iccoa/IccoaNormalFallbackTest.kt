@@ -63,4 +63,20 @@ class IccoaNormalFallbackTest {
         val refreshed = legacy.copy(lastSeenElapsedMs = 2_200L)
         assertEquals(refreshed, fallback.select(listOf(refreshed), false, 2_300L))
     }
+    @Test fun manualQuickRejectionMayContinueToNormalWithAutoConnectOff() {
+        assertTrue(IccoaNormalFallbackAdmission.allows(false, true, true, true))
+        val fallback = IccoaNormalFallback()
+        assertTrue(fallback.begin(previous, 2_000L))
+        val fresh = previous.copy(address = "ROTATED", lastSeenElapsedMs = 2_100L)
+        assertEquals(fresh, fallback.select(listOf(fresh), false, 2_200L))
+        assertFalse(fallback.active)
+    }
+
+    @Test fun normalFallbackAdmissionRequiresOwnerStartedEpisodeOrAutoConnect() {
+        assertFalse(IccoaNormalFallbackAdmission.allows(false, false, true, true))
+        assertTrue(IccoaNormalFallbackAdmission.allows(true, false, true, true))
+        assertFalse(IccoaNormalFallbackAdmission.allows(true, true, false, true))
+        assertFalse(IccoaNormalFallbackAdmission.allows(true, true, true, false))
+        assertFalse(IccoaNormalFallbackAdmission.allows(false, true, false, true))
+    }
 }

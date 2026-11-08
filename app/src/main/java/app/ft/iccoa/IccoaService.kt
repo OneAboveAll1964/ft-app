@@ -301,7 +301,9 @@ class IccoaService : Service() {
     }
 
     private fun maybeAutoConnect(result: IccoaDiscoveryState) {
-        if (!prefs.autoConnect || prefs.carProtocol != CarProtocol.ICCOA || !_state.value.running) {
+        if (!IccoaNormalFallbackAdmission.allows(
+                prefs.autoConnect, normalFallback.active,
+                prefs.carProtocol == CarProtocol.ICCOA, _state.value.running)) {
             cancelAutomaticConnection()
             return
         }
