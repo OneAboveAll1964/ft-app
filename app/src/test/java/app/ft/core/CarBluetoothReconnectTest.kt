@@ -28,9 +28,11 @@ class CarBluetoothReconnectTest {
         var permission = true
         var radioOn = true
         var discovering = false
+        var projectionAudio = false
+        var retainSuppressedA2dp = true
         var address = "AA:BB:CC:DD:EE:FF"
         val requests = mutableListOf<Pair<BluetoothProfile, BluetoothDevice>>()
-        val monitor = CarBluetoothReconnect(context, prefs, adapter, scope.backgroundScope, { permission }) { profile, device ->
+        val monitor = CarBluetoothReconnect(context, prefs, adapter, scope.backgroundScope, { permission }, { projectionAudio }, { retainSuppressedA2dp }) { profile, device ->
             requests += profile to device
             true
         }
@@ -310,5 +312,245 @@ class CarBluetoothReconnectTest {
         f.start(); f.connect()
         assertEquals("AA:BB:CC:DD:EE:FF", f.address)
         f.monitor.close()
+    }
+
+    @Test fun projectionAudioDoesNotRecoverA2dpButStillRecoversCalls() = runTest {
+        val f = Fixture(this)
+        f.projectionAudio = true
+        f.start(); f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(120_000); runCurrent()
+        verify(f.adapter, never()).startDiscovery()
+        assertEquals(0, f.requests.size)
+        f.connect(BluetoothProfile.HEADSET); f.drop(BluetoothProfile.HEADSET)
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.headset to f.car), f.requests)
+        f.monitor.close()
+    }
+
+    @Test fun switchingToProjectionAudioCancelsA2dpSearchImmediately() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.projectionAudio = true; f.monitor.refresh()
+        verify(f.adapter).cancelDiscovery()
+        f.monitor.onDeviceFound(f.car)
+        advanceTimeBy(120_000); runCurrent()
+        assertEquals(0, f.requests.size)
+        verify(f.adapter, times(1)).startDiscovery()
+        f.monitor.close()
+    }
+
+    @Test fun switchingRouteDuringSharedSearchKeepsOnlyCallRecovery() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.connect(BluetoothProfile.HEADSET)
+        f.drop(); f.drop(BluetoothProfile.HEADSET)
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.projectionAudio = true; f.monitor.refresh()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.headset to f.car), f.requests)
+        f.monitor.close()
+    }
+
+    @Test fun releasingProjectionRouteCanRecoverPreviouslyLostA2dp() = runTest {
+        val f = Fixture(this)
+        f.projectionAudio = true
+        f.start(); f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(120_000); runCurrent()
+        f.projectionAudio = false
+        f.preferenceListener!!.onSharedPreferenceChanged(null, "soundOverBluetooth"); runCurrent()
+        advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.a2dp to f.car), f.requests)
+        f.monitor.close()
+    }
+
+    @Test fun routeChangeWithoutObservedDisconnectDoesNotConnectPairedCar() = runTest {
+        val f = Fixture(this)
+        f.projectionAudio = true; f.start()
+        f.projectionAudio = false; f.monitor.refresh()
+        advanceTimeBy(120_000); runCurrent()
+        verify(f.adapter, never()).startDiscovery()
+        assertEquals(0, f.requests.size)
+        f.monitor.close()
+    }
+
+    @Test fun briefConnectionsDoNotResetThreeAttemptLimit() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.drop()
+        repeat(3) {
+            runCurrent(); advanceTimeBy(3_000); runCurrent()
+            f.monitor.onDeviceFound(f.car); runCurrent()
+            assertEquals(it + 1, f.requests.size)
+            f.connect(); runCurrent(); advanceTimeBy(1_000); runCurrent(); f.drop()
+        }
+        // Repeated broadcasts and refreshes must not open another recovery cycle.
+        f.drop(); f.monitor.refresh()
+        advanceTimeBy(180_000); runCurrent()
+        assertEquals(3, f.requests.size)
+        verify(f.adapter, times(3)).startDiscovery()
+        f.monitor.close()
+    }
+
+    @Test fun fullMinuteOfStableConnectionRestoresRecoveryBudget() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.drop()
+        repeat(3) {
+            runCurrent(); advanceTimeBy(3_000); runCurrent()
+            f.monitor.onDeviceFound(f.car); runCurrent()
+            f.connect(); runCurrent(); advanceTimeBy(1_000); runCurrent(); f.drop()
+        }
+        f.connect(); runCurrent(); advanceTimeBy(60_000); runCurrent(); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(4, f.requests.size)
+        f.monitor.close()
+    }
+
+    @Test fun exhaustedA2dpBudgetDoesNotBlockCallRecovery() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(180_000); runCurrent()
+        verify(f.adapter, times(3)).startDiscovery()
+        f.connect(BluetoothProfile.HEADSET); f.drop(BluetoothProfile.HEADSET)
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.headset to f.car), f.requests)
+        f.monitor.close()
+    }
+
+    @Test fun proxyAlreadyConnectedDuringGraceDoesNotStartNewDiscovery() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.drop()
+        `when`(f.a2dp.getConnectionState(f.car)).thenReturn(BluetoothProfile.STATE_CONNECTED)
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        advanceTimeBy(120_000); runCurrent()
+        verify(f.adapter, never()).startDiscovery()
+        assertEquals(0, f.requests.size)
+        f.monitor.close()
+    }
+
+    @Test fun refreshingDuringLastSearchDoesNotCancelFinalAttempt() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        repeat(3) { round ->
+            f.monitor.refresh()
+            f.monitor.onDeviceFound(f.car); runCurrent()
+            assertEquals(round + 1, f.requests.size)
+            if (round < 2) { advanceTimeBy(23_000); runCurrent() }
+        }
+        f.monitor.close()
+    }
+
+    @Test fun callProfileLostLateStillGetsItsOwnThreeAttempts() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.connect(BluetoothProfile.HEADSET); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        repeat(3) { round ->
+            f.monitor.onDeviceFound(f.car); runCurrent()
+            if (round < 2) { advanceTimeBy(23_000); runCurrent() }
+        }
+        f.drop(BluetoothProfile.HEADSET)
+        repeat(3) {
+            advanceTimeBy(23_000); runCurrent()
+            f.monitor.onDeviceFound(f.car); runCurrent()
+        }
+        assertEquals(3, f.requests.count { it.first === f.a2dp })
+        assertEquals(3, f.requests.count { it.first === f.headset })
+        f.monitor.close()
+    }
+
+    @Test fun exhaustedCallBudgetDoesNotKeepSuppressedA2dpSearchAlive() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(BluetoothProfile.HEADSET); f.drop(BluetoothProfile.HEADSET)
+        runCurrent(); advanceTimeBy(180_000); runCurrent()
+        verify(f.adapter, times(3)).startDiscovery()
+        f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        assertEquals(true, f.discovering)
+        f.projectionAudio = true; f.monitor.refresh()
+        assertEquals(false, f.discovering)
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(0, f.requests.size)
+        f.monitor.close()
+    }
+
+    @Test fun unavailableProfileWaitsForReplacementWithoutSpendingBudget() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect()
+        val listener = f.listeners.getValue(BluetoothProfile.A2DP)
+        listener.onServiceDisconnected(BluetoothProfile.A2DP)
+        f.drop()
+        runCurrent(); advanceTimeBy(180_000); runCurrent()
+        verify(f.adapter, never()).startDiscovery()
+        verify(f.a2dp, never()).getConnectionState(f.car)
+        val replacement = mock(BluetoothProfile::class.java)
+        `when`(replacement.connectedDevices).thenReturn(emptyList())
+        listener.onServiceConnected(BluetoothProfile.A2DP, replacement)
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        repeat(3) { round ->
+            f.monitor.onDeviceFound(f.car); runCurrent()
+            if (round < 2) { advanceTimeBy(23_000); runCurrent() }
+        }
+        assertEquals(3, f.requests.count { it.first === replacement })
+        f.monitor.close()
+    }
+
+    @Test fun disconnectingStateAloneDoesNotProvePreviousConnection() = runTest {
+        val f = Fixture(this)
+        f.start()
+        f.monitor.onConnectionChanged(BluetoothProfile.A2DP, f.car,
+            BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_DISCONNECTING)
+        runCurrent(); advanceTimeBy(180_000); runCurrent()
+        verify(f.adapter, never()).startDiscovery()
+        f.connect()
+        f.monitor.onConnectionChanged(BluetoothProfile.A2DP, f.car,
+            BluetoothProfile.STATE_DISCONNECTING, BluetoothProfile.STATE_CONNECTED)
+        f.monitor.onConnectionChanged(BluetoothProfile.A2DP, f.car,
+            BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_DISCONNECTING)
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.a2dp to f.car), f.requests)
+        f.monitor.close()
+    }
+
+    @Test fun unneededA2dpLossIsNotReplayedAfterProjectionEnds() = runTest {
+        val f = Fixture(this)
+        f.retainSuppressedA2dp = false
+        f.start(); f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.projectionAudio = true; f.monitor.refresh()
+        assertEquals(false, f.discovering)
+        advanceTimeBy(2_400_000); runCurrent()
+        // Repeated losses while CarLife owns music must not leave a deferred reconnection either.
+        f.drop(); f.projectionAudio = false; f.monitor.refresh()
+        advanceTimeBy(120_000); runCurrent()
+        verify(f.adapter, times(1)).startDiscovery()
+        assertEquals(0, f.requests.size)
+        // A genuinely new loss after the route was released is still recoverable.
+        f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.a2dp to f.car), f.requests)
+        f.monitor.close()
+    }
+
+    @Test fun profileServiceLossCancelsItsActiveSearchAndRebindResumesIt() = runTest {
+        val f = Fixture(this)
+        f.start(); f.connect(); f.drop()
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        val listener = f.listeners.getValue(BluetoothProfile.A2DP)
+        listener.onServiceDisconnected(BluetoothProfile.A2DP)
+        assertEquals(false, f.discovering)
+        f.monitor.onDeviceFound(f.car)
+        advanceTimeBy(120_000); runCurrent()
+        assertEquals(0, f.requests.size)
+        listener.onServiceConnected(BluetoothProfile.A2DP, f.a2dp)
+        runCurrent(); advanceTimeBy(3_000); runCurrent()
+        f.monitor.onDeviceFound(f.car); runCurrent()
+        assertEquals(listOf(f.a2dp to f.car), f.requests)
+        f.monitor.close()
+        verify(f.adapter).closeProfileProxy(BluetoothProfile.A2DP, f.a2dp)
     }
 }

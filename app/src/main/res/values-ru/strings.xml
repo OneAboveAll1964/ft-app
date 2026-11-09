@@ -91,7 +91,7 @@
     <string name="car_p2p_label">Имя WiFi Direct (пусто = любой CarLife)</string>
     <string name="car_bt_label">Имя Bluetooth для автозапуска (пусто = любое)</string>
     <string name="car_bt_reconnect">Переподключать Bluetooth автомобиля</string>
-    <string name="car_bt_reconnect_about">Пока FT включён, после обрыва делать до трёх попыток, только если последняя сопряжённая машина обнаружена поблизости. Машина должна быть видна в Bluetooth-поиске. Доступность зависит от телефона.</string>
+    <string name="car_bt_reconnect_about">До трёх попыток для каждого потерянного профиля, если последняя сопряжённая машина найдена поблизости. Лимит сбрасывается после минуты устойчивого соединения. При звуке через CarLife восстанавливается только Bluetooth для звонков. Машина должна быть видна в Bluetooth-поиске; поддержка зависит от телефона.</string>
     <string name="car_pin_label">PIN-код WiFi Direct (пусто = WPS по кнопке)</string>
     <string name="car_swap_keys">Поменять местами кнопки «Следующий» и «Предыдущий» на руле</string>
     <string name="sound_bluetooth">Выводить звук через Bluetooth автомобиля</string>

@@ -72,10 +72,17 @@ class AaHeadUnitService : Service() {
             private set
         @Volatile var micReady = false
             private set
-        private val launches = ServiceLaunches()
+        private val launches = ServiceLaunches { lifecycleChanged() }
+        private val _busy = MutableStateFlow(false)
+        val busy: StateFlow<Boolean> = _busy
         val isBusy: Boolean get() = running || launches.hasPending
         @Volatile var running = false
             private set
+        private fun lifecycleChanged() {
+            _busy.value = isBusy
+            CarConnection.lifecycleChanged()
+        }
+
         @Volatile var lastDisconnect = "none"
             private set
 
@@ -131,7 +138,7 @@ class AaHeadUnitService : Service() {
         super.onCreate()
         prefs = (application as FTApp).prefs
         running = true
-        CarConnection.lifecycleChanged()
+        lifecycleChanged()
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, Lang.str(R.string.channel_aa), NotificationManager.IMPORTANCE_LOW))
     }
@@ -351,7 +358,7 @@ class AaHeadUnitService : Service() {
         shutdown()
         scope.cancel()
         running = false
-        CarConnection.lifecycleChanged()
+        lifecycleChanged()
         super.onDestroy()
     }
 

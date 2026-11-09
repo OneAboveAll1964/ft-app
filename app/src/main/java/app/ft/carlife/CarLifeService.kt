@@ -69,6 +69,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -597,7 +599,15 @@ class CarLifeService : Service() {
         watchHeat()
         MirrorSink.onGone = { surface -> if (mirror.isShowing(surface)) mirror.hide() }
         watchCarBluetoothAudio()
-        bluetoothReconnect = CarBluetoothReconnect(this, prefs).also { it.start() }
+        bluetoothReconnect = CarBluetoothReconnect(this, prefs,
+            projectionAudio = ::projectionCarriesMusic,
+            retainSuppressedA2dp = { prefs.soundOverBluetooth }
+        ).also { it.start() }
+        scope.launch {
+            combine(_state, AaHeadUnitService.state, AaHeadUnitService.busy) { car, aa, busy ->
+                (car.session !is CarLifeSession.State.Idle) to (busy || aa.connected || aa.listening)
+            }.distinctUntilChanged().collect { bluetoothReconnect?.refresh() }
+        }
         watchUsb()
         progressJob = scope.launch {
             CarPlayer.state.collect { st -> songPosition(st) }
@@ -1775,6 +1785,7 @@ class CarLifeService : Service() {
             delay(1500)
             askAndroidAutoToConnect()
         }
+        bluetoothReconnect?.refresh()
         aaWatch?.cancel()
         aaWatch = scope.launch {
             var shown = _state.value.aaOverlay
@@ -1906,10 +1917,21 @@ class CarLifeService : Service() {
         return null
     }
 
+    private fun androidAutoOwnsAudio() = AaHeadUnitService.busy.value ||
+        AaHeadUnitService.state.value.connected || AaHeadUnitService.state.value.listening
+
+    private fun phoneSoundOverBluetooth() = prefs.soundOverBluetooth && !androidAutoOwnsAudio()
+
+    private fun projectionCarriesMusic() = androidAutoOwnsAudio() ||
+        (_state.value.session !is CarLifeSession.State.Idle && !prefs.soundOverBluetooth)
+
     private fun wakeCarBluetooth() {
+        if (projectionCarriesMusic()) return
         scope.launch {
             btAudio.open()
             delay(1500)
+            // Projection may have started while the profile proxy was being acquired.
+            if (projectionCarriesMusic()) return@launch
             val car = btAudio.theCar(prefs.carBtName, prefs.carLifeVehicleAddress.orEmpty().ifBlank { prefs.carBtAddress }, prefs.carLifeVehicleAddress.orEmpty().isNotBlank()) ?: carBtDevice()
             if (car == null) {
                 DiagLog.i(tag, "FT does not know which paired device is the car, so it cannot wake it over bluetooth")
@@ -2127,7 +2149,7 @@ class CarLifeService : Service() {
                     device.productName.toString() else "Bluetooth audio"
             }
         }.getOrNull()
-        val route = if (CarPlayer.toCar || !prefs.soundOverBluetooth) "the CarLife sound channel" else "bluetooth"
+        val route = if (CarPlayer.toCar || !phoneSoundOverBluetooth()) "the CarLife sound channel" else "bluetooth"
         return "${CarAudioBus.describe()}, sound goes over $route, phone media volume $volume" +
             (if (savedVolume >= 0) " (phone speaker silenced by FT)" else "") +
             (if (bluetooth != null) ", bluetooth sound connected to '$bluetooth'${if (am.isMusicActive) " and playing" else ""}" else ", no bluetooth sound connected")
@@ -2141,7 +2163,7 @@ class CarLifeService : Service() {
             gearVolumeBefore = -1
             gearVolumeSet = -1
         }
-        val hearsPhone = savedVolume < 0 && prefs.soundOverBluetooth
+        val hearsPhone = savedVolume < 0 && phoneSoundOverBluetooth()
         val target = if (level < 1f && hearsPhone) (am.getStreamMaxVolume(stream) * level).toInt() else Int.MAX_VALUE
         val base = if (gearVolumeSet >= 0) gearVolumeBefore else now
         if (target < base) {
@@ -2463,7 +2485,7 @@ class CarLifeService : Service() {
     }
 
     private fun carPlaysOurSound(): Boolean {
-        if (!prefs.soundOverBluetooth) return false
+        if (!phoneSoundOverBluetooth()) return false
         btAudio.open()
         if (!btAudio.ready()) return false
         val playing = btAudio.somethingIsPlaying()
@@ -2646,7 +2668,7 @@ class CarLifeService : Service() {
 
     private fun routePlayer() {
         val linked = mediaReady && session != null && CarAudioBus.open
-        val overBluetooth = linked && prefs.soundOverBluetooth && runCatching {
+        val overBluetooth = linked && phoneSoundOverBluetooth() && runCatching {
             btAudio.open()
             btAudio.ready() && btAudio.somethingIsPlaying() != null
         }.getOrDefault(false)
@@ -2712,7 +2734,7 @@ class CarLifeService : Service() {
 
     private fun routePhoneSound(why: String) {
         if (audio.active) return
-        if (prefs.soundOverBluetooth && btAudio.ready() && btAudio.somethingIsPlaying() != null) return
+        if (phoneSoundOverBluetooth() && btAudio.ready() && btAudio.somethingIsPlaying() != null) return
         if (!canRecord()) return
         if (projection != null || (app.mirrorResultCode != 0 && app.mirrorData != null)) {
             DiagLog.i(tag, "$why, sending its sound to the car")

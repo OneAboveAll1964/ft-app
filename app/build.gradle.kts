@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 179
-        versionName = "3.9.64-alice-panel"
+        versionCode = 180
+        versionName = "3.9.65-bluetooth-recovery"
     }
 
     signingConfigs {

@@ -92,7 +92,7 @@
     <string name="car_p2p_label">WiFi Direct name (blank = any CarLife)</string>
     <string name="car_bt_label">Bluetooth name for auto-start (blank = any)</string>
     <string name="car_bt_reconnect">Reconnect car Bluetooth</string>
-    <string name="car_bt_reconnect_about">While FT is on, try up to three times after a disconnect, only if the last paired car is found nearby. The car must be discoverable. Availability depends on your phone.</string>
+    <string name="car_bt_reconnect_about">Try up to three times per lost profile if the last paired car is found nearby. The limit resets after one minute of stable connection. While CarLife carries the sound, only Bluetooth for calls is restored. The car must be discoverable; support depends on your phone.</string>
     <string name="car_pin_label">WiFi Direct PIN (blank = push button)</string>
     <string name="car_join_timeout">Wi-Fi Direct connection timeout</string>
     <string name="car_join_timeout_about">How long to wait before retrying an unanswered connection attempt. Increase this if the car takes longer to connect. Applies to the next attempt.</string>

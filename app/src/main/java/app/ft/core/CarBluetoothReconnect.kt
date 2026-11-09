@@ -36,6 +36,10 @@ class CarBluetoothReconnect(
             }
         } else context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
     },
+    // True while the projection carries music itself; HFP remains independent.
+    private val projectionAudio: () -> Boolean = { false },
+    // Keep a deferred A2DP loss only if Bluetooth music will be wanted after projection.
+    private val retainSuppressedA2dp: () -> Boolean = { true },
     private val requestConnection: (BluetoothProfile, BluetoothDevice) -> Boolean = { proxy, device ->
         // Android has no public API for initiating A2DP/HFP connections. Some phones refuse this.
         proxy.javaClass.getMethod("connect", BluetoothDevice::class.java).invoke(proxy, device) == true
@@ -44,8 +48,12 @@ class CarBluetoothReconnect(
     private val context = context.applicationContext
     private val profiles = mutableMapOf<Int, BluetoothProfile>()
     private val listeners = mutableMapOf<Int, BluetoothProfile.ServiceListener>()
+    private val unavailableProfiles = mutableSetOf<Int>()
+    private var activeRoundProfiles = emptySet<Int>()
     private val connected = mutableSetOf<Int>()
     private val missing = mutableSetOf<Int>()
+    private val attempts = mutableMapOf<Int, Int>()
+    private val stableConnections = mutableMapOf<Int, Job>()
     private var job: Job? = null
     private var generation = 0
     private var found: CompletableDeferred<Unit>? = null
@@ -54,8 +62,9 @@ class CarBluetoothReconnect(
     private var started = false
     private var closed = false
     private var target = ""
+    private var projectionAudioActive = false
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key in setOf("carBtReconnect", "carBtAddress", "carLifeVehicleAddress", "carProtocol")) scope.launch { refresh() }
+        if (key in setOf("carBtReconnect", "carBtAddress", "carLifeVehicleAddress", "carProtocol", "soundOverBluetooth")) scope.launch { refresh() }
     }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -65,10 +74,10 @@ class CarBluetoothReconnect(
                     BluetoothAdapter.ACTION_STATE_CHANGED -> refresh()
                     BluetoothDevice.ACTION_FOUND -> device(intent)?.let(::onDeviceFound)
                     BluetoothDevice.ACTION_ACL_DISCONNECTED -> device(intent)?.let { car ->
-                        if (isTarget(car) && connected.isNotEmpty()) {
-                            missing.addAll(connected)
-                            connected.clear()
-                            recover()
+                        if (isTarget(car)) {
+                            connected.toList().forEach { id ->
+                                onConnectionChanged(id, car, BluetoothProfile.STATE_DISCONNECTED, BluetoothProfile.STATE_CONNECTED)
+                            }
                         }
                     }
                     BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
@@ -103,6 +112,7 @@ class CarBluetoothReconnect(
         val address = lockedAddress().ifBlank { prefs.carBtAddress }
         if (target != address) {
             cancelRecovery()
+            resetAttempts()
             connected.clear()
             target = address
         }
@@ -120,6 +130,7 @@ class CarBluetoothReconnect(
         }
         if (!available()) {
             cancelRecovery()
+            resetAttempts()
             releaseProfiles()
             connected.clear()
             return
@@ -132,20 +143,33 @@ class CarBluetoothReconnect(
                         runCatching { adapter?.closeProfileProxy(profile, proxy) }
                         return
                     }
+                    unavailableProfiles.remove(id)
                     profiles.put(id, proxy)?.takeIf { it !== proxy }?.let {
                         runCatching { adapter?.closeProfileProxy(id, it) }
                     }
                     runCatching {
                         proxy.connectedDevices.forEach { onConnectionChanged(id, it, BluetoothProfile.STATE_CONNECTED, -1) }
                     }
+                    updateRecovery()
                 }
                 override fun onServiceDisconnected(profile: Int) {
-                    // Keep the binding so Android can deliver a replacement proxy after a service restart.
+                    if (listeners[id] !== this) return
+                    // Retain the binding for replacement callbacks and eventual close, but never use its dead proxy.
+                    unavailableProfiles.add(id)
+                    stableConnections.remove(id)?.cancel()
+                    updateRecovery()
                 }
             }
             listeners[id] = listener
             if (runCatching { adapter?.getProfileProxy(context, listener, id) }.getOrNull() != true) listeners.remove(id)
         }
+        val audioActive = projectionAudio()
+        if (audioActive != projectionAudioActive) {
+            projectionAudioActive = audioActive
+            DiagLog.i(TAG, if (audioActive) "Projection carries music; A2DP recovery paused, HFP recovery unchanged"
+                else "Projection music route released; A2DP recovery allowed")
+        }
+        updateRecovery()
     }
 
     internal fun onConnectionChanged(id: Int, car: BluetoothDevice, state: Int, previous: Int) {
@@ -154,15 +178,29 @@ class CarBluetoothReconnect(
         if (!isTarget(car)) return
         when (state) {
             BluetoothProfile.STATE_CONNECTED -> {
-                connected.add(id)
+                val newlyConnected = connected.add(id)
                 missing.remove(id)
-                if (missing.isEmpty()) cancelRecovery()
+                updateRecovery()
+                if ((newlyConnected || stableConnections[id] == null) && attempts.getOrDefault(id, 0) > 0) {
+                    // Brief connections must not restart an endless series of recovery cycles.
+                    stableConnections[id] = scope.launch {
+                        delay(STABLE_CONNECTION_MS)
+                        attempts.remove(id)
+                        stableConnections.remove(id)
+                        DiagLog.i(TAG, "Profile $id stable for ${STABLE_CONNECTION_MS / 1000}s; recovery budget reset")
+                    }
+                }
             }
             BluetoothProfile.STATE_DISCONNECTED -> {
+                stableConnections.remove(id)?.cancel()
                 val wasConnected = connected.remove(id)
                 if (wasConnected || previous == BluetoothProfile.STATE_CONNECTED) {
-                    missing.add(id)
-                    recover()
+                    if (attempts.getOrDefault(id, 0) < MAX_ATTEMPTS) {
+                        missing.add(id)
+                        updateRecovery()
+                    } else {
+                        DiagLog.w(TAG, "Profile $id recovery paused after $MAX_ATTEMPTS attempts; waiting for a stable connection")
+                    }
                 }
             }
         }
@@ -179,6 +217,7 @@ class CarBluetoothReconnect(
         if (car.bondState == BluetoothDevice.BOND_BONDED && (known || named || automotive)) {
             if (!known) {
                 cancelRecovery()
+                resetAttempts()
                 connected.clear()
                 target = car.address
                 prefs.carBtAddress = target
@@ -193,23 +232,47 @@ class CarBluetoothReconnect(
     private fun isTarget(car: BluetoothDevice) = target.isNotBlank() && car.address.equals(target, ignoreCase = true)
     private fun available() = runCatching { !closed && prefs.carBtReconnect && hasPermission() && adapter?.isEnabled == true }.getOrDefault(false)
 
+    private fun profileAllowed(id: Int) = id != BluetoothProfile.A2DP || !projectionAudio()
+
+    private fun usableProfile(id: Int) = profiles[id]?.takeUnless { id in unavailableProfiles }
+
+    private fun pendingProfiles() = missing.filter {
+        profileAllowed(it) && usableProfile(it) != null && attempts.getOrDefault(it, 0) < MAX_ATTEMPTS
+    }
+
+    private fun updateRecovery() {
+        if (!profileAllowed(BluetoothProfile.A2DP) && !retainSuppressedA2dp()) missing.remove(BluetoothProfile.A2DP)
+        // An in-flight third attempt still counts as work even after its budget was charged.
+        val active = activeRoundProfiles.any { it in missing && profileAllowed(it) && usableProfile(it) != null }
+        if (pendingProfiles().isEmpty() && !active) cancelRecovery(clearMissing = false) else recover()
+    }
+
     private fun recover() {
-        if (job?.isActive == true || missing.isEmpty() || !available() || !registered) return
+        if (job?.isActive == true || pendingProfiles().isEmpty() || !available() || !registered) return
         val address = target
         val car = runCatching { adapter?.bondedDevices?.firstOrNull { it.address.equals(address, true) } }.getOrNull() ?: return
         val ticket = ++generation
         job = scope.launch {
             try {
-                for (attempt in 1..3) {
-                    delay(if (attempt == 1) 3_000 else 15_000)
+                var firstRound = true
+                while (true) {
+                    activeRoundProfiles = emptySet()
+                    delay(if (firstRound) 3_000 else 15_000)
+                    firstRound = false
                     if (!available() || target != address) break
                     refresh()
-                    missing.removeAll { profiles[it]?.getConnectionState(car) == BluetoothProfile.STATE_CONNECTED }
-                    if (missing.isEmpty() || car.bondState != BluetoothDevice.BOND_BONDED) break
+                    currentCoroutineContext().ensureActive()
+                    missing.toList().filter { usableProfile(it)?.getConnectionState(car) == BluetoothProfile.STATE_CONNECTED }
+                        .forEach { onConnectionChanged(it, car, BluetoothProfile.STATE_CONNECTED, -1) }
+                    currentCoroutineContext().ensureActive()
+                    val pending = pendingProfiles()
+                    if (pending.isEmpty() || car.bondState != BluetoothDevice.BOND_BONDED) break
+                    activeRoundProfiles = pending.toSet()
+                    for (id in pending) attempts[id] = attempts.getOrDefault(id, 0) + 1
                     val sighting = CompletableDeferred<Unit>()
                     found = sighting
                     if (adapter?.isDiscovering != true) ownDiscovery = adapter?.startDiscovery() == true
-                    DiagLog.i(TAG, "Looking for last car, recovery $attempt/3")
+                    DiagLog.i(TAG, "Looking for last car, recovery profiles=${pending.joinToString { "$it:${attempts[it]}/$MAX_ATTEMPTS" }}")
                     val seen = withTimeoutOrNull(15_000) { sighting.await(); true } == true
                     found = null
                     stopDiscovery()
@@ -217,16 +280,17 @@ class CarBluetoothReconnect(
                     repeat(20) { if (adapter?.isDiscovering == true) delay(100) }
                     if (!seen || adapter?.isDiscovering == true || !available() || target != address) continue
                     if (car.bondState != BluetoothDevice.BOND_BONDED) break
-                    for (id in missing.toList()) {
-                        val proxy = profiles[id] ?: continue
+                    for (id in pending) {
+                        if (id !in missing || !profileAllowed(id)) continue
+                        val proxy = usableProfile(id) ?: continue
                         val state = proxy.getConnectionState(car)
                         if (state == BluetoothProfile.STATE_CONNECTED || state == BluetoothProfile.STATE_CONNECTING) continue
                         val accepted = runCatching { requestConnection(proxy, car) }.getOrDefault(false)
-                        DiagLog.i(TAG, "Profile $id recovery $attempt/3 requested=$accepted")
+                        DiagLog.i(TAG, "Profile $id recovery ${attempts[id]}/$MAX_ATTEMPTS requested=$accepted")
                     }
                     // An accepted request is not a connection; wait for the real profile event.
                     delay(8_000)
-                    if (missing.isEmpty()) break
+                    if (pendingProfiles().isEmpty()) break
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -234,9 +298,10 @@ class CarBluetoothReconnect(
                 DiagLog.w(TAG, "Bluetooth recovery stopped: ${e.javaClass.simpleName}")
             } finally {
                 if (ticket == generation) {
+                    activeRoundProfiles = emptySet()
                     found = null
                     stopDiscovery()
-                    missing.clear()
+                    job = null
                 }
             }
         }
@@ -247,23 +312,32 @@ class CarBluetoothReconnect(
         ownDiscovery = false
     }
 
-    private fun cancelRecovery() {
+    private fun cancelRecovery(clearMissing: Boolean = true) {
         generation++
         job?.cancel()
         job = null
+        activeRoundProfiles = emptySet()
         found = null
-        missing.clear()
+        if (clearMissing) missing.clear()
         stopDiscovery()
+    }
+
+    private fun resetAttempts() {
+        stableConnections.values.forEach { it.cancel() }
+        stableConnections.clear()
+        attempts.clear()
     }
 
     private fun releaseProfiles() {
         listeners.clear() // Invalidates callbacks from bindings still being acquired.
         profiles.toMap().forEach { (id, proxy) -> runCatching { adapter?.closeProfileProxy(id, proxy) } }
         profiles.clear()
+        unavailableProfiles.clear()
     }
 
     private fun disable() {
         cancelRecovery()
+        resetAttempts()
         connected.clear()
         releaseProfiles()
         if (registered) runCatching { context.unregisterReceiver(receiver) }
@@ -285,6 +359,8 @@ class CarBluetoothReconnect(
 
     private companion object {
         const val TAG = "BtReconnect"
+        const val MAX_ATTEMPTS = 3
+        const val STABLE_CONNECTION_MS = 60_000L
         val PROFILE_IDS = listOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET)
     }
 }

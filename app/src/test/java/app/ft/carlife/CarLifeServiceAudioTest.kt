@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.media.projection.MediaProjection
+import app.ft.aa.AaHeadUnitService
+import app.ft.aa.AaState
 import app.ft.FTApp
 import app.ft.core.CarAudioBus
 import app.ft.core.CarProtocol
@@ -35,6 +37,10 @@ class CarLifeServiceAudioTest {
     @Suppress("UNCHECKED_CAST")
     private val state = CarLifeService::class.java.getDeclaredField("_state").apply { isAccessible = true }.get(null) as MutableStateFlow<CarState>
     private val previous = state.value
+    private val aaState = AaHeadUnitService.state as MutableStateFlow<AaState>
+    private val previousAaState = aaState.value
+    private val aaBusy = AaHeadUnitService.busy as MutableStateFlow<Boolean>
+    private val previousAaBusy = aaBusy.value
 
     init {
         doReturn(app).`when`(service).application
@@ -59,6 +65,8 @@ class CarLifeServiceAudioTest {
         recoveryScope.cancel()
         CarAudioBus.inCall = false
         state.value = previous
+        aaState.value = previousAaState
+        aaBusy.value = previousAaBusy
     }
 
     @Test fun quietDeclineWithoutPendingLaunchReleasesSoundWait() {
@@ -225,6 +233,89 @@ class CarLifeServiceAudioTest {
         runCurrent()
         assertFalse(CarAudioBus.inCall)
         invoke("stopWatchingCalls")
+    }
+
+
+    @Test fun negotiatedVideoPauseKeepsProjectionMusicRoute() {
+        aaState.value = AaState()
+        `when`(prefs.soundOverBluetooth).thenReturn(false)
+        state.value = CarState(session = CarLifeSession.State.Projecting("wifi", 800, 480, 30))
+        assertEquals(true, invoke("projectionCarriesMusic"))
+        state.value = CarState(session = CarLifeSession.State.Negotiated("wifi", 800, 480, 30))
+        assertEquals(true, invoke("projectionCarriesMusic"))
+        state.value = CarState()
+        assertEquals(false, invoke("projectionCarriesMusic"))
+    }
+
+    @Test fun androidAutoReconnectDoesNotEnableBluetoothMusic() {
+        val btAudio = mock(CarBtAudio::class.java)
+        set("btAudio\$delegate", lazyOf(btAudio))
+        `when`(prefs.soundOverBluetooth).thenReturn(true)
+        state.value = CarState(session = CarLifeSession.State.Projecting("wifi", 800, 480, 30))
+        aaState.value = AaState(connected = true, listening = true)
+        assertEquals(true, invoke("projectionCarriesMusic"))
+        assertEquals(false, invoke("carPlaysOurSound"))
+        aaState.value = AaState(connected = false, listening = true)
+        assertEquals(true, invoke("projectionCarriesMusic"))
+        assertEquals(false, invoke("carPlaysOurSound"))
+        invoke("wakeCarBluetooth")
+        verifyNoInteractions(btAudio)
+        aaState.value = AaState()
+        assertEquals(false, invoke("projectionCarriesMusic"))
+        assertEquals(true, invoke("phoneSoundOverBluetooth"))
+    }
+
+    @Test fun bluetoothMusicReturnsOnlyAfterAndroidAutoServiceFinishes() {
+        aaState.value = AaState()
+        state.value = CarState(session = CarLifeSession.State.Projecting("wifi", 800, 480, 30))
+        `when`(prefs.soundOverBluetooth).thenReturn(true)
+        // Discovery is already shut down, but the service is still finishing.
+        aaBusy.value = true
+        assertEquals(true, invoke("projectionCarriesMusic"))
+        assertEquals(false, invoke("phoneSoundOverBluetooth"))
+        aaBusy.value = false
+        assertEquals(false, invoke("projectionCarriesMusic"))
+        assertEquals(true, invoke("phoneSoundOverBluetooth"))
+    }
+
+    @Test fun delayedBluetoothWakeCannotOverrideProjectionThatJustStarted() = runTest {
+        val btAudio = mock(CarBtAudio::class.java)
+        set("btAudio\$delegate", lazyOf(btAudio))
+        set("scope", backgroundScope)
+        aaState.value = AaState()
+        state.value = CarState()
+        `when`(prefs.soundOverBluetooth).thenReturn(false)
+        invoke("wakeCarBluetooth"); runCurrent()
+        state.value = CarState(session = CarLifeSession.State.Negotiated("wifi", 800, 480, 30))
+        advanceTimeBy(1500); runCurrent()
+        verify(btAudio).open()
+        verifyNoMoreInteractions(btAudio)
+    }
+
+    @Test fun reverseGearChangesPhoneVolumeOnlyForBluetoothMusic() {
+        val manager = mock(AudioManager::class.java)
+        val phoneVolume = mock(PhoneVolume::class.java)
+        set("phoneVolume\$delegate", lazyOf(phoneVolume))
+        set("gearVolumeSet", -1)
+        set("gearVolumeBefore", -1)
+        `when`(phoneVolume.saved).thenReturn(-1)
+        `when`(manager.getStreamVolume(AudioManager.STREAM_MUSIC)).thenReturn(8)
+        `when`(manager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)).thenReturn(10)
+        `when`(prefs.soundOverBluetooth).thenReturn(true)
+        aaState.value = AaState()
+        aaBusy.value = true
+        val changeVolume = CarLifeService::class.java.getDeclaredMethod(
+            "gearPhoneVolume", AudioManager::class.java, Float::class.javaPrimitiveType
+        ).apply { isAccessible = true }
+        changeVolume.invoke(service, manager, 0.2f)
+        verify(manager, never()).setStreamVolume(anyInt(), anyInt(), anyInt())
+        val report = CarLifeService::class.java.getDeclaredMethod(
+            "gearSoundReport", AudioManager::class.java
+        ).apply { isAccessible = true }.invoke(service, manager) as String
+        assertTrue(report, report.contains("sound goes over the CarLife sound channel"))
+        aaBusy.value = false
+        changeVolume.invoke(service, manager, 0.2f)
+        verify(manager).setStreamVolume(AudioManager.STREAM_MUSIC, 2, 0)
     }
 
     private fun mode(value: Int) = CarLifeService::class.java.getDeclaredMethod("onAudioMode", Int::class.javaPrimitiveType).apply { isAccessible = true }.invoke(service, value)
