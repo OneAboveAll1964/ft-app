@@ -147,6 +147,38 @@ class CarWirelessSetupTest {
         assertEquals("192.168.49.23", ProtoReader(sent[0].copyOfRange(8, sent[0].size)).string(1))
     }
 
+    @Test fun anIpRequestWithoutAnAddressIsReportedButNeverAnsweredWithAnOldAddress() {
+        var requests = 0
+        val w = CarWirelessSetup(send = { sent.add(it) }, onCarWifiName = {},
+            onIpRequestWithoutAddress = { requests++ })
+        w.wifiDirectReady("192.168.49.23")
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        w.wifiDirectReady(null)
+        assertFalse("group loss alone is not a fresh HU request", w.waitingForAddress)
+        sent.clear()
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        assertEquals(1, requests)
+        assertTrue(w.waitingForAddress)
+        assertTrue("no empty or stale IP may be sent", sent.isEmpty())
+        w.wifiDirectReady("192.168.49.24")
+        assertFalse(w.waitingForAddress)
+        assertEquals("192.168.49.24", ProtoReader(sent.single().copyOfRange(8, sent.single().size)).string(1))
+        w.wifiDirectReady(null)
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        w.reset(keepIp = false)
+        assertFalse("a new exchange must not inherit the old request", w.waitingForAddress)
+    }
+
+    @Test fun aDelayedIpRequestWithoutAnAddressCannotReportAProblemWithALiveCommandChannel() {
+        var requests = 0
+        val w = CarWirelessSetup(send = { sent.add(it) }, onCarWifiName = {},
+            commandConnected = { true }, onIpRequestWithoutAddress = { requests++ })
+        w.feed(frame(CarWirelessSetup.HU_IP_REQUEST))
+        assertEquals(0, requests)
+        assertFalse(w.waitingForAddress)
+        assertTrue(sent.isEmpty())
+    }
+
     @Test
     fun theAddressGoesStraightAwayWhenWifiDirectIsAlreadyUp() {
         val w = setup()

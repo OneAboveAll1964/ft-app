@@ -12,7 +12,8 @@ class CarWirelessSetup(
     private val onCarWifiName: (String) -> Unit,
     private val progress: (String) -> Unit = {},
     private val commandConnected: () -> Boolean = { false },
-    private val now: () -> Long = { System.nanoTime() / 1_000_000 }
+    private val now: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val onIpRequestWithoutAddress: () -> Unit = {}
 ) {
     private val tag = "CarBT"
     private val buffer = ArrayList<Byte>(1024)
@@ -24,6 +25,8 @@ class CarWirelessSetup(
     private var phoneIp: String? = null
     @Volatile var exchange = 0L
         private set
+    @Volatile var waitingForAddress = false
+        private set
     private var nameReply = CompletableDeferred<Boolean>()
 
     @Synchronized
@@ -34,6 +37,7 @@ class CarWirelessSetup(
         buffer.clear()
         carWifiName = null
         ipWanted = false
+        waitingForAddress = false
         ipSent = false
         ipSentAt = null
         // A new Bluetooth exchange may reuse a live P2P group. Only discard
@@ -88,6 +92,8 @@ class CarWirelessSetup(
             ipSentAt = null
         }
         phoneIp = ip
+        // An old request must not be mistaken for a new request after group loss.
+        waitingForAddress = false
         if (ip != null && ipWanted) sendIp()
     }
 
@@ -149,7 +155,13 @@ class CarWirelessSetup(
             }
             HU_IP_REQUEST -> {
                 ipWanted = true
-                if (phoneIp != null) sendIp(requested = true) else progress("The car is waiting for WiFi Direct to connect")
+                val connected = commandConnected()
+                DiagLog.i(tag, "HU_IP_REQUEST exchange=$exchange addressAvailable=${phoneIp != null} commandConnected=$connected")
+                waitingForAddress = phoneIp == null && !connected
+                if (phoneIp != null) sendIp(requested = true) else if (!connected) {
+                    progress("The car is waiting for WiFi Direct to connect")
+                    onIpRequestWithoutAddress()
+                }
             }
             HU_STATUS -> DiagLog.i(tag, "car wireless status ${ProtoReader(body).int(1, -1)}")
             else -> DiagLog.rx(tag, "bluetooth ${CarLifeProtocol.name(serviceId)}", body)

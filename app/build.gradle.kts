@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 180
-        versionName = "3.9.65-bluetooth-recovery"
+        versionCode = 181
+        versionName = "3.9.66-carlife-diagnostics"
     }
 
     signingConfigs {

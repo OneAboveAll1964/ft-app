@@ -95,6 +95,7 @@ data class CarState(
     val btCar: String? = null,
     val carWifi: String? = null,
     val wifiDirect: Boolean = false,
+    val carWifiRecoveryNeeded: Boolean = false,
     val joinTimedOutSeconds: Int = 0,
     val beacon: Boolean = false,
     val step: String = "",
@@ -131,6 +132,7 @@ data class CarState(
     fun withSessionState(state: CarLifeSession.State, via: String): CarState = copy(
         link = via,
         session = state,
+        carWifiRecoveryNeeded = carWifiRecoveryNeeded && state is CarLifeSession.State.Idle,
         refused = if (state !is CarLifeSession.State.Idle) 0 else refused,
         step = when (state) {
             is CarLifeSession.State.Linked -> "CarLife connected via $via"
@@ -564,7 +566,8 @@ class CarLifeService : Service() {
             progress = { text ->
                 if (wifiLink?.connected == true) DiagLog.i(tag, text) else step(text)
             },
-            commandConnected = { wifiLink?.connected == true }
+            commandConnected = { wifiLink?.connected == true },
+            onIpRequestWithoutAddress = { queueWirelessIpRequest() }
         )
     }
 
@@ -575,6 +578,22 @@ class CarLifeService : Service() {
         scope.launch(Dispatchers.Main) {
             if (mode == 1 && finder === f && bt.connectionGeneration == generation &&
                 wireless.exchange == exchange) onCarRaisedWifiDirect(name)
+        }
+    }
+
+    internal fun queueWirelessIpRequest() {
+        val generation = wirelessBluetoothGeneration
+        val exchange = wireless.exchange
+        val f = finder ?: return
+        scope.launch(Dispatchers.Main) {
+            if (mode != 1 || finder !== f || bt.connectionGeneration != generation ||
+                wireless.exchange != exchange || !wireless.waitingForAddress || wifiLink?.connected == true) return@launch
+            // A request can race group admission or DHCP. Record the approved
+            // local state without claiming that the head unit has a stale group.
+            DiagLog.w(tag, "HU_IP_REQUEST without local address: bluetooth=$generation exchange=$exchange " +
+                "approvedGroup=${f.joined} localAddressReady=${_state.value.wifiDirect} " +
+                "peerOrJoin=${wireless.carWifiName?.let { f.inSight(it) } ?: false} preparingRetry=${f.preparingRetry}")
+            f.checkExisting()
         }
     }
 
@@ -1012,6 +1031,7 @@ class CarLifeService : Service() {
     private val vehicleCandidates = java.util.concurrent.ConcurrentHashMap<String, VehicleCandidate>()
 
     private fun startDirect() {
+        _state.update { it.copy(carWifiRecoveryNeeded = false) }
         vehicleCandidates.clear()
         val revision = prefs.carLifeVehicleRevision
         wireless.reset()
@@ -1214,6 +1234,11 @@ class CarLifeService : Service() {
                 // be admitted between this last check and retiring the socket.
                 if (canRecoverMissingPeer(f, name, generation)) {
                     DiagLog.w(tag, "WiFi + BL: '$name' is still absent after four name requests; reopening the Bluetooth conversation")
+                    if (wireless.waitingForAddress) {
+                        DiagLog.w(tag, "WiFi + BL: the car requested an IP but no local group or peer appeared; " +
+                            "reopen CarLife on the car and check whether another projection is active")
+                        _state.update { it.copy(carWifiRecoveryNeeded = true) }
+                    }
                     bt.disconnect(generation)
                 }
                 null
@@ -1275,7 +1300,7 @@ class CarLifeService : Service() {
         _state.update {
             it.copy(
                 link = "", session = CarLifeSession.State.Idle, listening = false, aaOverlay = false,
-                mirroring = false, mirrorPackage = "", btCar = null, carWifi = null, wifiDirect = false,
+                mirroring = false, mirrorPackage = "", btCar = null, carWifi = null, wifiDirect = false, carWifiRecoveryNeeded = false,
                 beacon = false, step = "", refused = 0, waitingForShare = false, usb = false,
                 blocked = 0, hotspotClients = null, joinTimedOutSeconds = 0
             )
@@ -1292,7 +1317,7 @@ class CarLifeService : Service() {
         f.onVehicleIdentified = { confirmWirelessVehicle() }
         f.onJoined = { l ->
             wifiCommandGroup = null
-            _state.update { it.copy(joinTimedOutSeconds = 0) }
+            _state.update { it.copy(joinTimedOutSeconds = 0, carWifiRecoveryNeeded = false) }
             DiagLog.i(tag, "on the car's WiFi Direct group ${l.name.ifBlank { l.groupOwnerIp }} (${l.iface ?: "?"}, car ${if (l.weAreOwner) "joined this phone" else "at " + l.groupOwnerIp})")
             step("WiFi Direct connected")
             p2pIface = l.iface
@@ -1388,7 +1413,7 @@ class CarLifeService : Service() {
     private fun retry() {
         if (mode != 1 || wifiLink?.connected == true) return
         DiagLog.i(tag, "manual connection retry requested")
-        _state.update { it.copy(joinTimedOutSeconds = 0) }
+        _state.update { it.copy(joinTimedOutSeconds = 0, carWifiRecoveryNeeded = false) }
         startFinder()
         finder?.retry()
         updateBeacon()

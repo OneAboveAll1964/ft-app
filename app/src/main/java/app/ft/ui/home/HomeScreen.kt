@@ -455,12 +455,20 @@ private fun directSteps(
         StepItem(
             stringResource(if (carFound) R.string.step_car_found else R.string.tile_looking),
             carFound,
-            hint = if (running) car.carWifi?.let { stringResource(R.string.step_joining, it) } ?: stringResource(R.string.step_waiting_bt) else null
+            hint = when {
+                !running -> null
+                car.carWifiRecoveryNeeded -> stringResource(R.string.step_car_wifi_recovery)
+                else -> car.carWifi?.let { stringResource(R.string.step_joining, it) } ?: stringResource(R.string.step_waiting_bt)
+            }
         ),
         StepItem(
             stringResource(R.string.step_wifi_direct_connected),
             car.wifiDirect,
-            hint = if (running) car.carWifi?.let { stringResource(R.string.step_joining, it) } ?: stringResource(R.string.step_asking_car) else null
+            hint = when {
+                !running || car.wifiDirect -> null
+                car.carWifiRecoveryNeeded -> stringResource(R.string.step_car_wifi_recovery)
+                else -> car.carWifi?.let { stringResource(R.string.step_joining, it) } ?: stringResource(R.string.step_asking_car)
+            }
         ),
         StepItem(
             stringResource(R.string.step_on_car_screen),

@@ -186,6 +186,7 @@
     <string name="step_wifi_direct_connected">WiFi Direct متصل</string>
     <string name="step_joining">جارٍ الانضمام إلى %1$s</string>
     <string name="step_asking_car">نطلب من السيارة تشغيله</string>
+    <string name="step_car_wifi_recovery">لم يتصل Wi-Fi Direct بعد محاولات متكررة. افتح CarLife مجدداً على شاشة السيارة. إذا كان CarPlay نشطاً، فافصله وحاول الاتصال مجدداً.</string>
     <string name="step_waiting_car_connect">بانتظار اتصال السيارة</string>
     <string name="refused_hotspot">حاولت السيارة الاتصال عبر نقطة الاتصال، لكن FT مضبوط على WiFi + BL</string>
     <string name="refused_direct">حاولت السيارة الاتصال عبر WiFi Direct، لكن FT مضبوط على نقطة الاتصال</string>

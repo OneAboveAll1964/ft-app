@@ -187,6 +187,7 @@
     <string name="step_joining">Подключение к %1$s</string>
     <string name="step_asking_car">Просим автомобиль включить WiFi Direct</string>
     <string name="step_waiting_car_connect">Ожидание подключения автомобиля</string>
+    <string name="step_car_wifi_recovery">Wi-Fi Direct не подключился после повторных попыток. Заново откройте CarLife на магнитоле. Если активен CarPlay, отключите его и повторите подключение.</string>
     <string name="refused_hotspot">Автомобиль пытался подключиться через точку доступа, но в FT выбран режим «WiFi + BL»</string>
     <string name="refused_direct">Автомобиль пытался подключиться через WiFi Direct, но в FT выбран режим «Hotspot»</string>
     <string name="blocked_baidu">Baidu CarLife удерживает подключение автомобиля. Остановите его принудительно, чтобы автомобиль подключился к FT.</string>

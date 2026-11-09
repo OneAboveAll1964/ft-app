@@ -186,6 +186,7 @@
     <string name="step_wifi_direct_connected">WiFi Direct گرێدایە</string>
     <string name="step_joining">گرێ ددەت ب %1$s ڤە</string>
     <string name="step_asking_car">داخوازێ ژ ترومبێلێ دکەت ڤەکەت</string>
+    <string name="step_car_wifi_recovery">Wi-Fi Direct پشتی چەند هەوڵان گرێ نەدا. CarLife ل سەر شاشا ترومبێلێ جارەکا دی ڤەکە. ئەگەر CarPlay چالاکە، گرێدانا وێ ژێببە و جارەکا دی هەوڵ بدە.</string>
     <string name="step_waiting_car_connect">ل هیڤیا گرێدانا ترومبێلێ</string>
     <string name="refused_hotspot">ترومبێلێ هەول دا ب هۆتسپۆتێ گرێ بدەت، بەلێ FT ل سەر WiFi + BL هاتیە دانان</string>
     <string name="refused_direct">ترومبێلێ هەول دا ب WiFi Direct گرێ بدەت، بەلێ FT ل سەر هۆتسپۆتێ هاتیە دانان</string>

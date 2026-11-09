@@ -302,10 +302,62 @@ class CarLifeServiceRetryTest {
         verify(h.bt, never()).stop()
         verify(h.finder, never()).stop()
         verify(h.link, never()).stop()
+        assertFalse(h.state.value.carWifiRecoveryNeeded)
+    }
+
+    @Test fun missingAddressRequestsQueryTheCurrentGroupWithoutRestartingTheTransport() = startupCheck { h ->
+        `when`(h.wireless.waitingForAddress).thenReturn(true)
+        `when`(h.wireless.carWifiName).thenReturn("CarLife")
+        // This can simply be DHCP lag on an otherwise valid group.
+        `when`(h.finder.joined).thenReturn(true)
+        h.service.queueWirelessIpRequest()
+        runCurrent()
+        verify(h.finder).checkExisting()
+        verify(h.finder, never()).retry()
+        verify(h.bt, never()).disconnect(anyLong())
+        verify(h.wireless, never()).reset(anyBoolean())
+        assertFalse(h.state.value.carWifiRecoveryNeeded)
+    }
+
+    @Test fun aQueuedIpRequestCannotAffectAReplacementOrAlreadyRecoveredConnection() = startupCheck { h ->
+        val protect = listOf<() -> Unit>(
+            { `when`(h.bt.connectionGeneration).thenReturn(8L) },
+            { `when`(h.wireless.exchange).thenReturn(4L) },
+            { `when`(h.wireless.waitingForAddress).thenReturn(false) },
+            { `when`(h.link.connected).thenReturn(true) },
+            { set(h.service, "finder", mock(CarFinder::class.java)) }
+        )
+        for (guard in protect) {
+            set(h.service, "finder", h.finder)
+            `when`(h.bt.connectionGeneration).thenReturn(7L)
+            `when`(h.wireless.exchange).thenReturn(3L)
+            `when`(h.wireless.waitingForAddress).thenReturn(true)
+            `when`(h.link.connected).thenReturn(false)
+            h.service.queueWirelessIpRequest()
+            guard()
+            runCurrent()
+        }
+        verify(h.finder, never()).checkExisting()
+        verify(h.bt, never()).disconnect(anyLong())
+        assertFalse(h.state.value.carWifiRecoveryNeeded)
+    }
+
+    @Test fun anAbsentCarRequestingAnIpGetsAdviceOnlyAfterBoundedRecovery() = startupCheck { h ->
+        h.state.value = h.state.value.copy(carWifi = "CarLife")
+        `when`(h.wireless.waitingForAddress).thenReturn(true)
+        for (at in listOf(0L, 2_000L, 7_000L, 17_000L, 27_000L)) h.service.askCarAgain(at)
+        assertFalse(h.state.value.carWifiRecoveryNeeded)
+        h.service.askCarAgain(37_000L)
+        h.service.askCarAgain(100_000L)
+        assertTrue(h.state.value.carWifiRecoveryNeeded)
+        verify(h.bt).disconnect(7L)
+        verify(h.finder, never()).retry()
+        verify(h.link, never()).stop()
     }
 
     @Test fun recoveryCannotRetireBluetoothAfterAnyConnectionProgressOrReplacement() = startupCheck { h ->
         h.state.value = h.state.value.copy(carWifi = "CarLife")
+        `when`(h.wireless.waitingForAddress).thenReturn(true)
         val protect = listOf<() -> Unit>(
             { `when`(h.finder.inSight("CarLife")).thenReturn(true) },
             { `when`(h.finder.joined).thenReturn(true) },
@@ -329,6 +381,7 @@ class CarLifeServiceRetryTest {
             h.service.askCarAgain(37_000L)
         }
         verify(h.bt, never()).disconnect(anyLong())
+        assertFalse(h.state.value.carWifiRecoveryNeeded)
     }
 
     private fun anyWaiting(): () -> Boolean = any<() -> Boolean>() ?: { true }
@@ -354,7 +407,7 @@ class CarLifeServiceRetryTest {
         val watch = CarLifeStartupWatch()
         val peerWatch = WirelessPeerWatch()
         init {
-            state.value = state.value.copy(wifiDirect = false, waitingForShare = false)
+            state.value = state.value.copy(wifiDirect = false, waitingForShare = false, carWifiRecoveryNeeded = false)
             set(service, "tag", "CarLifeRetryTest")
             set(service, "mode", 1)
             set(service, "scope", scope.backgroundScope)

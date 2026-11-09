@@ -195,6 +195,7 @@
     <string name="step_joining">Joining %1$s</string>
     <string name="step_asking_car">Asking the car to turn it on</string>
     <string name="step_waiting_car_connect">Waiting for the car to connect</string>
+    <string name="step_car_wifi_recovery">Wi-Fi Direct did not connect after repeated attempts. Reopen CarLife on the car. If CarPlay is active, disconnect it and try again.</string>
     <string name="refused_hotspot">The car tried the hotspot, but FT is set to WiFi + BL</string>
     <string name="refused_direct">The car tried WiFi Direct, but FT is set to Hotspot</string>
     <string name="blocked_baidu">Baidu CarLife is holding the car\'s connection. Force stop it so the car reaches FT.</string>

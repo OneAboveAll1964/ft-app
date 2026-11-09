@@ -186,6 +186,7 @@
     <string name="step_wifi_direct_connected">WiFi Direct پەیوەستە</string>
     <string name="step_joining">پەیوەست دەبێت بە %1$s</string>
     <string name="step_asking_car">داوا لە ئۆتۆمبێلەکە دەکات هەڵیبکات</string>
+    <string name="step_car_wifi_recovery">Wi-Fi Direct دوای چەند هەوڵێک پەیوەست نەبوو. CarLife لەسەر شاشەی ئۆتۆمبێلەکە دووبارە بکەرەوە. ئەگەر CarPlay چالاکە، پەیوەندییەکەی بپچڕێنە و دووبارە هەوڵ بدەرەوە.</string>
     <string name="step_waiting_car_connect">چاوەڕێی پەیوەستبوونی ئۆتۆمبێلەکە</string>
     <string name="refused_hotspot">ئۆتۆمبێلەکە هەوڵی دا بە هۆتسپۆت پەیوەست ببێت، بەڵام FT لەسەر WiFi + BL دانراوە</string>
     <string name="refused_direct">ئۆتۆمبێلەکە هەوڵی دا بە WiFi Direct پەیوەست ببێت، بەڵام FT لەسەر هۆتسپۆت دانراوە</string>

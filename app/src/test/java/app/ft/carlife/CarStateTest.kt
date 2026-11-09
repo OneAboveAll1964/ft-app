@@ -49,11 +49,12 @@ class CarStateTest {
     }
 
     @Test fun sessionProgressReplacesTheOldBluetoothDiagnostic() {
-        val waitingState = CarState(step = waiting, refused = 1)
+        val waitingState = CarState(step = waiting, refused = 1, carWifiRecoveryNeeded = true)
         val linked = waitingState.withSessionState(CarLifeSession.State.Linked("WiFi"), "WiFi")
         assertEquals("CarLife connected via WiFi", linked.step)
         assertEquals("WiFi", linked.link)
         assertEquals(0, linked.refused)
+        assertFalse(linked.carWifiRecoveryNeeded)
         assertTrue(linked.carFound)
 
         val negotiated = linked.withSessionState(
