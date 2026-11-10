@@ -37,6 +37,8 @@ class CarDisplay(private val context: Context) {
         if (t != null) deliver(t)
     }
     @Volatile private var frameIntervalMs = 33L
+    private var requestedFrameRate = 30
+    private var frameRateCap = 0
     private val ticker = object : Runnable {
         override fun run() {
             val p = presentation ?: return
@@ -79,7 +81,8 @@ class CarDisplay(private val context: Context) {
                     ) {
                         DiagLog.w(tag, "H264 ASYNC_RETRY candidate=${next + 1}/${failed.candidateCount} format=${plan.streamWidth}x${plan.streamHeight}@${plan.fps}")
                         runCatching {
-                            start(plan, onConfig, onFrame, onTimedFrame, onFailure, next, content)
+                            // Preserve a rate reduced by the car or thermal protection.
+                            start(plan.copy(fps = requestedFrameRate), onConfig, onFrame, onTimedFrame, onFailure, next, content)
                         }.onFailure { retryError ->
                             stop()
                             DiagLog.e(tag, "H264 retry display rebind failed", retryError)
@@ -92,7 +95,8 @@ class CarDisplay(private val context: Context) {
                 }
             }
         }
-        val fps = plan.fps
+        requestedFrameRate = plan.fps.coerceIn(1, 60)
+        val fps = VideoPlans.withinCap(requestedFrameRate, frameRateCap)
         val savePower = FTApp.instance.prefs.encoderSavePower
         width = plan.contentWidth
         height = plan.contentHeight
@@ -123,7 +127,7 @@ class CarDisplay(private val context: Context) {
         val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
         val vd = dm.createVirtualDisplay("FT", width, height, density, surface, flags)
         virtualDisplay = vd
-        video = plan
+        video = plan.copy(fps = fps)
         onVideoChanged?.invoke(video)
         DiagLog.i(tag, "virtual display ${width}x${height} dpi=$density id=${vd.display.displayId}")
         main.post {
@@ -162,8 +166,22 @@ class CarDisplay(private val context: Context) {
         gate?.wake(WAKE_MS)
     }
 
+    @Synchronized
     fun setFrameRate(fps: Int) {
-        val f = fps.coerceIn(1, 120)
+        requestedFrameRate = fps.coerceIn(1, 60)
+        applyFrameRate()
+    }
+
+    // A temporary projection cap must not overwrite the car/thermal rate to restore.
+    // Keep it across encoder restarts; the projection owner clears it on hiding AA.
+    @Synchronized
+    fun setFrameRateCap(fps: Int) {
+        frameRateCap = if (fps > 0) fps.coerceIn(1, 60) else 0
+        applyFrameRate()
+    }
+
+    private fun applyFrameRate() {
+        val f = VideoPlans.withinCap(requestedFrameRate, frameRateCap)
         val interval = (1000L / f).coerceAtLeast(8L)
         if (interval == frameIntervalMs) return
         frameIntervalMs = interval

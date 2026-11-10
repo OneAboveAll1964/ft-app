@@ -3,6 +3,7 @@ package app.ft.projection
 import android.content.Context
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.MediaCodec
 import android.os.Handler
 import android.view.Display
 import android.view.Surface
@@ -85,10 +86,45 @@ class CarDisplayTest {
         verify(f.vd, times(1)).release()
     }
 
+    @Test fun aaCapAppliesAtStartupAndRestoresLatestCarRate() = fixture { f ->
+        f.car.setFrameRateCap(30)
+        f.start(60)
+        assertEquals(30, f.encoderRates.single())
+        verify(f.gates().single()).start(30)
+        assertEquals(30, f.video?.fps)
+        f.car.setFrameRate(50)
+        assertEquals(30, f.video?.fps)
+        f.car.setFrameRateCap(0)
+        assertEquals(50, f.video?.fps)
+        verify(f.gates().single()).setRate(50)
+    }
+
+    @Test fun aaCapCannotRaiseThermallyLimitedRateAndSurvivesEncoderRestart() = fixture { f ->
+        f.car.setFrameRateCap(30)
+        f.start(60)
+        f.car.setFrameRate(24)
+        assertEquals(24, f.video?.fps)
+        f.car.setFrameRateCap(0)
+        assertEquals(24, f.video?.fps)
+        f.car.setFrameRateCap(30)
+        f.encoderFailures.last().invoke(mock(MediaCodec.CodecException::class.java))
+        f.runMain()
+        assertEquals(listOf(30, 24), f.encoderRates)
+        assertEquals(24, f.video?.fps)
+        f.car.setFrameRateCap(0)
+        assertEquals(24, f.video?.fps)
+        f.car.setFrameRate(60)
+        assertEquals(60, f.video?.fps)
+    }
+
     private class Fixture(val car: CarDisplay, val vd: VirtualDisplay,
-                          val queue: ArrayDeque<Runnable>, val presentations: () -> List<CarPresentation>) {
+                          val queue: ArrayDeque<Runnable>, val encoderRates: List<Int>,
+                          val encoderFailures: List<(Throwable) -> Unit>,
+                          val gates: () -> List<FrameGate>, val presentations: () -> List<CarPresentation>) {
         var failure: Throwable? = null
-        fun start() = car.start(VideoPlan(800, 480, 800, 480, 30, 3_000_000), {}, { _, _ -> },
+        var video: VideoPlan? = null
+        init { car.onVideoChanged = { video = it } }
+        fun start(fps: Int = 30) = car.start(VideoPlan(800, 480, 800, 480, fps, 3_000_000), {}, { _, _ -> },
             onFailure = { failure = it }, content = {})
         fun runMain() { while (queue.isNotEmpty()) queue.removeFirst().run() }
     }
@@ -107,6 +143,8 @@ class CarDisplayTest {
         `when`(context.getSystemService(Context.DISPLAY_SERVICE)).thenReturn(manager)
         `when`(manager.createVirtualDisplay(anyString(), anyInt(), anyInt(), anyInt(), any(Surface::class.java), anyInt())).thenReturn(vd)
         val queue = ArrayDeque<Runnable>()
+        val encoderRates = ArrayList<Int>()
+        val encoderFailures = ArrayList<(Throwable) -> Unit>()
         try {
             mockConstruction(Handler::class.java) { handler, _ ->
                 `when`(handler.post(any(Runnable::class.java))).thenAnswer {
@@ -114,18 +152,25 @@ class CarDisplayTest {
                 }
             }.use {
                 mockConstruction(DrawWatch::class.java).use {
-                    mockConstruction(SurfaceEncoder::class.java) { encoder, _ ->
+                    mockConstruction(SurfaceEncoder::class.java) { encoder, construction ->
+                        encoderRates.add(construction.arguments()[2] as Int)
+                        @Suppress("UNCHECKED_CAST")
+                        val failure = construction.arguments()[11] as (Throwable) -> Unit
+                        encoderFailures.add(failure)
+                        `when`(encoder.selectedCandidateIndex).thenReturn(0)
+                        `when`(encoder.candidateCount).thenReturn(2)
                         `when`(encoder.surface).thenReturn(surface)
                     }.use {
                         mockConstruction(FrameGate::class.java) { gate, _ ->
                             `when`(gate.start(anyInt())).thenReturn(true)
                             `when`(gate.input).thenReturn(surface)
-                        }.use {
+                        }.use { gates ->
                             mockConstruction(CarPresentation::class.java) { p, _ ->
                                 if (failShow) doThrow(IllegalStateException("display vanished")).`when`(p).show()
                                 else if (onShow != null) doAnswer { onShow(); null }.`when`(p).show()
                             }.use { presentations ->
-                                val f = Fixture(CarDisplay(context), vd, queue) { presentations.constructed() }
+                                val f = Fixture(CarDisplay(context), vd, queue, encoderRates, encoderFailures,
+                                    { gates.constructed() }, { presentations.constructed() })
                                 try { test(f) } finally { f.car.stop(); f.runMain() }
                             }
                         }

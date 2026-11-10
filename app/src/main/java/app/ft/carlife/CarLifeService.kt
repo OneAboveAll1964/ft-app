@@ -1297,6 +1297,7 @@ class CarLifeService : Service() {
         busyPorts.clear()
         pendingLaunch = null
         carDisplay.stop()
+        carDisplay.setFrameRateCap(0)
         _state.update {
             it.copy(
                 link = "", session = CarLifeSession.State.Idle, listening = false, aaOverlay = false,
@@ -1709,6 +1710,7 @@ class CarLifeService : Service() {
         aaAutoLaunched = false
         autoOpened = false
         _state.update { it.copy(aaOverlay = false) }
+        carDisplay.setFrameRateCap(0)
         updateNotification(waitingNote())
     }
 
@@ -1784,7 +1786,6 @@ class CarLifeService : Service() {
         if (prefs.aaWidth == size.first && prefs.aaHeight == size.second) return
         prefs.aaWidth = size.first
         prefs.aaHeight = size.second
-        if (size.third > 0) prefs.aaFps = size.third
         DiagLog.i(tag, "Android Auto will draw at the car's own ${size.first}x${size.second}")
     }
 
@@ -2329,6 +2330,7 @@ class CarLifeService : Service() {
         if (_state.value.aaOverlay != on) aaGestureViewport.reset()
         if (on) mirrorStop()
         _state.update { it.copy(aaOverlay = on) }
+        carDisplay.setFrameRateCap(if (on) prefs.aaFps else 0)
         DiagLog.i(tag, "android auto overlay ${if (on) "on" else "off"}")
     }
 
@@ -2417,6 +2419,7 @@ class CarLifeService : Service() {
         if (ticket != launchTicket.get()) return
         aaGestureViewport.reset() // AA -> mirror may occur without a touch event.
         _state.update { it.copy(aaOverlay = false, mirroring = true, mirrorPackage = pkg) }
+        carDisplay.setFrameRateCap(0)
         watchTurning()
         mirrorJob?.cancel()
         mirrorJob = scope.launch {

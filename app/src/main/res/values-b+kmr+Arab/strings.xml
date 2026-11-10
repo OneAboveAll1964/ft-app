@@ -54,6 +54,7 @@
     <string name="aa_width">پانیا ڤیدیۆیێ</string>
     <string name="aa_height">بلندیا ڤیدیۆیێ</string>
     <string name="aa_fps">رێژەیا فرەیمان</string>
+    <string name="aa_fps_body">د دەمێ دیاربوونا Android Auto دا رێژەیا فرەیمێن ناردنێ بۆ ترومبێلێ ژی سنووردار دکەت. 30 FPS بارێ کەم دکەت؛ 60 FPS جوولەکا نەرمتر ددەت. د پەیوەندیا داهاتی یا Android Auto دا دهێتە جێبەجێکرن.</string>
     <string name="aa_density">خەستیا پیکسلان</string>
     <string name="action_add">زێدەکرن</string>
     <string name="action_allow">رێ بدە</string>
@@ -131,7 +132,7 @@
     <string name="picture_min_fps">کێمترین رێژەیا فرەیمان یا دهێتە وەرگرتن، 0 ب واتا بێ سنوور</string>
     <string name="picture_density">زەلالیا ئەپان ل سەر شاشەیا ترومبێلێ</string>
     <string name="picture_save_power">بهێلە ئینکۆدەرێ ڤیدیۆیێ وزەیێ پاشەکەفت بکەت</string>
-    <string name="picture_save_power_body">ئینکۆدەرێ ڤیدیۆیێ یێ مۆبایلی ب رێژەیا فرەیمێن وێنەی کار دکەت، نە ب هەمی لەزا خوە. بەلکی مۆبایل د رێکێن درێژ دا کێمتر گەرم ببیت، بەلێ شاشەیا ترومبێلێ دێ پیچەکێ درەنگتر بەرسڤا دەست لێدانێ دەت.</string>
+    <string name="picture_save_power_body">د دەستپێکا ئینکۆدەری و گوهۆڕینا FPS دا ژێدەر بۆ رێژەیا فرەیمێن هەلبژارتی دخوازیت. پاراستنا وزەیێ و درەنگیا دەستلێدانێ ب مۆبایلی ڤە گرێدایینە. د پەیوەندیا داهاتی یا پیشاندانێ دا دهێتە جێبەجێکرن.</string>
     <string name="picture_at_defaults">هەر ل سەر رێکخستنێن بنەرەتی یە</string>
     <string name="picture_reset">هەمی تشتان بزڤرینە بۆ رێکخستنێن بنەرەتی</string>
     <string name="corner_title">دوگما FT ل سەر شاشەیا ترومبێلێ</string>

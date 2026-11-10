@@ -230,9 +230,15 @@ class AudioCaptureTest {
         val finishNewRead = CountDownLatch(1)
         val resetFinished = CountDownLatch(1)
         val oldReader = java.util.concurrent.atomic.AtomicReference<Thread>()
+        val oldStopped = CountDownLatch(1)
+        val oldReads = AtomicInteger()
+        doAnswer { oldStopped.countDown(); null }.`when`(oldRecord).stop()
         val delivered = AtomicInteger()
         `when`(oldRecord.read(any(ByteArray::class.java), anyInt(), anyInt())).thenAnswer {
             oldReader.set(Thread.currentThread())
+            // Do not rely on monitor fairness after the blocked callback returns.
+            // A late second read completes only after reset has stopped its owner.
+            if (oldReads.incrementAndGet() > 1) await(oldStopped)
             val bytes = it.arguments[0] as ByteArray
             bytes[0] = 1
             bytes[1] = 0
@@ -272,6 +278,7 @@ class AudioCaptureTest {
         } finally {
             finishCallback.countDown()
             finishNewRead.countDown()
+            oldStopped.countDown()
             capture.stop()
             reset.join(5000)
         }

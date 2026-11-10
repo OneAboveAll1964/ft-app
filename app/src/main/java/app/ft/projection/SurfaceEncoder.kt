@@ -44,6 +44,7 @@ class SurfaceEncoder(
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private var codec: MediaCodec? = null
+    @Volatile private var operatingRateHintEnabled = false
     private var lateNoted = 0L
     var surface: Surface? = null
         private set
@@ -56,33 +57,45 @@ class SurfaceEncoder(
         sawSps.set(false)
         sawPps.set(false)
         selectedCandidateIndex = -1
+        operatingRateHintEnabled = false
         val t = HandlerThread("FT-Encoder").also { it.start() }
         thread = t
         val h = Handler(t.looper)
         handler = h
-        // Start from portable AVC Surface input. Never force a guessed AVC level
-        // or an absurd operating rate before the first encoded frame.
+        // Optional resource-planning hint; retry the same portable AVC candidate
+        // without it if the vendor rejects it. Never force a guessed AVC level.
         // Bounded attempts. Each fallback keeps the exact RTSP-agreed stream geometry.
         val candidates = encoders().flatMap { codecName ->
             listOf("minimal", "baseline").map { label -> codecName to label }
-        }.take(MAX_CANDIDATES)
+        }.take(MAX_CANDIDATES).flatMap { (name, label) ->
+            // Keep the portable retry as a numbered candidate, including when
+            // the hint is rejected asynchronously after configure/start return.
+            (if (savePower) listOf(true, false) else listOf(false)).map { rateHint ->
+                Triple(name, label, rateHint)
+            }
+        }
         candidateCount = candidates.size
         for ((index, candidate) in candidates.withIndex()) {
             if (index < startCandidateIndex) continue
-            val (name, label) = candidate
-            val format = minimal(baseline = label == "baseline")
+            val (name, label, rateHint) = candidate
+            val format = minimal(baseline = label == "baseline").apply {
+                if (rateHint) setFloat(MediaFormat.KEY_OPERATING_RATE, fps.toFloat())
+            }
             val c = runCatching { MediaCodec.createByCodecName(name) }.getOrNull() ?: continue
+            val attemptActive = AtomicBoolean(true)
             try {
-                c.setCallback(callback(), h)
+                c.setCallback(callback(attemptActive), h)
                 c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 surface = c.createInputSurface()
                 c.start()
                 codec = c
+                operatingRateHintEnabled = rateHint
                 selectedCandidateIndex = index
-                DiagLog.i(tag, "codec STARTED_PENDING_OUTPUT name=${c.name} candidate=${index + 1}/${candidateCount} format=${width}x${height}@$fps bitrate=$bitrate CBR=$constantBitrate profile=$label; SPS/PPS/IDR not yet proven")
+                DiagLog.i(tag, "codec STARTED_PENDING_OUTPUT name=${c.name} candidate=${index + 1}/${candidateCount} format=${width}x${height}@$fps bitrate=$bitrate CBR=$constantBitrate profile=$label rateHint=$rateHint; SPS/PPS/IDR not yet proven")
                 return
             } catch (t: Throwable) {
-                DiagLog.w(tag, "codec CONFIGURE_REJECTED name=$name candidate=${index + 1}/${candidateCount} mode=$label error=${t.javaClass.simpleName}")
+                attemptActive.set(false)
+                DiagLog.w(tag, "codec CONFIGURE_REJECTED name=$name candidate=${index + 1}/${candidateCount} mode=$label rateHint=$rateHint error=${t.javaClass.simpleName}")
                 runCatching { surface?.release() }
                 surface = null
                 runCatching { c.release() }
@@ -129,10 +142,11 @@ class SurfaceEncoder(
         if (baseline) setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
     }
 
-    private fun callback() = object : MediaCodec.Callback() {
+    private fun callback(attemptActive: AtomicBoolean) = object : MediaCodec.Callback() {
             override fun onInputBufferAvailable(codec: MediaCodec, index: Int) = Unit
 
             override fun onOutputBufferAvailable(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
+                if (!attemptActive.get()) return
                 try {
                     val buf = codec.getOutputBuffer(index) ?: return
                     if (info.size <= 0) return
@@ -164,7 +178,7 @@ class SurfaceEncoder(
                         }
                     }
                 } catch (t: Throwable) {
-                    if (running.get() && asyncFailed.compareAndSet(false, true)) {
+                    if (attemptActive.get() && running.get() && asyncFailed.compareAndSet(false, true)) {
                         DiagLog.e(tag, "codec OUTPUT_CALLBACK_FAILURE candidate=${selectedCandidateIndex + 1}/$candidateCount sps=${sawSps.get()} pps=${sawPps.get()}", t)
                         onFailure?.invoke(t)
                     }
@@ -174,11 +188,13 @@ class SurfaceEncoder(
             }
 
             override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {
+                if (!attemptActive.get()) return
                 DiagLog.e(tag, "codec ASYNC_FAILURE name=${codec.name} errorCode=${e.errorCode} recoverable=${e.isRecoverable} transient=${e.isTransient} candidate=${selectedCandidateIndex + 1}/$candidateCount; retry candidate in same projection if available", e)
                 if (running.get() && asyncFailed.compareAndSet(false, true)) onFailure?.invoke(e)
             }
 
             override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
+                if (!attemptActive.get()) return
                 val out = ByteArrayOutputStream()
                 listOf("csd-0", "csd-1").forEach { k ->
                     format.getByteBuffer(k)?.let { b ->
@@ -218,11 +234,11 @@ class SurfaceEncoder(
     }
 
     fun setOperatingRate(fps: Int) {
-        if (!savePower) return
+        if (!operatingRateHintEnabled) return
         val rate = fps.coerceIn(1, 60)
         val activeCodec = codec ?: return
         handler?.post {
-            if (!running.get() || codec !== activeCodec) return@post
+            if (!running.get() || codec !== activeCodec || !operatingRateHintEnabled) return@post
             runCatching {
                 activeCodec.setParameters(Bundle().apply {
                     putFloat(MediaFormat.KEY_OPERATING_RATE, rate.toFloat())
@@ -241,6 +257,7 @@ class SurfaceEncoder(
         val ownedCodec = codec
         val ownedSurface = surface
         codec = null
+        operatingRateHintEnabled = false
         surface = null
         handler = null
         runCatching { ownedCodec?.stop() }

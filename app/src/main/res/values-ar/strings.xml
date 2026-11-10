@@ -54,6 +54,7 @@
     <string name="aa_width">عرض الفيديو</string>
     <string name="aa_height">ارتفاع الفيديو</string>
     <string name="aa_fps">معدل الإطارات</string>
+    <string name="aa_fps_body">يحد أيضًا من معدل البث إلى السيارة أثناء ظهور Android Auto. يقلل 30 FPS المعالجة، ويوفر 60 FPS حركة أكثر سلاسة. يُطبّق عند اتصال Android Auto التالي.</string>
     <string name="aa_density">كثافة البكسل</string>
     <string name="action_add">إضافة</string>
     <string name="action_allow">سماح</string>
@@ -131,7 +132,7 @@
     <string name="picture_min_fps">أدنى معدل إطارات مقبول، و0 يعني بلا حد أدنى</string>
     <string name="picture_density">وضوح التطبيقات على شاشة السيارة</string>
     <string name="picture_save_power">توفير طاقة مرمّز الفيديو</string>
-    <string name="picture_save_power_body">يعمل مرمّز الفيديو في الهاتف بمعدل إطارات الصورة بدلًا من سرعته القصوى. قد يبقى الهاتف أبرد في الرحلات الطويلة، لكن شاشة السيارة قد تستجيب للمس متأخرة قليلًا.</string>
+    <string name="picture_save_power_body">يطلب موارد تناسب معدل الإطارات المحدد عند بدء المرمّز وعند تغيير المعدل. يعتمد توفير الطاقة وتأخر اللمس على الهاتف. يُطبّق عند اتصال العرض التالي.</string>
     <string name="picture_at_defaults">الإعدادات الافتراضية مطبّقة بالفعل</string>
     <string name="picture_reset">إعادة كل شيء إلى الإعدادات الافتراضية</string>
     <string name="corner_title">زر FT على شاشة السيارة</string>

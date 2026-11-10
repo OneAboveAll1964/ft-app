@@ -313,6 +313,7 @@ private fun PageContent(page: SettingsPage) {
                 listOf(Option("30"), Option("60")),
                 if (fps == 60) 1 else 0
             ) { index -> fps = if (index == 1) 60 else 30; p.aaFps = fps }
+            Text(stringResource(R.string.aa_fps_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             IntSetting(stringResource(R.string.aa_density), p.aaDensity) { p.aaDensity = it }
         }
         SettingsPage.ADVANCED -> {

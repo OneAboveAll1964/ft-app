@@ -55,6 +55,7 @@
     <string name="aa_width">Video width</string>
     <string name="aa_height">Video height</string>
     <string name="aa_fps">Frame rate</string>
+    <string name="aa_fps_body">Also limits the stream to the car while Android Auto is visible. 30 FPS reduces processing; 60 FPS gives smoother motion. Applied on the next Android Auto connection.</string>
     <string name="aa_density">Density</string>
     <string name="action_add">Add</string>
     <string name="action_allow">Allow</string>
@@ -139,7 +140,7 @@
     <string name="picture_min_fps">Lowest frame rate to accept, 0 means no floor</string>
     <string name="picture_density">Sharpness of apps on the car screen</string>
     <string name="picture_save_power">Let the video encoder save power</string>
-    <string name="picture_save_power_body">The phone\'s video encoder runs at the picture\'s frame rate instead of full speed. The phone may stay cooler on long drives, but the car screen may answer touches a little later.</string>
+    <string name="picture_save_power_body">Requests resources for the selected FPS at encoder startup and when FPS changes. Savings and touch latency depend on the phone. Applied on the next projection connection.</string>
     <string name="picture_at_defaults">Already at the defaults</string>
     <string name="picture_reset">Put everything back to the defaults</string>
     <string name="corner_title">FT button on the car</string>

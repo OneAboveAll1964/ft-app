@@ -125,6 +125,57 @@ class AaVideoDecoderTest {
     }
 
 
+    @Test fun packetWindowExcludesHeaderAndSuffixAndFitsSmallerCodecBuffer() {
+        val codec = mock(MediaCodec::class.java)
+        val format = mock(MediaFormat::class.java)
+        val input = java.nio.ByteBuffer.allocate(8)
+        // Only the payload fits this slot; the full packet must never be submitted.
+        input.position(6)
+        input.limit(7)
+        `when`(codec.dequeueInputBuffer(anyLong())).thenReturn(0)
+        `when`(codec.getInputBuffer(0)).thenReturn(input)
+        `when`(codec.dequeueOutputBuffer(
+            any(MediaCodec.BufferInfo::class.java), anyLong()
+        )).thenAnswer {
+            Thread.sleep(2)
+            MediaCodec.INFO_TRY_AGAIN_LATER
+        }
+        mockStatic(MediaFormat::class.java).use { formats ->
+            formats.`when`<MediaFormat> {
+                MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1280, 720)
+            }.thenReturn(format)
+            mockStatic(MediaCodec::class.java).use { codecs ->
+                codecs.`when`<MediaCodec> {
+                    MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+                }.thenReturn(codec)
+                val decoder = AaVideoDecoder(1280, 720)
+                try {
+                    decoder.setSurface(mock(Surface::class.java))
+                    decoder.onConfig(byteArrayOf(0, 0, 1, 103))
+                    val frame = byteArrayOf(0, 0, 1, 65, 7)
+                    val packet = ByteArray(8) { 99 } + frame + byteArrayOf(88, 88)
+                    decoder.onFrame(packet, 1234L, offset = 8, length = frame.size)
+                    packet.fill(0) // The decoder must finish consuming the window before returning.
+                    verify(codec).queueInputBuffer(0, 0, frame.size, 1234L, 0)
+                    assertArrayEquals(frame, input.array().copyOfRange(0, frame.size))
+                } finally {
+                    decoder.reset()
+                }
+            }
+        }
+    }
+
+
+    @Test fun invalidPacketWindowsAreRejectedBeforeCodecUse() {
+        val decoder = AaVideoDecoder(1280, 720)
+        val packet = ByteArray(12)
+        listOf(-1 to 1, 0 to -1, 13 to 0, 8 to 5, Int.MAX_VALUE to 1, 1 to Int.MAX_VALUE).forEach { (offset, length) ->
+            assertThrows(IllegalArgumentException::class.java) {
+                decoder.onFrame(packet, 42L, offset, length)
+            }
+        }
+    }
+
     @Test fun stopMustNotReleaseCodecWhileOutputBufferIsBeingRendered() {
         val releaseEntered = CountDownLatch(1)
         val resetEntered = CountDownLatch(1)

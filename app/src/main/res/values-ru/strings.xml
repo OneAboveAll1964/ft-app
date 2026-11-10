@@ -54,6 +54,7 @@
     <string name="aa_width">Ширина видео</string>
     <string name="aa_height">Высота видео</string>
     <string name="aa_fps">Частота кадров</string>
+    <string name="aa_fps_body">Также ограничивает частоту потока в автомобиль, пока открыт Android Auto. 30 FPS снижает нагрузку, 60 FPS даёт более плавную картинку. Применяется при следующем подключении Android Auto.</string>
     <string name="aa_density">Плотность интерфейса, dpi</string>
     <string name="action_add">Добавить</string>
     <string name="action_allow">Разрешить</string>
@@ -131,7 +132,7 @@
     <string name="picture_min_fps">Минимальная частота кадров, 0 — без ограничения</string>
     <string name="picture_density">Масштаб интерфейса приложений, dpi</string>
     <string name="picture_save_power">Экономить энергию видеокодировщика</string>
-    <string name="picture_save_power_body">Видеокодировщик телефона работает с частотой кадров изображения, а не на полной скорости. В долгих поездках телефон может меньше нагреваться, но экран автомобиля может чуть позже отвечать на касания.</string>
+    <string name="picture_save_power_body">При запуске кодировщика и изменении FPS запрашивает ресурсы под выбранную частоту кадров. Экономия и задержка касаний зависят от телефона. Применяется при следующем подключении проекции.</string>
     <string name="picture_at_defaults">Уже установлены значения по умолчанию</string>
     <string name="picture_reset">Вернуть значения по умолчанию</string>
     <string name="corner_title">Кнопка FT на экране автомобиля</string>

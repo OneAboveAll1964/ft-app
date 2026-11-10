@@ -403,7 +403,6 @@ class IccoaProjection(
             val (width, height) = IccoaAaSize.fit(display.width, display.height)
             prefs.aaWidth = width
             prefs.aaHeight = height
-            prefs.aaFps = state.value.fps
             DiagLog.i("ICCOA", "AA active size=${width}x$height for car=${display.width}x${display.height}")
         }
         ownsAa = true
@@ -418,6 +417,7 @@ class IccoaProjection(
                 if (mutableState.value.aaOverlay != aa.showProjection) {
                     DiagLog.i("ICCOA", "AA visible=${aa.showProjection} connected=$connected focus=${aa.videoFocus}")
                     mutableState.update { it.copy(aaOverlay = aa.showProjection) }
+                    display.setFrameRateCap(if (aa.showProjection) prefs.aaFps else 0)
                 }
                 if (lastConnected != connected) {
                     lastConnected = connected
@@ -458,6 +458,7 @@ class IccoaProjection(
         }
         ownsAa = false
         mutableState.update { it.copy(aaOverlay = false) }
+        display.setFrameRateCap(0)
         onAaConnectionChanged(false)
     }
 

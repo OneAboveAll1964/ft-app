@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 181
-        versionName = "3.9.66-carlife-diagnostics"
+        versionCode = 182
+        versionName = "3.9.67-aa-energy"
     }
 
     signingConfigs {

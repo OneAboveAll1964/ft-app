@@ -89,6 +89,7 @@ class FrameGate(
 
     fun setRate(fps: Int) {
         intervalNs = 1_000_000_000L / fps.coerceIn(1, 60)
+        handler?.post { requestDraw() }
     }
 
     fun redraw() {
@@ -172,7 +173,9 @@ class FrameGate(
         if (wait <= SLACK_NS) {
             h.removeCallbacks(tick)
             draw()
-        } else if (!h.hasCallbacks(tick)) {
+        } else {
+            // A fresh frame or touch replaces a distant idle keepalive deadline.
+            h.removeCallbacks(tick)
             h.postDelayed(tick, (wait + 999_999) / 1_000_000)
         }
     }
@@ -187,12 +190,7 @@ class FrameGate(
             return
         }
         if (!fresh) {
-            empty++
-            if (empty > IDLE_TICKS && empty % IDLE_EVERY != 0 && System.nanoTime() >= awakeUntilNs) {
-                h.removeCallbacks(tick)
-                h.postDelayed(tick, intervalNs / 1_000_000)
-                return
-            }
+            empty = (empty + 1).coerceAtMost(IDLE_TICKS)
         }
         draw()
     }
@@ -230,7 +228,9 @@ class FrameGate(
         fresh = false
         lastNs = now
         h.removeCallbacks(tick)
-        h.postDelayed(tick, intervalNs / 1_000_000)
+        // Sleep between keepalives instead of waking at full FPS to skip work.
+        val delayNs = intervalNs * if (empty >= IDLE_TICKS && now >= awakeUntilNs) IDLE_EVERY else 1
+        h.postDelayed(tick, (delayNs + 999_999) / 1_000_000)
         if (now - reportedNs >= REPORT_NS) {
             DiagLog.i(tag, "last ${(now - reportedNs) / 1_000_000_000}s at ${1_000_000_000L / intervalNs} fps: $newFrames new frames sent, $repeats repeats, $skipped skipped")
             newFrames = 0

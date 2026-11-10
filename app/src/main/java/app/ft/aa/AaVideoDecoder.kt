@@ -110,7 +110,9 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         }
     }
 
-    fun onFrame(data: ByteArray, ptsUs: Long) {
+    // Consumes the selected bytes synchronously; the session may reuse data after return.
+    fun onFrame(data: ByteArray, ptsUs: Long, offset: Int = 0, length: Int = data.size - offset) {
+        require(offset >= 0 && length >= 0 && offset <= data.size && length <= data.size - offset)
         synchronized(lock) {
             if (!running.get()) {
                 if (surface != null && config != null) startLocked()
@@ -124,7 +126,7 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
                 stopLocked()
                 return
             }
-            feedLocked(data, false, ptsUs)
+            feedLocked(data, false, ptsUs, offset, length)
         }
     }
 
@@ -165,7 +167,10 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
         }
     }
 
-    private fun feedLocked(data: ByteArray, isConfig: Boolean, ptsUs: Long = 0L) {
+    private fun feedLocked(
+        data: ByteArray, isConfig: Boolean, ptsUs: Long = 0L,
+        offset: Int = 0, length: Int = data.size - offset
+    ) {
         val c = codec ?: return
         var slot = -1
         var given = false
@@ -177,14 +182,14 @@ class AaVideoDecoder(private val width: Int, private val height: Int) {
             // Capacity, not pre-clear remaining(), determines whether the
             // complete H.264 access unit fits after resetting its window.
             buf?.clear()
-            if (buf == null || data.size > buf.remaining()) {
-                if (buf != null) DiagLog.w(tag, "a ${data.size} byte picture did not fit the decoder, skipping it")
+            if (buf == null || length > buf.remaining()) {
+                if (buf != null) DiagLog.w(tag, "a ${length} byte picture did not fit the decoder, skipping it")
                 c.queueInputBuffer(slot, 0, 0, ptsUs, 0)
                 given = true
                 return
             }
-            buf.put(data)
-            c.queueInputBuffer(slot, 0, data.size, ptsUs, if (isConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0)
+            buf.put(data, offset, length)
+            c.queueInputBuffer(slot, 0, length, ptsUs, if (isConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0)
             given = true
         } catch (t: Throwable) {
             DiagLog.e(tag, "feed failed", t)
