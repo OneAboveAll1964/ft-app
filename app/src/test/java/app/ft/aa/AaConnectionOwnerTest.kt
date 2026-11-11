@@ -40,13 +40,13 @@ class AaConnectionOwnerTest {
         owner.stop()
         assertFalse(owner.attach(token, { error("shutdown must invalidate the dial") }, {}))
         val secondRun = owner.start()
-        assertNull(owner.idleGeneration(firstRun)) // An old accept resumed after restart.
+        assertNull(owner.idleGeneration(firstRun))
         assertFalse(owner.withRun(firstRun) { fail("old listener published its server") })
         val session = Any()
         owner.attach(owner.idleGeneration(secondRun)!!, { session }, {})
         assertSame(session, owner.stop())
         val thirdRun = owner.start()
-        assertNull(owner.idleGeneration(thirdRun)) // close() has not finished its cleanup yet.
+        assertNull(owner.idleGeneration(thirdRun))
         owner.release(session) {}
         assertNotNull(owner.idleGeneration(thirdRun))
     }

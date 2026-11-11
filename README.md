@@ -9,9 +9,9 @@ FT speaks CarLife the way the official Baidu CarLife app does: the same handshak
 
 FT runs in English, Arabic, Kurdish Sorani, Kurdish Badini and Russian, on the phone and on the car screen, in a light, dark or automatic look.
 
-## How it connects
-
 **Experimental ICCOA:** Settings → Car and connection → Car protocol also offers an independent ICCOA Carlink backend, with its own Bluetooth/Wi-Fi connection, car-code authentication, screen stream and input transport. It currently targets car access-point mode with a fresh six-digit code; physical Toyota XA60 testing is still required. CarLife remains the default. See the [tester instructions in Russian](docs/ICCOA-TESTER-RU.md) and [implementation status](docs/ICCOA-DEVELOPMENT.md).
+
+## How it connects
 
 For the wireless connection sequence, protocol sources and failure diagnosis, see
 [Wireless CarLife and Android Auto in FT](docs/wireless-connection.md).
@@ -19,7 +19,7 @@ For the wireless connection sequence, protocol sources and failure diagnosis, se
 Three ways, picked on Home:
 
 - **Hotspot** (default). The car joins the phone's hotspot. FT listens on the CarLife ports and sends a discovery beacon on UDP 7999 until the car connects.
-- **WiFi + BL**. Bluetooth wakes the car, the car raises its WiFi Direct group, FT joins it and the car connects over WiFi Direct. FT starts a join only when none is already running, so the car's repeated "ready" message never cancels a join in progress.
+- **WiFi + BL**. Bluetooth wakes the car, the car raises its WiFi Direct group, FT joins it and the car connects over WiFi Direct. FT starts a join only when none is already running, so the car's repeated "ready" message never cancels a join in progress. If the car does not answer, FT clears the half-made connection, waits until Android confirms it is gone and joins again from a fresh list of nearby devices. **WiFi Direct connection timeout** in Settings sets how long each try waits (5 seconds by default).
 - **USB**. Baidu's accessory mode over the cable, with all six channels in one pipe. A cable always wins over WiFi, and unplugging goes back to the chosen way.
 
 FT starts by itself when the car's Bluetooth connects, and a Quick Settings button switches it on or off without opening the app. If Android stops FT mid-drive, FT listens for the car again as soon as Android restarts it.
@@ -35,6 +35,7 @@ Then the CarLife handshake, as Baidu does it:
 
 - By default FT sends the car its own screen size (1920×720 on a Corolla) at 3 Mbps. **Like Baidu** sends Baidu's smaller size from its table (1280×720 for the Corolla), and **Custom** takes any size. FT draws at the car's full size, so nothing is stretched.
 - When the car asks for no frame rate, FT starts at 30 frames a second on Hotspot, and at 20 on WiFi Direct before moving to 30. It then follows what the car asks for between 15 and 30; like Baidu, it never paces below 15. A hot phone drops to 24 or 20 to cool down.
+- FT remembers the picture that worked with each car and starts the next connection with it; **Picture** in Settings shows what is being sent now and what is saved. A remembered frame rate can only speed up the start, never slow it down, so a moment where the car asked for less does not carry over to the next drive.
 - H.264 Baseline, a full picture every second, and a quality floor that keeps full pictures small enough for the car to take.
 - **Let the video encoder save power** supplies an optional operating-rate hint at startup and whenever FT changes the frame rate. The hint asks the codec to plan resources for the selected FPS; savings and latency depend on the phone. If startup with the hint fails, FT retries the same encoder without it. The setting is off by default and takes effect on the next projection connection.
 - Android Auto's **Frame rate** setting also caps FT's output to the car while AA is visible. Automatic screen matching adjusts dimensions without changing this selection. Choose 30 FPS to reduce frame processing, or 60 FPS for smoother motion; reconnect AA after changing it. On a static picture, the frame gate sleeps between keepalives instead of polling at full FPS, and a new frame or touch brings the next normal frame deadline forward.
@@ -89,7 +90,7 @@ The head unit speaks CarLife, not Android Auto, so FT shows **your own phone's**
 
 Android Auto only takes FT's head unit when its own head unit server is on, and Android Auto switches that server off whenever the phone restarts or Android Auto updates. Without root, enable the separate **FT — Android Auto server** accessibility helper (Russian: **FT — запуск Android Auto**). The car-touch service alone no longer starts the server. Each startup request lasts at most eight seconds: while the phone is unlocked, the helper opens Android Auto settings, selects **Start head unit server**, waits for the server port or the **Stop head unit server** menu item, and returns to FT if Android Auto is still foreground. It stops interacting when the phone locks or the user leaves Android Auto. It cannot inject gestures and uses no coordinate taps or global Back action. Root can still start the AA server directly; a failed direct start uses only the independently enabled helper. FT never enables this helper through root. Enable Android Auto developer settings first; the help sheet also provides the manual startup steps. See [the startup design and limitations](docs/AA-STARTER-2026-11-04.md).
 
-Android Auto's frame rate is 30 or 60, the only two it takes from a head unit.
+Android Auto's frame rate is 30 or 60, the only two it takes from a head unit. The picture fills the car screen without Android Auto's black margins, and touches follow the picture. The FT button over Android Auto can be hidden in Settings.
 
 When the assistant listens, FT asks the car to record from its own microphone and passes that sound to Android Auto. When the assistant stops, FT ends the recording and turns the car's microphone light off.
 
@@ -105,7 +106,7 @@ When the assistant listens, FT asks the car to record from its own microphone an
 
 ## Settings
 
-Language and look, car screen, picture, sound, car and connection, apps on the car, Android Auto, backup and advanced (the CarLife ports). **Picture** can send the car's own size, Baidu's size or a custom size, fix the frame rate, set the data rate and the quality floor, let the video encoder save power, and put everything back to the defaults. **Backup** saves and loads every setting and can share the car look as a code.
+Language and look (including a Default or Alternative look for the phone app), car screen, picture, sound, car and connection, apps on the car, Android Auto, backup and advanced (the CarLife ports). **Picture** can send the car's own size, Baidu's size or a custom size, fix the frame rate, set the data rate and the quality floor, let the video encoder save power, and put everything back to the defaults. **Backup** saves and loads every setting and can share the car look as a code.
 
 ## Diagnostics
 

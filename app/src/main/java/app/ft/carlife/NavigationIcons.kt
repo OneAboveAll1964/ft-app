@@ -8,7 +8,6 @@ import android.graphics.Path
 import androidx.core.graphics.createBitmap
 import java.io.ByteArrayOutputStream
 
-/** Small, locally drawn PNGs for CarLife versions which render the supplied turn icon. */
 object NavigationIcons {
     private val cache = HashMap<Pair<Int, Int>, ByteArray>()
 
@@ -48,7 +47,6 @@ object NavigationIcons {
             9, 10 -> {
                 canvas.drawCircle(64f, 62f, 28f, paint)
                 path.moveTo(64f, 110f); path.lineTo(64f, 90f)
-                // Exit number does not specify an angle. Avoid inventing an exit direction.
                 if (exit > 0) {
                     val text = Paint(paint).apply {
                         style = Paint.Style.FILL; textSize = 28f; textAlign = Paint.Align.CENTER

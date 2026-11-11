@@ -10,7 +10,6 @@ class AaVideoLayoutTest {
         assertEquals(720, layout.contentHeight)
         assertEquals(1f, layout.scaleX, 0.0001f)
         assertEquals(1.5f, layout.scaleY, 0.0001f)
-        // The top and bottom of the UI (180 and 900) fill the 720px view.
         assertEquals(0f, (180f * 720 / 1080 - 360) * layout.scaleY + 360, 0.0001f)
         assertEquals(720f, (900f * 720 / 1080 - 360) * layout.scaleY + 360, 0.0001f)
         val touch = AaViewport(0, 0, layout.contentWidth, layout.contentHeight)

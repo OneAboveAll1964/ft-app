@@ -22,7 +22,6 @@ class AaDisconnectHelpTest {
         help.start()
         help.closed(true, "write IOException: closed", true)
         assertTrue(help.pending.value)
-        // New UI subscribers see the pending suggestion, without generating a new event.
         assertTrue(help.pending.value)
         help.dismiss()
         help.closed(true, "read EOFException: null", true)

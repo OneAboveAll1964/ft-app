@@ -114,7 +114,6 @@ import app.ft.projection.CarControls.Phase
 import app.ft.projection.CarControls.ScreenState
 import app.ft.aa.AaTouchViewport
 import app.ft.aa.AaViewport
-import app.ft.core.PhoneStyle
 import app.ft.core.DiagLog
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -176,7 +175,6 @@ private fun CarRoot(style: CarStyle) {
     val aa by AaHeadUnitService.state.collectAsState()
     val assistant by app.ft.core.CarAssistantPanel.state.collectAsState()
     val touchCal by CarTouchCalibration.state.collectAsState()
-    val alternative by PhoneStyle.modern.collectAsState()
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
     var wasAaVisible by remember { mutableStateOf(state.aaOverlay) }

@@ -3,7 +3,6 @@ package app.ft.aa
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-/** Closing interrupts I/O first, then waits for dispatch before releasing shared media. */
 internal class AaSessionLifecycle(
     private val interrupt: () -> Unit,
     private val cleanup: (String) -> Unit
@@ -30,8 +29,6 @@ internal class AaSessionLifecycle(
 
     fun close(why: String) {
         if (reason.compareAndSet(null, why)) interrupt()
-        // A write failure / BYEBYE can close from inside dispatch. Finish only after
-        // that handler returns, so it cannot revive audio or video after cleanup.
         if (!Thread.holdsLock(gate)) synchronized(gate) { finishLocked() }
     }
 

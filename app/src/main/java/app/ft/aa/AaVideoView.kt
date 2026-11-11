@@ -6,7 +6,6 @@ import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
 
-/** Crops the negotiated AA margins without enlarging the touchable view. */
 class AaVideoView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
     private var video = AaVideoLayout.forFrame(800, 480, 800, 480)
     private var output: Surface? = null

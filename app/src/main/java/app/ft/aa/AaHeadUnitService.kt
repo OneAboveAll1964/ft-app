@@ -112,7 +112,6 @@ class AaHeadUnitService : Service() {
         }
 
         fun stop(context: Context) {
-            // Suppress a concurrent socket failure before the asynchronous stop intent arrives.
             disconnectHelp.stop()
             if (!isBusy) return
             val intent = Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP)

@@ -1,6 +1,5 @@
 package app.ft.core
 
-/** Maneuver numbers use Android Auto's NavigationManeuver.Type enum. Null distance is unknown. */
 data class NavigationInfo(
     val active: Boolean = false,
     val maneuver: Int = 0,

@@ -93,7 +93,6 @@ class CarFinderTest {
                         runCurrent()
                     }
 
-                    // The preference is snapshotted for this attempt.
                     `when`(prefs.carJoinTimeoutSeconds).thenReturn(5)
                     advanceTimeBy(16_000)
                     val noGroup = mock(Intent::class.java)
@@ -102,7 +101,6 @@ class CarFinderTest {
                         .thenReturn(WifiP2pInfo().apply { groupFormed = false })
                     receiver.value.onReceive(context, noGroup)
                     runCurrent()
-                    // An unrelated name only counts as in sight while a join is active.
                     assertTrue(finder.inSight("unrelated"))
                     assertTrue(timeouts.isEmpty())
                     assertTrue(retries.isEmpty())

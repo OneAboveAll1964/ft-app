@@ -263,6 +263,5 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     }
 }
 
-// Settings and the service each own a Prefs instance, but must invalidate/save atomically.
 private val videoProfileLock = Any()
 private val carLifeVehicleLock = Any()

@@ -1,6 +1,5 @@
 package app.ft.aa
 
-/** The video surface bounds in the car display's content coordinates. */
 data class AaViewport(val left: Int, val top: Int, val width: Int, val height: Int) {
     fun contains(x: Int, y: Int): Boolean =
         width > 0 && height > 0 && x >= left && x < left + width && y >= top && y < top + height
