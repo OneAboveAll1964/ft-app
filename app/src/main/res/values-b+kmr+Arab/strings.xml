@@ -518,4 +518,11 @@
     <string name="voice_alice_panel_helper_error">پانێلا ئەلیسێ دەست پێ نەکر. SuperCast ل سەر مۆبایلێ ڕێک بخە. ئەگەر FT هاتیە نویکرن، SuperCast ژ نوو دەست پێ بکە و دووبارە هەول بدە.</string>
     <string name="voice_alice_panel_display_error">مۆبایلێ نەشیا شاشەیەکێ ژ بۆ ئەلیسێ دروست بکەت. پانێلێ بگرە و دووبارە هەول بدە.</string>
     <string name="voice_alice_panel_moved">Yandex ئەلیس ل سەر شاشەیا ترۆمبێلێ ڤەنەکر. پانێلێ بگرە، قفلا مۆبایلێ ڤەکە و دووبارە هەول بدە.</string>
+    <string name="aa_phone_screen_off">ڤەمراندنا شاشەیا مۆبایلێ</string>
+    <string name="aa_phone_screen_off_body">دەما Android Auto گرێدایە، هاریکارێ SuperCast شاشەیا فیزیکی یا مۆبایلێ دڤەمرینیت. ڕێنیشاندەر و دەنگ بەردەوام دبن. دوگمەیا پاوەر شاشەیێ بۆ دەمەکێ ڤەدکەت؛ پشتی دەمێ دیارکری یێ شاشەیا مۆبایلێ دیسا دڤەمرێت. ب ڤەقەتاندنا AA، کۆنترۆلا شاشەیێ دزڤڕیت بۆ Android. پشتەڤانی ب فیرموێرێ ڤە گرێدایە؛ پاشەکەفتنا باترییێ دڤێت ل ئامێری بهێتە پیڤان.</string>
+    <string name="aa_phone_screen_helper">ژ بۆ کۆنترۆلا شاشەیێ، دڤێت هاریکارێ SuperCast کار بکەت.</string>
+    <string name="aa_phone_screen_adb">پێدڤی نینە بەرنامە بگوهێزیت بۆ دۆخێ SuperCast. هاریکار پێدڤی ب root یان دەستپێکرن ب ADB هەیە. ژ کۆمپیوتەری، USB debugging چالاک بکە، مۆبایلی گرێ بدە، دەستورێ بدە دیباگێ و فەرمانا ژێرێ جێبەجێ بکە. پشتی ریستارتا مۆبایلی دبت دووبارەکرن پێدڤی بیت.</string>
+    <string name="aa_phone_screen_active">کۆنترۆلا شاشەیێ چالاکە. دوگمەیا پاوەر بدە ژ بۆ ڤەکرنا شاشەیێ بۆ دەمەکێ.</string>
+    <string name="aa_phone_screen_waiting">هاریکار ئامادەیە. دەما Android Auto گرێ بدەت، شاشە دڤەمرێت.</string>
+    <string name="aa_phone_screen_failed">کۆنترۆلا شاشەیا مۆبایلێ سەرنەکەفت. دەستویریێن هاریکاری و گونجانا فیرموێری بپشکنە و دووبارە هەول بدە.</string>
 </resources>

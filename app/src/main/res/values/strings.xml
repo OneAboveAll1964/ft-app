@@ -519,4 +519,11 @@
     <string name="voice_alice_panel_helper_error">Could not start the Alice panel. Set up SuperCast on the phone. If FT was updated, restart SuperCast and try again.</string>
     <string name="voice_alice_panel_display_error">The phone could not create a screen for Alice. Close the panel and try again.</string>
     <string name="voice_alice_panel_moved">Yandex did not open Alice on the car screen. Close the panel, unlock the phone and try again.</string>
+    <string name="aa_phone_screen_off">Turn off the phone screen</string>
+    <string name="aa_phone_screen_off_body">While Android Auto is connected, the SuperCast helper turns off the physical phone panel. Navigation and audio keep running. The power button turns the screen on temporarily; it goes dark again after the phone screen timeout. Disconnecting AA returns screen control to Android. Support depends on the firmware; battery savings need to be measured on the device.</string>
+    <string name="aa_phone_screen_helper">The SuperCast helper must be running to control the screen.</string>
+    <string name="aa_phone_screen_adb">There is no need to switch apps to SuperCast mode. The helper requires root or an ADB launch. To launch from a computer, enable USB debugging, connect the phone, allow debugging and run the command below. You may need to repeat this after restarting the phone.</string>
+    <string name="aa_phone_screen_active">Screen control is active. Press the power button to turn the screen on temporarily.</string>
+    <string name="aa_phone_screen_waiting">The helper is ready. The screen will turn off when Android Auto connects.</string>
+    <string name="aa_phone_screen_failed">Could not control the phone screen. Check helper permissions and firmware compatibility, then try again.</string>
 </resources>

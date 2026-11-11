@@ -8,10 +8,8 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.view.SurfaceView
 import android.view.SurfaceHolder
 import app.ft.aa.AaVideoView
@@ -212,33 +210,8 @@ private fun CarRoot(style: CarStyle) {
         onDispose { CarInfo.stop(context) }
     }
     val superCastReady by SuperCast.ready.collectAsState()
-    val darkenPhone = FTApp.instance.prefs.supercastScreenOff
-    val panesLive = view == CarView.SUPERCAST && panes.isNotEmpty() && superCastReady
-    DisposableEffect(panesLive, darkenPhone) {
-        if (!panesLive) return@DisposableEffect onDispose { }
-        val watch = object : BroadcastReceiver() {
-            override fun onReceive(ignored: Context?, intent: Intent?) {
-                if (intent?.action != Intent.ACTION_SCREEN_OFF) return
-                DiagLog.i("SuperCast", "power button pressed while apps run, keeping the phone awake and switching its screen")
-                SuperCast.later {
-                    SuperCast.keepAwake(true, wake = true)
-                    SuperCast.powerPressed()
-                }
-            }
-        }
-        context.registerReceiver(watch, IntentFilter(Intent.ACTION_SCREEN_OFF))
-        SuperCast.later {
-            SuperCast.keepAwake(true, wake = true)
-            SuperCast.manageScreen(darkenPhone)
-        }
-        onDispose {
-            runCatching { context.unregisterReceiver(watch) }
-            SuperCast.later {
-                SuperCast.phoneScreen(true)
-                SuperCast.keepAwake(false)
-            }
-        }
-    }
+    val panesLive = view == CarView.SUPERCAST && panes.isNotEmpty() && !state.aaOverlay && !state.mirroring && !state.waitingForShare
+    CarPhoneScreen(aa.connected, panesLive)
     LaunchedEffect(superCastReady, view) {
         if (superCastReady && view == CarView.SUPERCAST && dockApps.isEmpty()) {
             val all = withContext(Dispatchers.IO) { SuperCast.apps() }

@@ -518,4 +518,11 @@
     <string name="voice_alice_panel_helper_error">تعذّر تشغيل لوحة أليس. أعدّ SuperCast على الهاتف. إذا تم تحديث FT، أعد تشغيل SuperCast وحاول مجدداً.</string>
     <string name="voice_alice_panel_display_error">تعذّر على الهاتف إنشاء شاشة لأليس. أغلق اللوحة وحاول مجدداً.</string>
     <string name="voice_alice_panel_moved">لم يفتح Yandex أليس على شاشة السيارة. أغلق اللوحة وافتح قفل الهاتف وحاول مجدداً.</string>
+    <string name="aa_phone_screen_off">إطفاء شاشة الهاتف</string>
+    <string name="aa_phone_screen_off_body">عند اتصال Android Auto، يطفئ مساعد SuperCast لوحة الهاتف الفعلية. تستمر الملاحة والصوت. يشغل زر الطاقة الشاشة مؤقتا، وتنطفئ مجددا بعد مهلة شاشة الهاتف. عند فصل AA تعود إدارة الشاشة إلى Android. يعتمد الدعم على البرنامج الثابت؛ يجب قياس توفير البطارية على الجهاز.</string>
+    <string name="aa_phone_screen_helper">يجب تشغيل مساعد SuperCast للتحكم في الشاشة.</string>
+    <string name="aa_phone_screen_adb">لا يلزم تحويل التطبيقات إلى وضع SuperCast. يحتاج المساعد إلى root أو التشغيل عبر ADB. للتشغيل من الكمبيوتر، فعّل تصحيح أخطاء USB ووصل الهاتف واسمح بتصحيح الأخطاء ثم نفذ الأمر أدناه. قد يلزم تكراره بعد إعادة تشغيل الهاتف.</string>
+    <string name="aa_phone_screen_active">التحكم في الشاشة نشط. اضغط زر الطاقة لتشغيل الشاشة مؤقتا.</string>
+    <string name="aa_phone_screen_waiting">المساعد جاهز. ستنطفئ الشاشة عند اتصال Android Auto.</string>
+    <string name="aa_phone_screen_failed">تعذر التحكم في شاشة الهاتف. تحقق من أذونات المساعد وتوافق البرنامج الثابت، ثم حاول مجددا.</string>
 </resources>

@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 182
-        versionName = "3.9.67-aa-energy"
+        versionCode = 183
+        versionName = "3.9.68-aa-screen-off"
     }
 
     signingConfigs {

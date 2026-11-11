@@ -97,7 +97,9 @@ fun SuperCastSettings() {
     ) { index ->
         onCar = index == 1
         prefs.supercastOn = onCar
-        if (onCar) setUp() else scope.launch { withContext(Dispatchers.IO) { SuperCast.stopAll() } }
+        if (onCar) setUp() else if (!prefs.aaPhoneScreenOff) {
+            scope.launch { withContext(Dispatchers.IO) { SuperCast.stopAll() } }
+        }
     }
 
     if (!onCar) {

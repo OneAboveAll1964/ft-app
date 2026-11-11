@@ -202,21 +202,18 @@ object SuperCast {
         return packages.mapIndexed { index, pkg -> pkg to (labels.getOrNull(index) ?: pkg) }
     }
 
-    fun phoneScreen(on: Boolean) {
-        ask("screen") { putBoolean("on", on) }
-    }
+    fun phoneScreen(on: Boolean): Boolean? =
+        ask("screen") { putBoolean("on", on) }?.getBoolean("ok")
 
-    fun manageScreen(darkenByItself: Boolean) {
-        ask("screen") { putBoolean("on", false); putBoolean("auto", darkenByItself) }
-    }
+    fun manageScreen(darkenByItself: Boolean): Boolean? =
+        ask("screen") { putBoolean("on", false); putBoolean("auto", darkenByItself) }?.getBoolean("ok")
 
     fun powerPressed() {
         ask("power")
     }
 
-    fun keepAwake(on: Boolean, wake: Boolean = false) {
-        ask("awake") { putBoolean("on", on); putBoolean("wake", wake) }
-    }
+    fun keepAwake(on: Boolean, wake: Boolean = false): Boolean? =
+        ask("awake") { putBoolean("on", on); putBoolean("wake", wake) }?.getBoolean("ok")
 
     fun stopAll() {
         ask("stop")
@@ -237,6 +234,10 @@ object SuperCast {
             if (!state.compareAndSet(0, 1)) return false
             try {
                 return if (bridge) startOverBridge(context) else start(context, prefs)
+            } catch (error: Exception) {
+                if (error is java.util.concurrent.CancellationException) throw error
+                DiagLog.w(TAG, "could not start the helper: ${error.message}")
+                return false
             } finally {
                 state.set(2)
                 finishStart()

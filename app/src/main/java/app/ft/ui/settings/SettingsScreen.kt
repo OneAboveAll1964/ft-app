@@ -295,6 +295,7 @@ private fun PageContent(page: SettingsPage) {
             }
         }
         SettingsPage.ANDROID_AUTO -> {
+            AaPhoneScreenSetting(p)
             BoolSetting(stringResource(R.string.aa_cluster_navigation), p.aaClusterNavigation,
                 detail = stringResource(R.string.aa_cluster_navigation_body)) { p.aaClusterNavigation = it }
             BoolSetting(stringResource(R.string.aa_show_return_button), p.aaShowReturnButton) {

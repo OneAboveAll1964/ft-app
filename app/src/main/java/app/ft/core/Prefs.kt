@@ -80,6 +80,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
             sp.edit().putInt("aaDensity", v.coerceIn(120, 480))
                 .putBoolean("aaDensityBoost167", true).apply()
         }
+    var aaPhoneScreenOff: Boolean get() = bool("aaPhoneScreenOff", true); set(v) = set("aaPhoneScreenOff", v)
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
     var aaClusterNavigation: Boolean get() = bool("aaClusterNavigation", true); set(v) = set("aaClusterNavigation", v)
     var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)
@@ -242,7 +243,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
             "cmdPort", "videoPort", "mediaPort", "ttsPort", "vrPort", "touchPort",
             "aaPort", "aaSelfPort", "aaWidth", "aaHeight", "aaFps", "aaDensity", "aaDensityBoost167",
             "aaControlsLeft", "aaClusterNavigation", "aaMatchCar", "aaBluetooth", "aaPackage", "aaServerPackage",
-            "aaAutoStart", "aaPrepareBeforeConnect", "aaShowReturnButton", "aaCorner",
+            "aaPhoneScreenOff", "aaAutoStart", "aaPrepareBeforeConnect", "aaShowReturnButton", "aaCorner",
             "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps", "pictureBitrate", "videoQpFloor",
             "carDensity", "encoderSavePower", "savedVideoProfile", "videoProfileGeneration", "carSizedApps",
             "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio", "iccoaMicGain", "directions",

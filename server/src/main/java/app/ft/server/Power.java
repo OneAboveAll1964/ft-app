@@ -100,22 +100,26 @@ public final class Power {
 
     public static synchronized boolean screen(boolean on) {
         if (on) {
-            release();
-            return true;
+            return release();
         }
         return manage(true);
     }
 
     public static synchronized boolean manage(boolean darkenByItself) {
+        if (!keepAwake(true)) {
+            release();
+            return false;
+        }
         managing = true;
         autoDark = darkenByItself;
         refused = false;
-        keepAwake(true);
         startGuard();
         if (autoDark) {
             return darken("apps run on the car");
         }
-        dark = false;
+        if (dark) {
+            light("screen mode changed");
+        }
         Touches.poke();
         Log.i("phone screen stays on while apps run, the power button darkens it");
         return true;
@@ -161,18 +165,19 @@ public final class Power {
         }
     }
 
-    private static void release() {
+    private static boolean release() {
         boolean was = managing;
         boolean wasDark = dark;
         managing = false;
-        dark = false;
         Boolean back = wasDark ? setPowerMode(true) : Boolean.TRUE;
-        if (back == null) {
+        dark = wasDark && !Boolean.TRUE.equals(back);
+        if (!Boolean.TRUE.equals(back)) {
             Apps.shell("input keyevent 224");
         }
         if (was) {
-            Log.i("phone screen given back" + (back == null ? " (not through the display, asking the system)" : ""));
+            Log.i("phone screen given back" + (!Boolean.TRUE.equals(back) ? " (not through the display, asking the system)" : ""));
         }
+        return Boolean.TRUE.equals(back);
     }
 
     private static void light(String why) {
