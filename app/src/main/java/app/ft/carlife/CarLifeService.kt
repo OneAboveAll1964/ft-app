@@ -326,6 +326,7 @@ class CarLifeService : Service() {
     @Volatile private var mode = -1
     private var callWatch: Any? = null
     private var callPoll: Job? = null
+    private var lastAudioMode: Int? = null
     private var resumePhoneAudio: Pair<MediaProjection, Long>? = null
     @Volatile private var callRecovery: Any? = null
     private var callRecoveryJob: Job? = null
@@ -1600,6 +1601,10 @@ class CarLifeService : Service() {
     }
 
     private fun onAudioMode(m: Int) {
+        if (lastAudioMode != m) {
+            DiagLog.i(tag, "audio mode changed: previous=$lastAudioMode current=$m")
+            lastAudioMode = m
+        }
         val calling = m == android.media.AudioManager.MODE_RINGTONE ||
             m == android.media.AudioManager.MODE_IN_CALL ||
             m == android.media.AudioManager.MODE_IN_COMMUNICATION

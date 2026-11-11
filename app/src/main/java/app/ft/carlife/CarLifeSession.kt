@@ -365,6 +365,8 @@ class CarLifeSession(
     private fun handleCmd(c: CarLifeFraming.Cmd) {
         if (c.serviceId !in setOf(CarLifeProtocol.CMD_HU_GEAR_INFO, CarLifeProtocol.CMD_MODULE_CONTROL,
                 CarLifeProtocol.CMD_CAR_GPS, CarLifeProtocol.CMD_CAR_VELOCITY)) {
+            // Keep routing metadata when report export removes RX payload lines.
+            DiagLog.d(tag, "command ${CarLifeProtocol.name(c.serviceId)} bytes=${c.payload.size}")
             DiagLog.rx(tag, CarLifeProtocol.name(c.serviceId), c.payload)
         }
         when (c.serviceId) {
@@ -620,6 +622,9 @@ class CarLifeSession(
             musicAskAt = now
             DiagLog.rx(tag, CarLifeProtocol.name(CarLifeProtocol.CMD_MODULE_CONTROL), raw)
         }
+        if (loud || module != CarLifeProtocol.MODULE_MUSIC) {
+            DiagLog.i(tag, "module control: module=$module status=$status")
+        }
         if (module == CarLifeProtocol.MODULE_VR && status == 1) {
             DiagLog.i(tag, "car requested the voice assistant through MODULE_VR")
             onHardKey?.invoke(84)
@@ -692,7 +697,10 @@ class CarLifeSession(
                 DiagLog.i(tag, "steering wheel key $key (payload ${c.payload.joinToString(" ") { b -> "%02X".format(b) }})")
                 if (key >= 0) onHardKey?.invoke(key)
             }
-            else -> DiagLog.rx(tag, "ctrl ${CarLifeProtocol.name(c.serviceId)}", c.payload)
+            else -> {
+                DiagLog.d(tag, "control ${CarLifeProtocol.name(c.serviceId)} bytes=${c.payload.size}")
+                DiagLog.rx(tag, "ctrl ${CarLifeProtocol.name(c.serviceId)}", c.payload)
+            }
         }
     }
 
