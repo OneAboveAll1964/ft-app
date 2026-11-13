@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 124
-        versionName = "3.9.13"
+        versionCode = 183
+        versionName = "3.9.68-aa-screen-off"
     }
 
     signingConfigs {
@@ -39,6 +39,11 @@ android {
         }
         debug {
             signingConfig = signingConfigs.getByName("release")
+        }
+        create("unsignedTransit") {
+            initWith(getByName("release"))
+            signingConfig = null
+            matchingFallbacks += listOf("release")
         }
     }
 
@@ -88,4 +93,3 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation(project(":server"))
 }
-

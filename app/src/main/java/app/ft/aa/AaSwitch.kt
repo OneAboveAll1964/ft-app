@@ -2,167 +2,104 @@ package app.ft.aa
 
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.res.Resources
-import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.view.accessibility.AccessibilityNodeInfo
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import app.ft.FTApp
-import app.ft.FTTouchService
 import app.ft.core.DiagLog
 import app.ft.core.Root
 import app.ft.carlife.CarLifeService
 import app.ft.carlife.CarLifeSession
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 object AaSwitch {
-    private const val TAG = "AA"
-    private const val START = "Start head unit server"
-    private const val STOP = "Stop head unit server"
-    private const val STEP_MS = 40L
+    enum class Result {
+        ON, LOCKED, NO_HELPER, NOT_INSTALLED, FAILED,
+        NO_AA_WINDOW, MENU_UNAVAILABLE, START_UNAVAILABLE, ACTION_REJECTED, NOT_CONFIRMED, FOCUS_LOST;
 
-    enum class Result { ON, NO_DEVELOPER_MENU, LOCKED, NO_HELPER, NOT_INSTALLED, FAILED }
+        val failedAttempt: Boolean get() = this !in setOf(ON, LOCKED, NO_HELPER, NOT_INSTALLED)
+    }
 
-    @Volatile private var busy = false
+    fun isStarterServiceEnabled(context: Context): Boolean {
+        val expected = ComponentName(context, AaStarterAccessibilityService::class.java)
+        val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        return enabled.orEmpty().split(':').any { ComponentName.unflattenFromString(it) == expected }
+    }
 
-    fun canTap(): Boolean = FTTouchService.instance != null
+    fun canTap(): Boolean = AaStarterAccessibilityService.instance != null && isStarterServiceEnabled(FTApp.instance)
 
+    fun openAccessibilitySettings(context: Context) {
+        val component = ComponentName(context, AaStarterAccessibilityService::class.java)
+        // This Settings action exists in AOSP but its constant is hidden from the public SDK.
+        val detail = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, component.flattenToString())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(detail) }.isSuccess) return
+        runCatching { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+
+    /** Blocking entry point for existing IO callers. The service owns every UI action on main. */
     fun start(context: Context): Result {
+        if (Thread.currentThread().isInterrupted) return Result.FAILED
+        if (Looper.myLooper() == Looper.getMainLooper()) return Result.FAILED
         val port = FTApp.instance.prefs.aaSelfPort
         if (AaInstaller.serverRunning(port)) return Result.ON
-        val service = FTTouchService.instance ?: return Result.NO_HELPER
-        val target = AaInstaller.settingsPackage(context) ?: return Result.NOT_INSTALLED
-        if (AaInstaller.stub(context, target)) return Result.NOT_INSTALLED
+        DiagLog.i("AA", "Android Auto starter requested; enabled=${isStarterServiceEnabled(context)} connected=${AaStarterAccessibilityService.connected.value}")
+        val service = AaStarterAccessibilityService.instance ?: return Result.NO_HELPER
+        if (!isStarterServiceEnabled(context)) return Result.NO_HELPER
+        if (AaInstaller.settingsPackage(context) != AaInstaller.GEARHEAD || AaInstaller.stub(context)) return Result.NOT_INSTALLED
         if (locked(context)) return Result.LOCKED
-        synchronized(this) {
-            if (busy) return Result.FAILED
-            busy = true
+        val answer = CompletableFuture<Result>()
+        val token = Any()
+        val handler = Handler(Looper.getMainLooper())
+        handler.post {
+            if (answer.isDone) return@post
+            try {
+                if (AaStarterAccessibilityService.instance !== service || !isStarterServiceEnabled(context)) {
+                    answer.complete(Result.NO_HELPER)
+                } else if (locked(context)) {
+                    answer.complete(Result.LOCKED)
+                } else if (!service.armForLaunch(token, port) { answer.complete(it) }) {
+                    answer.complete(Result.FAILED)
+                } else if (!AaInstaller.openStarterSettings(context)) {
+                    service.cancel(token)
+                }
+            } catch (e: Exception) {
+                DiagLog.w("AA", "opening Android Auto starter failed (${e.javaClass.simpleName})")
+                service.cancel(token)
+                answer.complete(Result.FAILED)
+            }
         }
-        val began = SystemClock.elapsedRealtime()
-        try {
-            if (!AaInstaller.openSettings(context, fallback = false)) return Result.FAILED
-            val labels = overflowLabels(context, target)
-            val more = waitFor(4000) { find(service, target) { overflow(it, labels) } }
-            if (more == null) {
-                DiagLog.w(TAG, "Android Auto's settings opened, but its menu button never showed")
-                leave(service, target)
-                return Result.FAILED
-            }
-            press(service, more)
-            val item = waitFor(2000) { find(service, target) { it.text?.toString().let { t -> t == START || t == STOP } } }
-            if (item == null) {
-                DiagLog.w(TAG, "Android Auto's menu has no \"$START\", so its developer settings are off")
-                leave(service, target)
-                return Result.NO_DEVELOPER_MENU
-            }
-            if (item.text?.toString() == START) press(service, item) else service.back()
-            val on = waitFor(3000) { if (AaInstaller.serverRunning(port)) true else null } == true
-            waitFor(800) { if (find(service, target) { it.text?.toString().let { t -> t == START || t == STOP } } == null) true else null }
-            leave(service, target)
-            val took = SystemClock.elapsedRealtime() - began
-            if (on) DiagLog.i(TAG, "switched on Android Auto's head unit server through accessibility in $took ms")
-            else DiagLog.w(TAG, "tapped \"$START\" but Android Auto's head unit server did not open its port ($took ms)")
-            return if (on) Result.ON else Result.FAILED
-        } catch (t: Throwable) {
-            DiagLog.w(TAG, "switching Android Auto's head unit server on failed: $t")
-            return Result.FAILED
+        return try {
+            answer.get(AaStarterAccessibilityService.TIMEOUT_MS + 2_000, TimeUnit.MILLISECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            Result.FAILED
+        } catch (e: Exception) {
+            DiagLog.w("AA", "waiting for Android Auto starter failed (${e.javaClass.simpleName})")
+            Result.FAILED
         } finally {
-            busy = false
+            answer.cancel(false)
+            handler.post { service.cancel(token) }
         }
     }
 
-    private fun leave(service: FTTouchService, target: String) {
-        repeat(3) {
-            if (!showing(service, target)) return
-            service.back()
-            if (waitFor(700) { if (showing(service, target)) null else true } == true) return
-        }
-    }
-
-    private fun showing(service: FTTouchService, target: String): Boolean =
-        roots(service).any { it.packageName?.toString() == target }
-
-    private fun roots(service: FTTouchService): List<AccessibilityNodeInfo> {
-        val found = runCatching { service.windows.mapNotNull { it.root } }.getOrDefault(emptyList()).toMutableList()
-        service.rootInActiveWindow?.let { active -> if (found.none { it == active }) found += active }
-        return found
-    }
-
-    private fun locked(context: Context): Boolean {
-        val keys = context.getSystemService(KeyguardManager::class.java)
-        val power = context.getSystemService(PowerManager::class.java)
-        return keys?.isKeyguardLocked == true || power?.isInteractive == false
-    }
-
-    private fun overflowLabels(context: Context, target: String): Set<String> {
-        val found = linkedSetOf("More options")
-        runCatching {
-            val res = context.packageManager.getResourcesForApplication(target)
-            listOf("abc_action_menu_overflow_description", "m3c_top_app_bar_overflow_description", "more_options").forEach { name ->
-                val id = res.getIdentifier(name, "string", target)
-                if (id != 0) found += res.getString(id)
-            }
-        }
-        runCatching {
-            val id = Resources.getSystem().getIdentifier("action_menu_overflow_description", "string", "android")
-            if (id != 0) found += Resources.getSystem().getString(id)
-        }
-        return found
-    }
-
-    private fun overflow(node: AccessibilityNodeInfo, labels: Set<String>): Boolean {
-        val said = node.contentDescription?.toString() ?: return false
-        return said in labels
-    }
-
-    private fun find(service: FTTouchService, target: String, match: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
-        for (root in roots(service)) {
-            if (root.packageName?.toString() != target) continue
-            val hit = walk(root, match)
-            if (hit != null) return hit
-        }
-        return null
-    }
-
-    private fun walk(node: AccessibilityNodeInfo, match: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
-        if (match(node)) return node
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val hit = walk(child, match)
-            if (hit != null) return hit
-        }
-        return null
-    }
-
-    private fun press(service: FTTouchService, node: AccessibilityNodeInfo) {
-        var n: AccessibilityNodeInfo? = node
-        while (n != null) {
-            if (n.isClickable && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return
-            n = n.parent
-        }
-        val r = Rect()
-        node.getBoundsInScreen(r)
-        service.tap(r.exactCenterX(), r.exactCenterY())
-    }
-
-    private fun <T> waitFor(timeoutMs: Long, check: () -> T?): T? {
-        val end = SystemClock.elapsedRealtime() + timeoutMs
-        while (true) {
-            val got = runCatching { check() }.getOrNull()
-            if (got != null) return got
-            if (SystemClock.elapsedRealtime() >= end) return null
-            Thread.sleep(STEP_MS)
-        }
-    }
+    internal fun locked(context: Context): Boolean =
+        context.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true ||
+            context.getSystemService(PowerManager::class.java)?.isInteractive == false
 }
-
 object AaKeep {
     private const val TAG = "AA"
     private const val GAP_MS = 20_000L
@@ -183,11 +120,33 @@ object AaKeep {
 
     private val one = Any()
 
-    fun switchOn(context: Context): Boolean = synchronized(one) { switchOnNow(context) }
+    @Volatile private var failedPreparationProfile: String? = null
+
+    /** A new explicit preflight may retry immediately, regardless of an earlier auto-start cooldown. */
+    internal fun preparing() {
+        failedPreparationProfile = null
+        restUntil = 0L
+    }
+
+    internal fun prepared(profileId: String, result: AaSwitch.Result) {
+        // LOCKED and NO_HELPER may recover when the user unlocks or enables the helper.
+        // Only a completed, unsuccessful UI attempt is suppressed for this vehicle attempt.
+        failedPreparationProfile = profileId.takeIf { result.failedAttempt }
+    }
+
+    internal fun preparationFailed(profileId: String, enabled: Boolean): Boolean =
+        enabled && failedPreparationProfile == profileId
+
+    fun switchOn(context: Context): Boolean = synchronized(one) {
+        // Cancellation can happen while a caller is waiting to enter this monitor.
+        if (Thread.currentThread().isInterrupted) false else switchOnNow(context)
+    }
 
     private fun switchOnNow(context: Context): Boolean {
         val app = context.applicationContext
         if (AaInstaller.serverRunning(FTApp.instance.prefs.aaSelfPort)) return true
+        val prefs = FTApp.instance.prefs
+        if (preparationFailed(prefs.profileId, prefs.aaPrepareBeforeConnect)) return false
         if (!AaInstaller.installed(app)) return false
         val target = AaInstaller.settingsPackage(app) ?: return false
         if (AaInstaller.stub(app, target)) {
@@ -219,11 +178,11 @@ object AaKeep {
             override fun onReceive(c: Context, intent: Intent) {
                 runCatching { context.unregisterReceiver(this) }
                 waiting = null
-                scope.launch { switchOn(context) }
+                if (FTApp.instance.prefs.autoConnect && AaHeadUnitService.isBusy) scope.launch { switchOn(context) }
             }
         }
         waiting = receiver
-        val filter = IntentFilter(Intent.ACTION_USER_PRESENT).apply { addAction(Intent.ACTION_SCREEN_ON) }
+        val filter = IntentFilter(Intent.ACTION_USER_PRESENT)
         runCatching { ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED) }.onFailure { waiting = null }
     }
 }

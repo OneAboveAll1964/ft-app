@@ -97,6 +97,10 @@ object CarAudioBus {
             if (value) synchronized(lock) {
                 if (voiceOpen) closeVoice()
                 if (blending) finishBlend()
+                waiting.clear()
+                held = 0
+                offset = 0
+                speaking = false
             }
         }
 
@@ -401,9 +405,13 @@ object CarAudioBus {
         return top
     }
 
-    fun write(lane: Int, pcm: ByteArray) {
+    fun write(lane: Int, data: ByteArray) {
         val target = out ?: return
-        if (pcm.isEmpty()) return
+        // Every packet contains PCM16 stereo frames. Ignore an incomplete trailing frame,
+        // just as the resampler does, so it cannot shift the next packet's samples.
+        val size = data.size - data.size % 4
+        if (size == 0) return
+        val pcm = if (size == data.size) data else data.copyOf(size)
         val now = System.nanoTime()
         val main = lane == LANE_MEDIA || lane == LANE_PLAYER || lane == LANE_PHONE
         val audible = main && peak(pcm) > SILENT
@@ -523,7 +531,10 @@ object CarAudioBus {
     }
 
     fun toCarFormat(pcm: ByteArray, rate: Int, channels: Int): ByteArray {
-        if (rate == RATE && channels == 2) return pcm
+        if (rate == RATE && channels == 2) {
+            val size = pcm.size - pcm.size % 4
+            return if (size == pcm.size) pcm else pcm.copyOf(size)
+        }
         val ch = channels.coerceAtLeast(1)
         val r = rate.coerceAtLeast(1)
         val frames = pcm.size / (2 * ch)

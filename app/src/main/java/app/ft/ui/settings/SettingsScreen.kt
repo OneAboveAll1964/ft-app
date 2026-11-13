@@ -19,6 +19,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -70,16 +71,24 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import app.ft.carlife.GearAction
 import app.ft.carlife.WheelAction
-import app.ft.carlife.JoinWatch
 import app.ft.ui.components.AaMissing
 import app.ft.ui.components.AaStart
 import app.ft.ui.components.rememberRootGranted
 import app.ft.ui.components.rememberAaServerOn
+import app.ft.ui.components.rememberAaStarterEnabled
 import app.ft.ui.components.Option
 import app.ft.ui.components.PickSetting
 import app.ft.ui.car.CarStyles
 import app.ft.aa.AaInstaller
+import app.ft.aa.AaSwitch
+import app.ft.aa.AaStarterAccessibilityService
 import app.ft.core.CarAudioBus
+import app.ft.core.CarVoiceAssistant
+import app.ft.core.Prefs
+import app.ft.core.VoiceAssistant
+import app.ft.core.CarProtocol
+import app.ft.ui.components.CarProtocolSetting
+import app.ft.ui.components.BluetoothCallsSetting
 import app.ft.projection.VideoPlans
 import app.ft.projection.VideoPlan
 import app.ft.projection.VideoProfile
@@ -209,7 +218,9 @@ private fun MadeBy() {
             Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
         }
         if (version.isNotBlank()) {
-            Text("FT $version", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { app.ft.core.Links.openOnPhone(context, app.ft.core.Links.RELEASES) }) {
+                Text("FT $version", style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }
@@ -246,41 +257,45 @@ private fun PageContent(page: SettingsPage) {
             QuietShareSetting()
         }
         SettingsPage.CAR -> {
-            TextSetting(stringResource(R.string.car_name_label), p.carName) { p.carName = it }
-            TextSetting(stringResource(R.string.car_p2p_label), p.carP2pName) { p.carP2pName = it }
-            TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
-            TextSetting(stringResource(R.string.car_pin_label), p.carWpsPin) { p.carWpsPin = it }
-            var timeout by remember { mutableIntStateOf(p.carJoinTimeoutSeconds) }
-            PickSetting(
-                stringResource(R.string.car_join_timeout),
-                JoinWatch.TIMEOUT_SECONDS.map { Option(stringResource(R.string.car_join_timeout_seconds, it)) },
-                JoinWatch.TIMEOUT_SECONDS.indexOf(timeout),
-                about = stringResource(R.string.car_join_timeout_about)
-            ) { index ->
-                timeout = JoinWatch.TIMEOUT_SECONDS[index]
-                p.carJoinTimeoutSeconds = timeout
+            val protocol = CarProtocolSetting()
+            AaPreparationSetting()
+            VoiceAssistantSetting(p)
+            BoolSetting(stringResource(R.string.car_bt_reconnect), p.carBtReconnect,
+                detail = stringResource(R.string.car_bt_reconnect_about)) { p.carBtReconnect = it }
+            if (protocol == CarProtocol.ICCOA) {
+                Text(stringResource(R.string.iccoa_settings_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                BluetoothCallsSetting()
+                IccoaMicrophoneGainSetting(p.iccoaMicGain) { p.iccoaMicGain = it }
+            } else {
+                RememberedCarSetting()
+                TextSetting(stringResource(R.string.car_name_label), p.carName) { p.carName = it }
+                TextSetting(stringResource(R.string.car_p2p_label), p.carP2pName) { p.carP2pName = it }
+                TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
+                TextSetting(stringResource(R.string.car_pin_label), p.carWpsPin) { p.carWpsPin = it }
+                CarJoinTimeoutSetting(p.carJoinTimeoutSeconds) { p.carJoinTimeoutSeconds = it }
+                BoolSetting(stringResource(R.string.car_swap_keys), p.swapTrackKeys) { p.swapTrackKeys = it }
+                Text(stringResource(R.string.wheel_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    stringResource(R.string.wheel_about),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                WheelSetting(stringResource(R.string.wheel_next_again), p.wheelLongNext) { p.wheelLongNext = it }
+                WheelSetting(stringResource(R.string.wheel_prev_again), p.wheelLongPrev) { p.wheelLongPrev = it }
+                Text(stringResource(R.string.gear_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    stringResource(R.string.gear_about),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                GearSetting(stringResource(R.string.gear_reverse), p.gearReverse) { p.gearReverse = it }
+                GearSoundSetting(stringResource(R.string.gear_reverse_sound), p.gearReverseSound, p.gearReverseLevel, { p.gearReverseSound = it }) { p.gearReverseLevel = it }
+                GearSetting(stringResource(R.string.gear_park), p.gearPark) { p.gearPark = it }
+                GearSoundSetting(stringResource(R.string.gear_park_sound), p.gearParkSound, p.gearParkLevel, { p.gearParkSound = it }) { p.gearParkLevel = it }
             }
-            BoolSetting(stringResource(R.string.car_swap_keys), p.swapTrackKeys) { p.swapTrackKeys = it }
-            Text(stringResource(R.string.wheel_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                stringResource(R.string.wheel_about),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            WheelSetting(stringResource(R.string.wheel_next_again), p.wheelLongNext) { p.wheelLongNext = it }
-            WheelSetting(stringResource(R.string.wheel_prev_again), p.wheelLongPrev) { p.wheelLongPrev = it }
-            Text(stringResource(R.string.gear_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                stringResource(R.string.gear_about),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            GearSetting(stringResource(R.string.gear_reverse), p.gearReverse) { p.gearReverse = it }
-            GearSoundSetting(stringResource(R.string.gear_reverse_sound), p.gearReverseSound, p.gearReverseLevel, { p.gearReverseSound = it }) { p.gearReverseLevel = it }
-            GearSetting(stringResource(R.string.gear_park), p.gearPark) { p.gearPark = it }
-            GearSoundSetting(stringResource(R.string.gear_park_sound), p.gearParkSound, p.gearParkLevel, { p.gearParkSound = it }) { p.gearParkLevel = it }
         }
         SettingsPage.ANDROID_AUTO -> {
+            AaPhoneScreenSetting(p)
             BoolSetting(stringResource(R.string.aa_cluster_navigation), p.aaClusterNavigation,
                 detail = stringResource(R.string.aa_cluster_navigation_body)) { p.aaClusterNavigation = it }
             BoolSetting(stringResource(R.string.aa_show_return_button), p.aaShowReturnButton) {
@@ -299,9 +314,20 @@ private fun PageContent(page: SettingsPage) {
                 listOf(Option("30"), Option("60")),
                 if (fps == 60) 1 else 0
             ) { index -> fps = if (index == 1) 60 else 30; p.aaFps = fps }
+            Text(stringResource(R.string.aa_fps_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             IntSetting(stringResource(R.string.aa_density), p.aaDensity) { p.aaDensity = it }
         }
         SettingsPage.ADVANCED -> {
+            BoolSetting(
+                stringResource(R.string.show_other_devices_logs),
+                p.showOtherDevicesInLogs,
+                detail = stringResource(R.string.show_other_devices_logs_about)
+            ) { p.showOtherDevicesInLogs = it }
+            BoolSetting(
+                stringResource(R.string.vehicle_coordinate_log),
+                p.vehicleCoordinateLogging,
+                detail = stringResource(R.string.vehicle_coordinate_log_about)
+            ) { p.vehicleCoordinateLogging = it }
             Text(stringResource(R.string.adv_ports), style = MaterialTheme.typography.labelLarge)
             IntSetting(stringResource(R.string.adv_command), p.cmdPort) { p.cmdPort = it }
             IntSetting(stringResource(R.string.adv_video), p.videoPort) { p.videoPort = it }
@@ -313,6 +339,48 @@ private fun PageContent(page: SettingsPage) {
         SettingsPage.SUPERCAST -> SuperCastSettings()
         SettingsPage.BACKUP -> BackupSettings()
     }
+}
+
+@Composable
+private fun RememberedCarSetting() {
+    val p = FTApp.instance.prefs
+    val context = LocalContext.current
+    var savedAddress by remember { mutableStateOf(p.carLifeVehicleAddress) }
+    var savedName by remember { mutableStateOf(p.carLifeVehicleName) }
+    var change by remember { mutableStateOf(false) }
+    DisposableEffect(p) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "carLifeVehicleAddress" || key == "carLifeVehicleName") {
+                savedAddress = p.carLifeVehicleAddress
+                savedName = p.carLifeVehicleName
+            }
+        }
+        p.registerListener(listener)
+        onDispose { p.unregisterListener(listener) }
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.car_remembered), style = MaterialTheme.typography.titleSmall)
+        Text(
+            if (savedAddress.isBlank()) stringResource(R.string.car_remembered_empty)
+            else listOf(savedName, savedAddress).filter { it.isNotBlank() }.joinToString("\n"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(onClick = { change = true }) { Text(stringResource(R.string.car_change)) }
+    }
+    if (change) AlertDialog(
+        onDismissRequest = { change = false },
+        title = { Text(stringResource(R.string.car_change)) },
+        text = { Text(stringResource(R.string.car_change_about)) },
+        confirmButton = {
+            TextButton(onClick = {
+                CarLifeService.switchOff(context)
+                p.forgetCarLifeVehicle()
+                change = false
+            }) { Text(stringResource(R.string.car_change)) }
+        },
+        dismissButton = { TextButton(onClick = { change = false }) { Text(stringResource(R.string.action_cancel)) } }
+    )
 }
 
 private val GUIDANCE = listOf(
@@ -436,6 +504,28 @@ internal fun BoolSetting(label: String, initial: Boolean, detail: String? = null
     }
 }
 
+@Composable
+private fun AaPreparationSetting() {
+    val prefs = FTApp.instance.prefs
+    val context = LocalContext.current
+    var enabled by remember(prefs.profileId) { mutableStateOf(prefs.aaPrepareBeforeConnect) }
+    val root = rememberRootGranted()
+    val helper by AaStarterAccessibilityService.connected.collectAsStateWithLifecycle()
+    val helperEnabled = rememberAaStarterEnabled()
+    BoolSetting(stringResource(R.string.aa_prepare_before_connect), enabled,
+        stringResource(R.string.aa_prepare_before_connect_body)) {
+        enabled = it
+        prefs.aaPrepareBeforeConnect = it
+    }
+    if (enabled && !root && !helper) {
+        Text(stringResource(if (helperEnabled) R.string.aa_helper_disconnected else R.string.aa_prepare_helper_body), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { AaSwitch.openAccessibilitySettings(context) }) {
+            Text(stringResource(if (helperEnabled) R.string.aa_helper_settings else R.string.aa_let_ft))
+        }
+    }
+}
+
 private val SIZE_CHOICES = listOf(
     VideoPlans.SIZE_CAR to R.string.picture_size_car,
     VideoPlans.SIZE_BAIDU to R.string.picture_size_baidu,
@@ -556,6 +646,31 @@ private fun videoSummary(plan: VideoPlan): String = stringResource(R.string.pict
     java.text.NumberFormat.getNumberInstance().apply { maximumFractionDigits = 2 }.format(plan.bitrate / 1_000_000.0))
 
 private const val DEFAULT_FLOOR = 22
+
+@Composable
+private fun VoiceAssistantSetting(prefs: Prefs) {
+    var chosen by remember(prefs) { mutableStateOf(prefs.voiceAssistant) }
+    val context = LocalContext.current
+    val preview = remember(context, prefs) { CarVoiceAssistant(context, { prefs }, { false }) {} }
+    PickSetting(
+        stringResource(R.string.voice_assistant_title),
+        listOf(Option(stringResource(R.string.voice_assistant_default)), Option(stringResource(R.string.voice_assistant_alice))),
+        VoiceAssistant.entries.indexOf(chosen),
+        about = stringResource(R.string.voice_assistant_about)
+    ) { index ->
+        chosen = VoiceAssistant.entries[index]
+        prefs.voiceAssistant = chosen
+    }
+    if (chosen == VoiceAssistant.ALICE) {
+        Text(
+            stringResource(R.string.voice_alice_adb_about, stringResource(R.string.settings_supercast_title)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        SuperCastComputerCommand()
+        TextButton(onClick = { preview.press() }) { Text(stringResource(R.string.voice_alice_test)) }
+    }
+}
 
 @Composable
 private fun WheelSetting(label: String, initial: Int, onChange: (Int) -> Unit) {

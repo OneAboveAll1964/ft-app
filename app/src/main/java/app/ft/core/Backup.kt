@@ -8,7 +8,10 @@ object Backup {
     const val SCHEME = "ft"
     const val LOOK_HOST = "look"
 
-    private val SKIP = setOf("carBtAddress", "weatherAt", "weatherCelsius", "weatherCode", "lastLatitude", "lastLongitude")
+    private val SKIP = setOf(
+        "carBtAddress", "carLifeVehicleAddress", "carLifeVehicleName", "carLifeWifiAddress", "carLifeVehicleRevision",
+        "weatherAt", "weatherCelsius", "weatherCode", "lastLatitude", "lastLongitude"
+    )
 
     val LOOK_KEYS = listOf(
         "carBackground", "carAccent", "carTiles", "carClock24", "carShowLink", "carSongInfo",

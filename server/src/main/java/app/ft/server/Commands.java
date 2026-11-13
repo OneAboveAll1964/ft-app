@@ -86,6 +86,32 @@ public final class Commands {
                 answer.putBoolean("input", Input.ready());
                 return answer;
             }
+            case "assistant-open": {
+                String name = request.getString("name");
+                if (name == null || !name.startsWith("alice-") || surface == null) return null;
+                Displays.Pane pane = displays.open(name, surface, request.getInt("width", 600),
+                    request.getInt("height", 720), request.getInt("dpi", 200), true);
+                if (pane == null) {
+                    answer.putString("error", "display");
+                    return answer;
+                }
+                if (pane.assistant == null) {
+                    pane.assistant = new AlicePanel(pane.id());
+                    if (!pane.assistant.start()) {
+                        displays.close(name);
+                        answer.putString("error", "unavailable");
+                        return answer;
+                    }
+                }
+                answer.putBoolean("ok", true);
+                answer.putInt("display", pane.id());
+                return answer;
+            }
+            case "assistant-status": {
+                Displays.Pane pane = displays.pane(request.getString("name", ""));
+                answer.putString("state", pane == null || pane.assistant == null ? "closed" : pane.assistant.state());
+                return answer;
+            }
             case "open": {
                 String name = request.getString("name", "pane");
                 int width = request.getInt("width", 1280);

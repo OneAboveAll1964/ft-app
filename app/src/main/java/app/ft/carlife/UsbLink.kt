@@ -87,12 +87,13 @@ class AccessoryLink(
     private val tag = "USB"
     private val running = AtomicBoolean(false)
     private val closing = AtomicBoolean(false)
-    private val writeLock = Any()
-    @Volatile private var pipe: Pipe? = null
+    private class Connection(val pipe: Pipe, val writer: CarLifeWriter<Pair<Int, ByteArray>>)
+    private val connectionLock = Any()
+    @Volatile private var connection: Connection? = null
     private var reader: Thread? = null
     private var unknownNoted = false
 
-    override val isOpen: Boolean get() = running.get() && pipe != null
+    override val isOpen: Boolean get() = running.get() && connection != null
     override val connected: Boolean get() = isOpen
 
     override fun start(scope: CoroutineScope, onMessage: LinkMessage, onEvent: (String) -> Unit, onConnected: () -> Unit, onClosed: (String) -> Unit) {
@@ -104,17 +105,21 @@ class AccessoryLink(
                 if (running.get()) onClosed("$what could not be opened")
                 return@Thread
             }
-            if (!running.get()) {
-                runCatching { p.close() }
-                return@Thread
+            val c = synchronized(connectionLock) {
+                if (!running.get()) {
+                    runCatching { p.close() }
+                    return@Thread
+                }
+                Connection(p, CarLifeWriter("ft-usb-send") { (channel, inner) -> write(p, channel, inner) })
+                    .also { connection = it }
             }
-            pipe = p
             onEvent("$name connected to $what")
             onConnected()
             val why = read(p, onMessage)
             val mine = closing.compareAndSet(false, true)
-            pipe = null
+            synchronized(connectionLock) { if (connection === c) connection = null }
             runCatching { p.close() }
+            c.writer.close()
             if (mine && running.get()) {
                 onEvent("$name disconnected: $why")
                 onClosed(why)
@@ -153,53 +158,40 @@ class AccessoryLink(
 
     private fun exactly(input: InputStream, dst: ByteArray, count: Int) {
         var off = 0
-        var ends = 0
         while (off < count) {
             val n = input.read(dst, off, count - off)
-            if (n < 0) {
-                if (++ends > 3) throw java.io.EOFException("the car closed the cable link")
-                continue
-            }
-            ends = 0
+            if (n < 0) throw java.io.EOFException("the car closed the cable link")
             off += n
         }
     }
 
     override fun send(channel: Int, inner: ByteArray): Boolean {
-        if (pipe == null) return false
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-            OFF_MAIN.execute { write(channel, inner) }
-            return true
-        }
-        return write(channel, inner)
+        val c = connection ?: return false
+        return c.writer.send(channel to inner, asynchronous = onCarLifeMainThread())
     }
 
-    private fun write(channel: Int, inner: ByteArray): Boolean {
-        val p = pipe ?: return false
-        synchronized(writeLock) {
-            return try {
-                p.output.write(AoaFraming.head(channel, inner.size))
-                p.output.write(inner)
-                p.output.flush()
-                true
-            } catch (t: Throwable) {
-                if (running.get() && !closing.get()) DiagLog.e(tag, "$name ${CarLifeProtocol.channelName(channel)} write failed", t)
-                false
-            }
+    private fun write(p: Pipe, channel: Int, inner: ByteArray): Boolean {
+        return try {
+            p.output.write(AoaFraming.head(channel, inner.size))
+            p.output.write(inner)
+            p.output.flush()
+            true
+        } catch (t: Throwable) {
+            if (running.get() && !closing.get()) DiagLog.e(tag, "$name ${CarLifeProtocol.channelName(channel)} write failed", t)
+            false
         }
     }
 
     override fun stop() {
         running.set(false)
         closing.set(true)
-        val p = pipe
-        pipe = null
-        p?.let { runCatching { it.close() } }
+        val c = synchronized(connectionLock) { connection.also { connection = null } }
+        c?.let {
+            runCatching { it.pipe.close() }
+            it.writer.close()
+        }
         reader?.interrupt()
         reader = null
     }
 
-    companion object {
-        private val OFF_MAIN = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "ft-usb-main-sends").apply { isDaemon = true } }
-    }
 }

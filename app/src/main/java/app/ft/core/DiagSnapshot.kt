@@ -5,7 +5,9 @@ import android.app.ActivityManager
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInfo
@@ -23,6 +25,8 @@ import android.os.Process
 import android.provider.Settings
 import app.ft.FTTouchService
 import app.ft.aa.AaHeadUnitService
+import app.ft.aa.AaSwitch
+import app.ft.aa.AaStarterAccessibilityService
 import app.ft.carlife.CarLifeService
 import java.net.NetworkInterface
 
@@ -92,7 +96,11 @@ object DiagSnapshot {
         add(line("notifications allowed") { c.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled() })
         add(line("touch control (accessibility)") {
             val list = Settings.Secure.getString(c.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
-            "enabled=${list.contains("${c.packageName}/")} running=${FTTouchService.instance != null}"
+            val component = ComponentName(c, FTTouchService::class.java)
+            "enabled=${list.split(':').any { ComponentName.unflattenFromString(it) == component }} running=${FTTouchService.instance != null}"
+        })
+        add(line("Android Auto starter (accessibility)") {
+            "enabled=${AaSwitch.isStarterServiceEnabled(c)} connected=${AaStarterAccessibilityService.connected.value} lastResult=${AaStarterAccessibilityService.lastResult}"
         })
         add(line("draw over apps") { Settings.canDrawOverlays(c) })
         add(line("screen sharing without asking") { appop(c, "android:project_media") })
@@ -106,13 +114,25 @@ object DiagSnapshot {
             }
         })
         add(line("carlife state") { CarLifeService.state.value })
+        add(line("car protocol") { Prefs(c).carProtocol.id })
+        add(line("iccoa state") { app.ft.iccoa.IccoaService.state.value })
         add(line("android auto bridge state") { AaHeadUnitService.state.value })
     }
 
     fun settings(c: Context): List<String> = runCatching {
+        val prefs = Prefs(c)
+        val recordCoordinates = prefs.vehicleCoordinateLogging
         listOf("(only settings that were changed are listed, the rest are at their defaults)") +
-            c.getSharedPreferences("ft", Context.MODE_PRIVATE).all.toSortedMap().map { (k, v) ->
-                "$k = " + if (SECRET.containsMatchIn(k) && v?.toString()?.isNotEmpty() == true) "<hidden, ${v.toString().length} chars>" else v.toString()
+            prefs.all.toSortedMap().map { (k, v) ->
+                val privateLocation = !recordCoordinates &&
+                    (k.contains("latitude", ignoreCase = true) ||
+                     k.contains("longitude", ignoreCase = true) ||
+                     k.contains("coordinate", ignoreCase = true))
+                "$k = " + when {
+                    privateLocation -> "<redacted>"
+                    SECRET.containsMatchIn(k) && v?.toString()?.isNotEmpty() == true -> "<hidden, ${v.toString().length} chars>"
+                    else -> v.toString()
+                }
             }
     }.getOrElse { listOf("settings: error ${it.message}") }
 
@@ -147,8 +167,20 @@ object DiagSnapshot {
         })
         val adapter = (c.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
         add(line("bluetooth") { "on=${adapter?.isEnabled} state=${adapter?.state} scanning=${runCatching { adapter?.isDiscovering }.getOrNull()}" })
-        val carAddress = runCatching { c.getSharedPreferences("ft", Context.MODE_PRIVATE).getString("carBtAddress", "") }.getOrNull().orEmpty()
-        runCatching { adapter?.bondedDevices?.toList().orEmpty() }.getOrElse { add("paired: error ${it.message}"); emptyList() }.forEach { d ->
+        add(line("bluetooth calls HFP") {
+            when (adapter?.getProfileConnectionState(BluetoothProfile.HEADSET)) {
+                BluetoothProfile.STATE_CONNECTED -> "connected (at least one device; see BluetoothCalls log for names)"
+                BluetoothProfile.STATE_CONNECTING -> "connecting"
+                BluetoothProfile.STATE_DISCONNECTING -> "disconnecting"
+                BluetoothProfile.STATE_DISCONNECTED -> "disconnected"
+                else -> "unavailable"
+            }
+        })
+        val prefs = Prefs(c)
+        val carAddress = (if (prefs.carProtocol == CarProtocol.CARLIFE) prefs.carLifeVehicleAddress else "")
+            .ifBlank { prefs.carBtAddress }
+        runCatching { adapter?.bondedDevices?.toList().orEmpty() }.getOrElse { add("paired: error ${it.message}"); emptyList() }
+            .filter { prefs.showOtherDevicesInLogs || carAddress.isNotBlank() && it.address.equals(carAddress, true) }.forEach { d ->
             add(line("paired") {
                 val name = runCatching { d.name }.getOrNull() ?: "?"
                 val address = if (d.address.equals(carAddress, true)) d.address else d.address.substring(0, 8) + ":xx:xx:xx"
@@ -160,8 +192,9 @@ object DiagSnapshot {
     }
 
     fun androidAuto(c: Context): List<String> = buildList {
+        val selfPort = runCatching { Prefs(c).aaSelfPort }.getOrDefault(5277)
         add(line("android auto") { pkg(c, GEARHEAD)?.let { "${it.versionName} (code ${if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else 0}) enabled=${it.applicationInfo?.enabled}" } ?: "not installed" })
-        add(line("head unit server ${prefsInt(c, "aaSelfPort", 5277)}") { if (app.ft.aa.AaInstaller.serverRunning(prefsInt(c, "aaSelfPort", 5277))) "running" else "off" })
+        add(line("head unit server $selfPort") { if (app.ft.aa.AaInstaller.serverRunning(selfPort)) "running" else "off" })
         add(line("ft head unit listener") { AaHeadUnitService.state.value.listening })
         add(line("last android auto transport close") { AaHeadUnitService.lastDisconnect })
         add(line("android auto battery optimization ignored") { c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(GEARHEAD) })
@@ -174,7 +207,14 @@ object DiagSnapshot {
     fun audio(c: Context): List<String> = buildList {
         val am = c.getSystemService(AudioManager::class.java)
         add(line("audio") { "mode=${am.mode} music active=${am.isMusicActive} rate=${am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)} frames=${am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)} volume=${am.getStreamVolume(AudioManager.STREAM_MUSIC)}/${am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}" })
-        add(line("outputs") { am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).joinToString { d -> "${d.type}:${d.productName}" + if (d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) "(bt)" else "" } })
+        add(line("outputs") {
+            val prefs = Prefs(c)
+            val known = if (prefs.carProtocol == CarProtocol.CARLIFE) prefs.carLifeVehicleAddress.ifBlank { prefs.carBtAddress } else prefs.carBtAddress
+            am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).joinToString { d ->
+                val name = if (prefs.showOtherDevicesInLogs || known.isNotBlank() && d.address.equals(known, true)) d.productName else "output"
+                "${d.type}:$name" + if (d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) "(bt)" else ""
+            }
+        })
     }
 
     fun codecs(): List<String> = runCatching {
@@ -223,6 +263,4 @@ object DiagSnapshot {
         }
     }.getOrElse { "error ${it.message}" }
 
-    private fun prefsInt(c: Context, key: String, default: Int): Int =
-        runCatching { c.getSharedPreferences("ft", Context.MODE_PRIVATE).getInt(key, default) }.getOrDefault(default)
 }

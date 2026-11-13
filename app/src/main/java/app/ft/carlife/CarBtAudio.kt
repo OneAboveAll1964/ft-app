@@ -42,11 +42,12 @@ class CarBtAudio(private val context: Context) {
     fun somethingIsPlaying(): BluetoothDevice? =
         runCatching { a2dp?.connectedDevices?.firstOrNull() }.getOrNull()
 
-    fun theCar(preferredName: String, address: String): BluetoothDevice? {
+    fun theCar(preferredName: String, address: String, strictAddress: Boolean = false): BluetoothDevice? {
         val a = adapter ?: return null
         val bonded = runCatching { a.bondedDevices?.toList() }.getOrNull().orEmpty()
         val want = address.trim()
         if (want.isNotEmpty()) bonded.firstOrNull { it.address.equals(want, true) }?.let { return it }
+        if (strictAddress) return null
         val name = preferredName.trim()
         if (name.isNotEmpty()) {
             bonded.firstOrNull { runCatching { it.name }.getOrNull()?.contains(name, true) == true }?.let { return it }

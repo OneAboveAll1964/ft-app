@@ -63,8 +63,17 @@ object DiagLog {
     fun e(tag: String, text: String, t: Throwable? = null) =
         add(tag, if (t != null) "$text: ${t.javaClass.simpleName} ${t.message ?: ""}\n${trace(t)}" else text, Log.ERROR)
 
-    fun rx(tag: String, what: String, data: ByteArray) = add(tag, "RX $what  ${Bytes.hex(data, PAYLOAD_LIMIT)}", Log.DEBUG)
-    fun tx(tag: String, what: String, data: ByteArray) = add(tag, "TX $what  ${Bytes.hex(data, PAYLOAD_LIMIT)}", Log.DEBUG)
+    // Unstructured protobuf/ICCOA payloads may encode exact coordinates or destinations.
+    // Hide them too unless the owner explicitly opts into location-bearing diagnostics.
+    private fun rawPayloadEnabled(): Boolean =
+        runCatching { app.ft.FTApp.instance.prefs.vehicleCoordinateLogging }.getOrDefault(false)
+
+    fun rx(tag: String, what: String, data: ByteArray) = add(tag,
+        if (rawPayloadEnabled()) "RX $what  ${Bytes.hex(data, PAYLOAD_LIMIT)}"
+        else "RX $what bytes=${data.size} payload=OMITTED", Log.DEBUG)
+    fun tx(tag: String, what: String, data: ByteArray) = add(tag,
+        if (rawPayloadEnabled()) "TX $what  ${Bytes.hex(data, PAYLOAD_LIMIT)}"
+        else "TX $what bytes=${data.size} payload=OMITTED", Log.DEBUG)
 
     fun trace(t: Throwable, maxFrames: Int = 40): String {
         val sb = StringBuilder()

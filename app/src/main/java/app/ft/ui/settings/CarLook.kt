@@ -177,7 +177,7 @@ fun CarColourSettings(preview: CarPreviewState) {
     var photoFailed by remember { mutableStateOf(false) }
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) scope.launch {
-            val ok = withContext(Dispatchers.IO) { CarStyles.savePhoto(context, uri) }
+            val ok = withContext(Dispatchers.IO) { CarStyles.savePhoto(context, uri, p.profileId) }
             photoFailed = !ok
             if (ok) save { p.carBackground = CarStyle.PHOTO }
             preview.night = false
@@ -367,6 +367,12 @@ fun CarWidgetSettings() {
             if (style.mph) 1 else 0
         ) { index -> save { p.speedMph = index == 1 } }
     }
+    Toggle(stringResource(R.string.widget_coordinates), CarStyle.WIDGET_COORDINATES in style.widgets) { on ->
+        widget(CarStyle.WIDGET_COORDINATES, on)
+    }
+    Toggle(stringResource(R.string.widget_course), CarStyle.WIDGET_COURSE in style.widgets) { on ->
+        widget(CarStyle.WIDGET_COURSE, on)
+    }
     Toggle(stringResource(R.string.widget_calendar), CarStyle.WIDGET_CALENDAR in style.widgets) { on -> widget(CarStyle.WIDGET_CALENDAR, on) }
 
     val needsLocation = remember(permissionTick, style.widgets) { CarInfo.needsLocation(context) }
@@ -389,7 +395,7 @@ fun CarCornerSettings(preview: CarPreviewState) {
     val p = FTApp.instance.prefs
     val style by CarStyles.current.collectAsState()
     Section(stringResource(R.string.corner_title), stringResource(R.string.corner_body))
-    val corners = listOf(R.string.corner_top_left, R.string.corner_top_right, R.string.corner_bottom_left, R.string.corner_bottom_right)
+    val corners = listOf(R.string.corner_top_left, R.string.corner_top_right, R.string.corner_bottom_left, R.string.corner_bottom_right, R.string.corner_above_microphone)
     PickSetting(
         stringResource(R.string.corner_place),
         corners.map { Option(stringResource(it)) },
@@ -397,6 +403,9 @@ fun CarCornerSettings(preview: CarPreviewState) {
     ) { index ->
         save { p.aaCorner = index }
         preview.pillTick++
+    }
+    if (style.corner == 4) {
+        Text(stringResource(R.string.corner_above_microphone_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

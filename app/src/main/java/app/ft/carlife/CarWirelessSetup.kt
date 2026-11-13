@@ -4,36 +4,78 @@ import app.ft.core.Bytes
 import app.ft.core.DiagLog
 import app.ft.core.ProtoReader
 import app.ft.core.ProtoWriter
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 
 class CarWirelessSetup(
     private val send: (ByteArray) -> Boolean,
     private val onCarWifiName: (String) -> Unit,
     private val progress: (String) -> Unit = {},
-    private val onCarReady: () -> Unit = {}
+    private val commandConnected: () -> Boolean = { false },
+    private val now: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val onIpRequestWithoutAddress: () -> Unit = {}
 ) {
     private val tag = "CarBT"
     private val buffer = ArrayList<Byte>(1024)
     @Volatile var carWifiName: String? = null
         private set
-    @Volatile private var ipWanted = false
-    @Volatile private var ipSent = false
-    @Volatile private var phoneIp: String? = null
-    @Volatile private var announcedReady = false
+    private var ipWanted = false
+    private var ipSent = false
+    private var ipSentAt: Long? = null
+    private var phoneIp: String? = null
+    @Volatile var exchange = 0L
+        private set
+    @Volatile var waitingForAddress = false
+        private set
+    private var nameReply = CompletableDeferred<Boolean>()
 
-    fun reset() {
-        synchronized(buffer) { buffer.clear() }
+    @Synchronized
+    fun reset(keepIp: Boolean = true) {
+        exchange++
+        nameReply.complete(false)
+        nameReply = CompletableDeferred()
+        buffer.clear()
         carWifiName = null
         ipWanted = false
+        waitingForAddress = false
         ipSent = false
-        announcedReady = false
+        ipSentAt = null
+        // A new Bluetooth exchange may reuse a live P2P group. Only discard
+        // its address when the caller has confirmed that group was removed.
+        if (!keepIp) phoneIp = null
     }
 
+    @Synchronized
+    fun restart(keepIp: Boolean = true): Boolean {
+        reset(keepIp)
+        return begin()
+    }
+
+    /** Install the waiter before writing: the head unit can reply immediately. */
+    @Synchronized
+    fun restartAwaitingName(keepIp: Boolean): Deferred<Boolean> {
+        reset(keepIp)
+        val reply = nameReply
+        if (!begin()) reply.complete(false)
+        return reply
+    }
+
+    @Synchronized
+    fun bluetoothDisconnected() {
+        buffer.clear()
+        nameReply.complete(false)
+        // An SPP close during group negotiation is normal. Keep the accepted
+        // name and IP; only a new exchange invalidates their queued callbacks.
+    }
+
+    @Synchronized
     fun begin(): Boolean {
         val ok = send(CarLifeFraming.cmd(MD_WIRELESS_INFO_REQUEST))
         if (ok) progress("Asking the car to turn on WiFi Direct") else DiagLog.d(tag, "no bluetooth link to ask the car on")
         return ok
     }
 
+    @Synchronized
     fun askName(): Boolean {
         carWifiName = null
         val ok = send(CarLifeFraming.cmd(MD_TARGET_INFO_REQUEST))
@@ -43,30 +85,41 @@ class CarWirelessSetup(
 
     @Synchronized
     fun wifiDirectReady(ip: String?) {
-        if (ip == null || ip != phoneIp) ipSent = false
-        if (ip == null) announcedReady = false
+        if (ip == null || ip != phoneIp) {
+            ipSent = false
+            ipSentAt = null
+        }
         phoneIp = ip
+        // An old request must not be mistaken for a new request after group loss.
+        waitingForAddress = false
         if (ip != null && ipWanted) sendIp()
     }
 
+    @Synchronized
     fun feed(chunk: ByteArray) {
+        val currentExchange = exchange
         val frames = ArrayList<Pair<Int, ByteArray>>()
-        synchronized(buffer) {
-            for (b in chunk) buffer.add(b)
-            while (buffer.size >= CarLifeProtocol.HEAD_CMD) {
-                val head = ByteArray(CarLifeProtocol.HEAD_CMD) { buffer[it] }
-                val len = Bytes.u16(head, 0)
-                if (len > MAX_BODY || Bytes.u16(head, 2) != 0) {
-                    buffer.removeAt(0)
-                    continue
-                }
-                if (buffer.size < CarLifeProtocol.HEAD_CMD + len) break
-                val body = ByteArray(len) { buffer[CarLifeProtocol.HEAD_CMD + it] }
-                repeat(CarLifeProtocol.HEAD_CMD + len) { buffer.removeAt(0) }
-                frames += Bytes.u32(head, 4) to body
+        for (b in chunk) buffer.add(b)
+        var at = 0
+        while (buffer.size - at >= CarLifeProtocol.HEAD_CMD) {
+            val head = ByteArray(CarLifeProtocol.HEAD_CMD) { buffer[at + it] }
+            val len = Bytes.u16(head, 0)
+            if (len > MAX_BODY || Bytes.u16(head, 2) != 0) {
+                at++
+                continue
             }
+            if (buffer.size - at < CarLifeProtocol.HEAD_CMD + len) break
+            val body = ByteArray(len) { buffer[at + CarLifeProtocol.HEAD_CMD + it] }
+            at += CarLifeProtocol.HEAD_CMD + len
+            frames += Bytes.u32(head, 4) to body
         }
-        frames.forEach { (id, body) -> handle(id, body) }
+        buffer.subList(0, at).clear()
+        for ((id, body) in frames) {
+            // A callback may start a new exchange on the same thread. Do not
+            // apply the remainder of this old read to the reset state.
+            if (exchange != currentExchange) break
+            handle(id, body)
+        }
     }
 
     private fun handle(serviceId: Int, body: ByteArray) {
@@ -75,13 +128,8 @@ class CarWirelessSetup(
                 val r = ProtoReader(body)
                 val type = r.int(1, -1)
                 DiagLog.i(tag, "car wireless info: type $type, band ${r.int(2, 0)}")
-                if (carWifiName != null) {
-                    if (type in 2..4 && !announcedReady) {
-                        announcedReady = true
-                        onCarReady()
-                    }
-                    return
-                }
+                // This describes supported transports, not an open WPS window.
+                if (carWifiName != null) return
                 progress("Asking the car for its WiFi Direct name")
                 send(CarLifeFraming.cmd(MD_TARGET_INFO_REQUEST))
             }
@@ -99,11 +147,19 @@ class CarWirelessSetup(
                 }
                 carWifiName = name
                 progress("The car is on WiFi Direct as '$name'")
+                val reply = nameReply
                 onCarWifiName(name)
+                reply.complete(true)
             }
             HU_IP_REQUEST -> {
                 ipWanted = true
-                if (phoneIp != null) sendIp() else progress("The car is waiting for WiFi Direct to connect")
+                val connected = commandConnected()
+                DiagLog.i(tag, "HU_IP_REQUEST exchange=$exchange addressAvailable=${phoneIp != null} commandConnected=$connected")
+                waitingForAddress = phoneIp == null && !connected
+                if (phoneIp != null) sendIp(requested = true) else if (!connected) {
+                    progress("The car is waiting for WiFi Direct to connect")
+                    onIpRequestWithoutAddress()
+                }
             }
             HU_STATUS -> DiagLog.i(tag, "car wireless status ${ProtoReader(body).int(1, -1)}")
             else -> DiagLog.rx(tag, "bluetooth ${CarLifeProtocol.name(serviceId)}", body)
@@ -111,19 +167,26 @@ class CarWirelessSetup(
     }
 
     @Synchronized
-    private fun sendIp() {
+    private fun sendIp(requested: Boolean = false) {
         val ip = phoneIp ?: return
-        if (ipSent) return
+        // The vehicle SDK restarts its TCP client on MD_WIFI_IP. Answer a fresh
+        // request during startup, but never restart an established CMD channel.
+        if (commandConnected()) return
+        val at = now()
+        if (ipSent && (!requested || ipSentAt?.let { at - it < IP_REPLY_INTERVAL_MS } == true)) return
         ipSent = true
+        ipSentAt = at
         if (send(CarLifeFraming.cmd(MD_WIFI_IP, ProtoWriter().string(1, ip).toByteArray()))) {
             progress("Told the car to connect to $ip")
         } else {
             ipSent = false
+            ipSentAt = null
         }
     }
 
     companion object {
         private const val MAX_BODY = 4096
+        private const val IP_REPLY_INTERVAL_MS = 2000L
         const val MD_WIRELESS_INFO_REQUEST = 0x00100001
         const val HU_WIRELESS_INFO = 0x00108002
         const val MD_TARGET_INFO_REQUEST = 0x00100004

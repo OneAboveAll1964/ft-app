@@ -4,16 +4,16 @@ import androidx.compose.ui.unit.sp
 import app.ft.ui.components.FitText
 import app.ft.ui.theme.ownDirection
 import app.ft.ui.components.InkText
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.key
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.view.SurfaceView
 import android.view.SurfaceHolder
 import app.ft.aa.AaVideoView
+import app.ft.aa.AaDisplayConfig
 import app.ft.aa.AaVideoLayout
 import android.graphics.Rect
 import androidx.compose.animation.AnimatedVisibility
@@ -23,6 +23,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +36,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -73,6 +75,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
@@ -87,10 +92,16 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.drawable.toBitmap
 import app.ft.FTApp
@@ -98,11 +109,11 @@ import app.ft.FTTouchService
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.aa.AaVideoSink
+import app.ft.projection.CarControls
+import app.ft.projection.CarControls.Phase
+import app.ft.projection.CarControls.ScreenState
 import app.ft.aa.AaTouchViewport
 import app.ft.aa.AaViewport
-import app.ft.carlife.CarLifeService
-import app.ft.carlife.CarLifeSession
-import app.ft.carlife.CarState
 import app.ft.core.DiagLog
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -112,6 +123,7 @@ import app.ft.core.Links
 import app.ft.media.CarPlayer
 import app.ft.media.MediaLibrary
 import app.ft.projection.CarTouchZones
+import app.ft.projection.CarTouchCalibration
 import app.ft.projection.MirrorSink
 import app.ft.ui.theme.CarTheme
 import kotlinx.coroutines.delay
@@ -129,11 +141,11 @@ import java.util.Calendar
 
 enum class CarView { LAUNCHER, DRAWER, BROWSER, YOUTUBE, MUSIC, VIDEOS, SUPERCAST }
 
-fun Modifier.touchZone(key: String): Modifier = composed {
+fun Modifier.touchZone(key: String, slopPx: Int = 8): Modifier = composed {
     DisposableEffect(key) { onDispose { CarTouchZones.remove(key) } }
     onGloballyPositioned { c ->
         val b = c.boundsInWindow()
-        CarTouchZones.put(key, Rect(b.left.toInt() - 8, b.top.toInt() - 8, b.right.toInt() + 8, b.bottom.toInt() + 8))
+        CarTouchZones.put(key, Rect(b.left.toInt() - slopPx, b.top.toInt() - slopPx, b.right.toInt() + slopPx, b.bottom.toInt() + slopPx))
     }
 }
 
@@ -159,10 +171,20 @@ fun CarScreen() {
 
 @Composable
 private fun CarRoot(style: CarStyle) {
-    val state by CarLifeService.state.collectAsState()
+    val state by CarControls.state.collectAsState()
     val aa by AaHeadUnitService.state.collectAsState()
+    val assistant by app.ft.core.CarAssistantPanel.state.collectAsState()
+    val touchCal by CarTouchCalibration.state.collectAsState()
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
+    var wasAaVisible by remember { mutableStateOf(state.aaOverlay) }
+    LaunchedEffect(state.aaOverlay) {
+        if (wasAaVisible && !state.aaOverlay) {
+            view = CarView.LAUNCHER
+            nowPlaying = false
+        }
+        wasAaVisible = state.aaOverlay
+    }
     var panes by remember { mutableStateOf<List<CarPane>>(emptyList()) }
     var dockApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var castFull by remember { mutableStateOf(false) }
@@ -186,33 +208,8 @@ private fun CarRoot(style: CarStyle) {
         onDispose { CarInfo.stop(context) }
     }
     val superCastReady by SuperCast.ready.collectAsState()
-    val darkenPhone = FTApp.instance.prefs.supercastScreenOff
-    val panesLive = view == CarView.SUPERCAST && panes.isNotEmpty() && superCastReady
-    DisposableEffect(panesLive, darkenPhone) {
-        if (!panesLive) return@DisposableEffect onDispose { }
-        val watch = object : BroadcastReceiver() {
-            override fun onReceive(ignored: Context?, intent: Intent?) {
-                if (intent?.action != Intent.ACTION_SCREEN_OFF) return
-                DiagLog.i("SuperCast", "power button pressed while apps run, keeping the phone awake and switching its screen")
-                SuperCast.later {
-                    SuperCast.keepAwake(true, wake = true)
-                    SuperCast.powerPressed()
-                }
-            }
-        }
-        context.registerReceiver(watch, IntentFilter(Intent.ACTION_SCREEN_OFF))
-        SuperCast.later {
-            SuperCast.keepAwake(true, wake = true)
-            SuperCast.manageScreen(darkenPhone)
-        }
-        onDispose {
-            runCatching { context.unregisterReceiver(watch) }
-            SuperCast.later {
-                SuperCast.phoneScreen(true)
-                SuperCast.keepAwake(false)
-            }
-        }
-    }
+    val panesLive = view == CarView.SUPERCAST && panes.isNotEmpty() && !state.aaOverlay && !state.mirroring && !state.waitingForShare
+    CarPhoneScreen(aa.connected, panesLive)
     LaunchedEffect(superCastReady, view) {
         if (superCastReady && view == CarView.SUPERCAST && dockApps.isEmpty()) {
             val all = withContext(Dispatchers.IO) { SuperCast.apps() }
@@ -230,12 +227,12 @@ private fun CarRoot(style: CarStyle) {
     LaunchedEffect(view) {
         DiagLog.i("Car", "car screen: ${view.name}")
         if (view == CarView.YOUTUBE || view == CarView.BROWSER || view == CarView.VIDEOS || view == CarView.SUPERCAST) {
-            CarLifeService.soundSoon()
+            CarControls.soundSoon()
         }
     }
     LaunchedEffect(nowPlaying) { if (view == CarView.MUSIC) DiagLog.i("Car", if (nowPlaying) "music: now playing" else "music: song list") }
     LaunchedEffect(Unit) {
-        CarLifeService.openView.collect { key ->
+        CarControls.openView.collect { key ->
             when (key) {
                 "music" -> { view = CarView.MUSIC; nowPlaying = false }
                 "videos" -> view = CarView.VIDEOS
@@ -247,8 +244,10 @@ private fun CarRoot(style: CarStyle) {
         }
     }
     LaunchedEffect(Unit) {
-        CarLifeService.screenKeys.collect { key ->
+        CarControls.screenKeys.collect { key ->
+            val panel = app.ft.core.CarAssistantPanel.state.value
             when {
+                panel != null && (key == 3 || key == 4) -> app.ft.core.CarAssistantPanel.dismiss(panel)
                 key == 3 -> { view = CarView.LAUNCHER; nowPlaying = false }
                 castFull && view == CarView.SUPERCAST -> castFull = false
                 view == CarView.MUSIC && nowPlaying -> nowPlaying = false
@@ -338,13 +337,46 @@ private fun CarRoot(style: CarStyle) {
                     if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                 }
             }
-            if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || style.aaShowReturnButton)) {
-                CornerPill(style.corner) {
-                    view = CarView.LAUNCHER
-                    nowPlaying = false
-                    CarLifeService.goHome()
+            if (!state.aaOverlay && !state.mirroring && touchCal.step in 1..4) {
+                Box(Modifier.fillMaxSize().background(Color(0xFF0B1220))) {
+                    val targetX = if (touchCal.step == 1 || touchCal.step == 3) .15f else .85f
+                    val targetY = if (touchCal.step <= 2) .15f else .85f
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawCircle(
+                            color = Color(0xFF53E5BB),
+                            radius = 22.dp.toPx(),
+                            center = Offset(size.width * targetX, size.height * targetY)
+                        )
+                    }
+                    Text(
+                        "Касание ${touchCal.step}/4: нажмите точно в центр зелёного круга",
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 36.dp)
+                    )
+                    Text(
+                        "Для отмены нажмите в верхнем левом углу экрана",
+                        color = Color.White,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 30.dp)
+                    )
                 }
             }
+            if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || style.aaShowReturnButton)) {
+                // FT163 field log: top-corner taps were intercepted by FT's return pill
+                // rather than reaching small close buttons inside Android Auto.
+                val returnHome = {
+                    view = CarView.LAUNCHER
+                    nowPlaying = false
+                    CarControls.goHome()
+                }
+                val position = CarOverlayPlacement.corner(style.corner, aa = state.aaOverlay)
+                if (position == CarOverlayPlacement.ABOVE_MICROPHONE) {
+                    AaMicReturnButton(aa, returnHome)
+                } else {
+                    CornerPill(position, onClick = returnHome)
+                }
+            }
+            assistant?.let { request -> key(request.id) { LeftToRight { AlicePanel(request) } } }
         }
     }
 }
@@ -375,13 +407,46 @@ private fun ShareWait(pkg: String, forSound: Boolean) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.7f)
             )
-            Button(onClick = { CarLifeService.cancelShareWait() }) { Text(stringResource(if (forSound) R.string.action_not_now else R.string.action_cancel)) }
+            Button(onClick = { CarControls.cancelShareWait() }) { Text(stringResource(if (forSound) R.string.action_not_now else R.string.action_cancel)) }
         }
     }
 }
 
 @Composable
-private fun CornerPill(corner: Int, onClick: () -> Unit) {
+private fun ReturnButton(
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 48.dp,
+    registerTouchZone: Boolean = true,
+    onClick: () -> Unit
+) {
+    val label = stringResource(R.string.aa_return_to_ft)
+    // The AA picture can be smaller than 48 local dp. Do not expand its touch target
+    // into adjacent AA controls; the registered car touch zone is the exact button.
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        Surface(
+            onClick = onClick,
+            shape = CircleShape,
+            color = Color.Transparent,
+            contentColor = Color(0xFFF1F3F4),
+            modifier = modifier.size(size)
+                .then(if (registerTouchZone) Modifier.touchZone("return-button", slopPx = 0) else Modifier)
+                .semantics {
+                contentDescription = label
+                role = Role.Button
+            }
+        ) {
+            Box(
+                Modifier.fillMaxSize().padding(size / 24).background(Color(0xFF25272A), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("FT", fontSize = (size.value / 3).sp, fontWeight = FontWeight.Medium, modifier = Modifier.clearAndSetSemantics {})
+            }
+        }
+    }
+}
+
+@Composable
+private fun CornerPill(corner: Int, registerTouchZone: Boolean = true, onClick: () -> Unit) {
     val align = when (corner) {
         1 -> AbsoluteAlignment.TopRight
         2 -> AbsoluteAlignment.BottomLeft
@@ -389,30 +454,40 @@ private fun CornerPill(corner: Int, onClick: () -> Unit) {
         else -> AbsoluteAlignment.TopLeft
     }
     Box(Modifier.fillMaxSize().padding(CAR_EDGE), contentAlignment = align) {
-        Surface(
-            onClick = onClick,
-            shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(width = 68.dp, height = CAR_ROW).touchZone("pill")
-        ) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = null)
-                Text("FT", fontWeight = FontWeight.Black)
-            }
-        }
+        ReturnButton(registerTouchZone = registerTouchZone, onClick = onClick)
     }
 }
 
 @Composable
-private fun Launcher(state: CarState, style: CarStyle, preview: Boolean = false, onApp: (String) -> Boolean = { false }, onOpen: (CarView, Boolean) -> Unit = { _, _ -> }) {
+private fun AaMicReturnButton(aa: app.ft.aa.AaState, onClick: () -> Unit) {
+    val display = aa.display
+    if (display == null) {
+        CornerPill(2, onClick = onClick)
+        return
+    }
+    val layout = aaVideoLayout(display)
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = AbsoluteAlignment.TopLeft) {
+        val bounds = CarOverlayPlacement.aboveMicrophone(
+            constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), layout, display
+        ) ?: return@BoxWithConstraints
+        ReturnButton(
+            modifier = Modifier.absoluteOffset { IntOffset(bounds.left.roundToInt(), bounds.top.roundToInt()) },
+            size = with(density) { bounds.size.toDp() },
+            onClick = onClick
+        )
+    }
+}
+
+@Composable
+private fun Launcher(state: ScreenState, style: CarStyle, preview: Boolean = false, onApp: (String) -> Boolean = { false }, onOpen: (CarView, Boolean) -> Unit = { _, _ -> }) {
     val player by CarPlayer.state.collectAsState()
     val context = LocalContext.current
     val hasInfo = style.showClock || style.showLink || style.showCarHome || style.showMusic || style.showAa || style.widgets.isNotEmpty()
     val info: @Composable ColumnScope.() -> Unit = {
         if (style.showClock) Clock(style.clock24)
         if (style.showLink) LinkChip(state, preview)
-        if (style.showCarHome) CarHomeButton { if (!preview) CarLifeService.goToCarHome() }
+        if (style.showCarHome) CarHomeButton { if (!preview) CarControls.goToCarHome() }
         CarWidgets(style, preview = preview)
         Spacer(Modifier.weight(1f))
         if (style.showMusic) {
@@ -420,7 +495,7 @@ private fun Launcher(state: CarState, style: CarStyle, preview: Boolean = false,
         }
         if (style.showAa) {
             Button(
-                onClick = { if (!preview) CarLifeService.startAa() },
+                onClick = { if (!preview) CarControls.startAa() },
                 modifier = Modifier.fillMaxWidth().height(84.dp),
                 shapes = ButtonDefaults.shapes(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -497,13 +572,13 @@ private fun CarHomeButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun LinkChip(state: CarState, preview: Boolean = false) {
-    val s = state.session
+private fun LinkChip(state: ScreenState, preview: Boolean = false) {
+    val s = state
     val label = when {
-        s is CarLifeSession.State.Projecting -> stringResource(R.string.link_projecting, s.via, s.streamWidth, s.streamHeight, s.fps)
+        s.phase == Phase.PROJECTING -> stringResource(R.string.link_projecting, s.via, s.width, s.height, s.fps)
         preview -> stringResource(R.string.link_projecting, "WiFi", 1920, 720, 30)
-        s is CarLifeSession.State.Negotiated -> stringResource(R.string.link_getting_ready, s.via)
-        s is CarLifeSession.State.Linked -> stringResource(R.string.link_connected, s.via)
+        s.phase == Phase.NEGOTIATED -> stringResource(R.string.link_getting_ready, s.via)
+        s.phase == Phase.LINKED -> stringResource(R.string.link_connected, s.via)
         else -> stringResource(R.string.link_not_connected)
     }
     Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), contentColor = Color.White) {
@@ -638,10 +713,10 @@ private fun openTile(key: String, onOpen: (CarView, Boolean) -> Unit, onApp: (St
         key == "browser" -> onOpen(CarView.BROWSER, false)
         key == "apps" -> onOpen(CarView.DRAWER, false)
         key == "supercast" -> onOpen(CarView.SUPERCAST, false)
-        key == "maps" -> CarLifeService.launchApp(FTApp.instance.prefs.mapsPackage)
-        key == "aa" -> CarLifeService.startAa()
-        key == "phone" -> CarLifeService.showPhone()
-        key.startsWith("app:") -> CarLifeService.launchApp(key.removePrefix("app:"))
+        key == "maps" -> CarControls.launchApp(FTApp.instance.prefs.mapsPackage)
+        key == "aa" -> CarControls.startAa()
+        key == "phone" -> CarControls.showPhone()
+        key.startsWith("app:") -> CarControls.launchApp(key.removePrefix("app:"))
     }
 }
 
@@ -708,12 +783,17 @@ private fun Tile(modifier: Modifier, spec: TileSpec, onClick: () -> Unit) {
 }
 
 @Composable
+private fun aaVideoLayout(display: AaDisplayConfig): AaVideoLayout {
+    val real by AaVideoSink.frame.collectAsState()
+    val (frameW, frameH) = real ?: app.ft.aa.AaProtocol.standardSize(display.width, display.height)
+    return AaVideoLayout.forFrame(display.width, display.height, frameW, frameH)
+}
+
+@Composable
 private fun AaOverlay(aa: app.ft.aa.AaState, modifier: Modifier = Modifier) {
     val prefs = FTApp.instance.prefs
-    val (fullW, fullH) = app.ft.aa.AaProtocol.standardSize(prefs.aaWidth, prefs.aaHeight)
-    val real by AaVideoSink.frame.collectAsState()
-    val (frameW, frameH) = real ?: (fullW to fullH)
-    val layout = AaVideoLayout.forFrame(prefs.aaWidth, prefs.aaHeight, frameW, frameH)
+    val display = aa.display ?: AaDisplayConfig(prefs.aaWidth, prefs.aaHeight, prefs.aaDensity, prefs.aaControlsLeft)
+    val layout = aaVideoLayout(display)
     DisposableEffect(Unit) { onDispose { AaTouchViewport.bounds = null } }
     BoxWithConstraints(modifier.fillMaxSize().clipToBounds().background(Color.Black)) {
         val ratio = layout.contentWidth.toFloat() / layout.contentHeight
@@ -831,11 +911,11 @@ private fun PhoneKeys(left: Boolean, rotate: Boolean, modifier: Modifier) {
                     exit = fadeOut(tween(250))
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 6.dp)) {
-                        PhoneKey(CarIcons.Back, stringResource(R.string.key_back)) { CarLifeService.navBack(); poke++ }
-                        PhoneKey(Icons.Filled.Home, stringResource(R.string.key_home)) { CarLifeService.navHome(); poke++ }
-                        PhoneKey(CarIcons.Recents, stringResource(R.string.key_recents)) { CarLifeService.navRecents(); poke++ }
-                        if (rotate) PhoneKey(CarIcons.Rotate, stringResource(R.string.key_rotate)) { CarLifeService.rotatePhone(); poke++ }
-                        PhoneKey(Icons.Filled.Notifications, stringResource(R.string.key_notifications)) { CarLifeService.navNotifications(); poke++ }
+                        PhoneKey(CarIcons.Back, stringResource(R.string.key_back)) { CarControls.navBack(); poke++ }
+                        PhoneKey(Icons.Filled.Home, stringResource(R.string.key_home)) { CarControls.navHome(); poke++ }
+                        PhoneKey(CarIcons.Recents, stringResource(R.string.key_recents)) { CarControls.navRecents(); poke++ }
+                        if (rotate) PhoneKey(CarIcons.Rotate, stringResource(R.string.key_rotate)) { CarControls.rotatePhone(); poke++ }
+                        PhoneKey(Icons.Filled.Notifications, stringResource(R.string.key_notifications)) { CarControls.navNotifications(); poke++ }
                     }
                 }
             }
@@ -911,7 +991,7 @@ private fun AppCell(app: AppCatalog.App, px: Int, onClose: () -> Unit) {
         if (value == null) value = AppCatalog.icon(context, app, px)
     }
     Surface(
-        onClick = { onClose(); CarLifeService.launchApp(app.pkg) },
+        onClick = { onClose(); CarControls.launchApp(app.pkg) },
         shape = RoundedCornerShape(22.dp),
         color = LocalCarCard.current,
         contentColor = Color.White,
@@ -928,7 +1008,7 @@ private fun AppCell(app: AppCatalog.App, px: Int, onClose: () -> Unit) {
 
 @Composable
 fun CarPreview(style: CarStyle, modifier: Modifier = Modifier, pill: Boolean = false) {
-    val state by CarLifeService.state.collectAsState()
+    val state by CarControls.state.collectAsState()
     CarTheme(style.accentColor) {
         CompositionLocalProvider(
             LocalContentColor provides Color.White,
@@ -939,7 +1019,7 @@ fun CarPreview(style: CarStyle, modifier: Modifier = Modifier, pill: Boolean = f
                 CarBackground(style)
                 Launcher(state, style, preview = true)
                 AnimatedVisibility(visible = pill, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.matchParentSize()) {
-                    CornerPill(style.corner) {}
+                    CornerPill(CarOverlayPlacement.corner(style.corner, aa = false), registerTouchZone = false) {}
                 }
                 Box(
                     Modifier

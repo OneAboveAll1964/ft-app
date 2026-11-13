@@ -64,4 +64,33 @@ class CarMatchTest {
         val carlife = peer("CarLife-1234", "02:00:00:00:00:01", owner = true)
         assertEquals(carlife to CarMatch.Why.NAME, CarMatch.pick(listOf(tv, carlife), "", ""))
     }
+
+    @Test
+    fun rememberedNamelessCarUsesOnlyItsConfirmedWifiAddress() {
+        val car = peer("", "ee:a7:ad:83:5f:b3", owner = true)
+        assertEquals(car, CarMatch.known(listOf(tv, printer, car), "", "EE:A7:AD:83:5F:B3"))
+        assertNull(CarMatch.known(listOf(tv, printer), "", car.address))
+    }
+
+    @Test
+    fun rememberedCarNeverUsesApproximateAddressesOrNamelessFallback() {
+        val nearbyRadio = peer("", "ee:a7:ad:83:5f:b3", owner = true)
+        assertNull(CarMatch.known(listOf(nearbyRadio), "_ClfWfd_vehicle-ePI34", "ec:a7:ad:83:5f:b4"))
+    }
+
+    @Test
+    fun freshExactAnnouncementCanFindChangedWifiAddress() {
+        val car = peer("_ClfWfd_vehicle-ePI34", "22:34:56:78:9a:bc", owner = true)
+        assertEquals(car, CarMatch.known(listOf(tv, car), "_ClfWfd_vehicle-ePI34", "ee:a7:ad:83:5f:b3"))
+        assertNull(CarMatch.known(listOf(car), "", "ee:a7:ad:83:5f:b3"))
+        assertNull(CarMatch.known(listOf(car), "_ClfWfd_vehicle", "ee:a7:ad:83:5f:b3"))
+    }
+
+    @Test
+    fun exactSavedAddressWinsButAmbiguousFreshNameDoesNot() {
+        val car = peer("CarLife", "22:34:56:78:9a:bc")
+        val other = peer("CarLife", "32:34:56:78:9a:bc")
+        assertEquals(car, CarMatch.known(listOf(other, car), "CarLife", car.address))
+        assertNull(CarMatch.known(listOf(other, car), "CarLife", ""))
+    }
 }

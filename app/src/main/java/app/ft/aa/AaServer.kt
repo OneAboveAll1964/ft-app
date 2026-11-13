@@ -18,37 +18,29 @@ object AaServer {
 
     fun start(context: Context): Boolean {
         if (up()) return true
-        if (!Root.ensure()) return false
-        for (part in look(context)) {
+        if (!Root.granted) return false
+        // A different AA version must fail closed, rather than launch vaguely named activities or receivers.
+        for (part in look(context).filter { it.kind == Kind.SERVICE && it.name == KNOWN }) {
             val component = "$PACKAGE/${part.name}"
-            val tried = when (part.kind) {
-                Kind.SERVICE -> listOf("am start-foreground-service -n $component", "am startservice -n $component")
-                Kind.ACTIVITY -> listOf("am start -n $component")
-                Kind.RECEIVER -> listOf("am broadcast -n $component")
-            }
+            val tried = listOf("am start-foreground-service -n $component", "am startservice -n $component")
             for (command in tried) {
-                Root.run(command)
+                Root.runAaCommand(command)
                 if (settles()) {
                     DiagLog.i(TAG, "Android Auto's head unit server switched on from ${part.name.substringAfterLast('.')}, nothing tapped")
                     return true
                 }
             }
         }
-        DiagLog.i(TAG, "none of Android Auto's own parts switched the head unit server on")
+        DiagLog.i(TAG, "Android Auto's known head unit service could not be started directly")
         return false
     }
 
     fun stop(context: Context): Boolean {
         if (!up()) return true
-        if (!Root.ensure()) return false
-        Root.run("am stopservice -n $PACKAGE/$KNOWN")
+        if (!Root.granted) return false
+        Root.runAaCommand("am stopservice -n $PACKAGE/$KNOWN")
         if (gone()) {
             DiagLog.i(TAG, "Android Auto's head unit server stopped")
-            return true
-        }
-        Root.run("pkill -f $PACKAGE:projection")
-        if (gone()) {
-            DiagLog.i(TAG, "Android Auto kept the door open after stopping, so FT closed it")
             return true
         }
         return false

@@ -7,6 +7,9 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import app.ft.carlife.CarLifeService
+import app.ft.core.CarConnection
+import app.ft.core.CarProtocol
+import app.ft.iccoa.IccoaService
 import app.ft.carlife.CarLifeSession
 import app.ft.core.DiagLog
 import app.ft.core.Lang
@@ -24,6 +27,7 @@ class FtTile : TileService() {
         val made = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scope = made
         made.launch { CarLifeService.state.collect { draw() } }
+        made.launch { IccoaService.state.collect { draw() } }
     }
 
     override fun onStopListening() {
@@ -36,10 +40,10 @@ class FtTile : TileService() {
         val on = FTApp.instance.prefs.autoConnect
         if (on) {
             DiagLog.i(TAG, "switched off from the quick settings")
-            CarLifeService.switchOff(applicationContext)
+            CarConnection.switchOff(applicationContext)
         } else {
             DiagLog.i(TAG, "switched on from the quick settings")
-            CarLifeService.switchOn(applicationContext)
+            CarConnection.switchOn(applicationContext)
         }
         draw()
     }
@@ -54,6 +58,7 @@ class FtTile : TileService() {
         tile.subtitle = Lang.str(
             when {
                 !on -> R.string.state_off
+                FTApp.instance.prefs.carProtocol == CarProtocol.ICCOA -> R.string.iccoa_experimental
                 car.session is CarLifeSession.State.Projecting -> R.string.tile_on_the_car
                 car.running -> R.string.tile_looking
                 else -> R.string.state_on

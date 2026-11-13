@@ -96,6 +96,37 @@ class VideoProfileSessionTest {
         assertNull(store.prefs.savedVideoProfile)
     }
 
+    @Test fun changedScreenRestartsVideoWithoutReconnecting() = runTest {
+        val connection = Connection(Store(), backgroundScope)
+        connection.init()
+        connection.init(1280, 720)
+        assertEquals(2, connection.starts)
+        assertEquals(1280, connection.session.streamWidth)
+        assertEquals(1280, connection.started!!.streamWidth)
+    }
+
+    @Test fun identicalInitKeepsTheAdaptedStreamButChangedRateRestartsIt() = runTest {
+        val connection = Connection(Store(), backgroundScope)
+        connection.init()
+        connection.rate(24)
+        connection.init()
+        assertEquals(1, connection.starts)
+        assertEquals(24, connection.session.fps)
+        connection.init(asked = 30)
+        assertEquals(2, connection.starts)
+        assertEquals(30, connection.session.fps)
+    }
+
+    @Test fun encoderFailureCanBeRetriedWithTheSameInit() = runTest {
+        val connection = Connection(Store(), backgroundScope)
+        connection.session.onVideoConfig = { error("encoder refused") }
+        assertThrows(IllegalStateException::class.java) { connection.init() }
+        var restarted = false
+        connection.session.onVideoConfig = { restarted = true }
+        connection.init()
+        assertTrue(restarted)
+    }
+
     @Test fun temporaryThermalLimitIsNotRemembered() = runTest {
         val store = Store()
         val first = Connection(store, backgroundScope)
@@ -114,8 +145,9 @@ class VideoProfileSessionTest {
         private val link = TestLink()
         val session = CarLifeSession(store.context, link, Prefs(store.context), scope)
         var started: VideoPlan? = null
+        var starts = 0
         init {
-            session.onVideoConfig = { started = it }
+            session.onVideoConfig = { started = it; starts++ }
             session.start()
         }
         fun init(width: Int = 1920, height: Int = 720, asked: Int = 0) =

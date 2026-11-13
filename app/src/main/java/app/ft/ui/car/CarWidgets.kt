@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +29,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.ft.R
 import app.ft.core.CarInfo
+import app.ft.core.VehicleLocation
+import app.ft.core.VehicleTelemetry
+import kotlinx.coroutines.delay
 import app.ft.ui.theme.ownDirection
 import java.util.Calendar
 import java.util.Locale
@@ -37,6 +41,11 @@ import kotlin.math.roundToInt
 @Composable
 fun CarWidgets(style: CarStyle, modifier: Modifier = Modifier, preview: Boolean = false) {
     if (style.widgets.isEmpty()) return
+    val vehicle by VehicleTelemetry.current.collectAsState()
+    val now by produceState(initialValue = System.currentTimeMillis()) {
+        while (true) { delay(1_000); value = System.currentTimeMillis() }
+    }
+    val freshVehicle = vehicle?.takeIf { it.fresh(now) }
     FlowRow(
         modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -46,7 +55,9 @@ fun CarWidgets(style: CarStyle, modifier: Modifier = Modifier, preview: Boolean 
             when (key) {
                 CarStyle.WIDGET_WEATHER -> WeatherChip(style.fahrenheit, preview)
                 CarStyle.WIDGET_BATTERY -> BatteryChip(preview)
-                CarStyle.WIDGET_SPEED -> SpeedChip(style.mph, preview)
+                CarStyle.WIDGET_SPEED -> SpeedChip(style.mph, preview, freshVehicle, now)
+                CarStyle.WIDGET_COORDINATES -> CoordinatesChip(vehicle, preview, now)
+                CarStyle.WIDGET_COURSE -> CourseChip(vehicle, preview, now)
                 CarStyle.WIDGET_CALENDAR -> EventChip(style.clock24, preview)
             }
         }
@@ -72,12 +83,62 @@ private fun BatteryChip(preview: Boolean) {
 }
 
 @Composable
-private fun SpeedChip(mph: Boolean, preview: Boolean) {
+private fun SpeedChip(mph: Boolean, preview: Boolean, vehicle: VehicleLocation?, now: Long) {
     val live by CarInfo.speed.collectAsState()
-    val speed = if (live < 0f && preview) 60f else live
+    // A displayed car speed is live only with a recent OEM GPS position.
+    val carSpeed = vehicle?.takeIf { it.positionFresh(now) }?.speedKmh
+        ?.takeIf { it.isFinite() && it in 0f..450f }
+    val speed = carSpeed ?: if (live < 0f && preview) 60f else live
     if (speed < 0f) return
     val shown = if (mph) speed * 0.621371f else speed
-    Chip(CarIcons.Speed, "${shown.roundToInt()}", stringResource(if (mph) R.string.widget_mph else R.string.widget_kmh))
+    val source = if (carSpeed != null) (vehicle?.source ?: "CAR") else "PHONE"
+    val raw = vehicle?.speedRaw
+    val suffix = if (carSpeed == null && raw != null) " · ${vehicle?.source} raw=$raw" else " · $source"
+    Chip(CarIcons.Speed, "${shown.roundToInt()}",
+        "${stringResource(if (mph) R.string.widget_mph else R.string.widget_kmh)}$suffix")
+}
+
+@Composable
+private fun CoordinatesChip(vehicle: VehicleLocation?, preview: Boolean, now: Long) {
+    val fix = vehicle?.takeIf { it.positionAtMs > 0L }
+    val fresh = fix?.positionFresh(now) == true
+    val latitude = fix?.displayLatitude
+    val longitude = fix?.displayLongitude
+    val value = when {
+        latitude != null && longitude != null -> String.format(Locale.US, "%.5f, %.5f", latitude, longitude)
+        fix?.rawLatitude != null && fix.rawLongitude != null ->
+            "${fix.rawLatitude}, ${fix.rawLongitude}"
+        else -> "—"
+    }
+    val detail = when {
+        latitude != null && fresh -> "${fix?.source ?: "CAR"} · GPS"
+        latitude != null -> "${fix?.source ?: "CAR"} · STALE ${((now - fix!!.positionAtMs).coerceAtLeast(0L) / 1000L)}s"
+        fix?.rawLatitude != null && fresh -> "${fix.source} · raw"
+        fix?.rawLatitude != null -> "${fix.source} · raw STALE"
+        else -> "${vehicle?.source ?: "CAR"} · NO FIX"
+    }
+    Chip(CarIcons.Map, value, detail, wide = true)
+}
+
+@Composable
+private fun CourseChip(vehicle: VehicleLocation?, preview: Boolean, now: Long) {
+    val fix = vehicle?.takeIf { it.positionAtMs > 0L }
+    val fresh = fix?.positionFresh(now) == true
+    val degrees = fix?.headingDegrees?.takeIf { it.isFinite() && it in 0f..360f }
+    val raw = fix?.headingRaw
+    val label = when {
+        degrees != null -> "${degrees.roundToInt()}°"
+        raw != null -> "$raw"
+        else -> "—"
+    }
+    val detail = when {
+        degrees != null && fresh -> fix?.source ?: "CAR"
+        degrees != null -> "${fix?.source ?: "CAR"} · STALE ${((now - fix!!.positionAtMs).coerceAtLeast(0L) / 1000L)}s"
+        raw != null && fresh -> "${fix?.source ?: "CAR"} · raw"
+        raw != null -> "${fix?.source ?: "CAR"} · raw STALE"
+        else -> "${vehicle?.source ?: "CAR"} · NO FIX"
+    }
+    Chip(CarIcons.Rotate, label, detail)
 }
 
 @Composable

@@ -15,6 +15,23 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 class UsbLinkTest {
+    @Test
+    fun eofClosesTheLinkWithoutReadingTheClosedStreamAgain() {
+        var reads = 0
+        val input = object : java.io.InputStream() {
+            override fun read(): Int { reads++; return -1 }
+        }
+        val closed = LinkedBlockingQueue<String>()
+        val link = AccessoryLink("USB", "test") {
+            AccessoryLink.Pipe(input, java.io.ByteArrayOutputStream()) { }
+        }
+        try {
+            link.start(CoroutineScope(Dispatchers.IO), { _, _, _ -> }, { }, { }, { closed.put(it) })
+            assertTrue(closed.poll(5, TimeUnit.SECONDS)?.contains("the car closed the cable link") == true)
+            assertEquals(1, reads)
+        } finally { link.stop() }
+    }
+
     private data class Got(val channel: Int, val serviceId: Int, val body: ByteArray)
 
     private val got = ArrayList<Got>()

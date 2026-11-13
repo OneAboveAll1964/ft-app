@@ -77,8 +77,11 @@ data class CarStyle(
         const val WIDGET_WEATHER = "weather"
         const val WIDGET_BATTERY = "battery"
         const val WIDGET_SPEED = "speed"
+        const val WIDGET_COORDINATES = "coordinates"
+        const val WIDGET_COURSE = "course"
         const val WIDGET_CALENDAR = "calendar"
-        val WIDGETS = listOf(WIDGET_WEATHER, WIDGET_BATTERY, WIDGET_SPEED, WIDGET_CALENDAR)
+        val WIDGETS = listOf(WIDGET_WEATHER, WIDGET_BATTERY, WIDGET_SPEED,
+            WIDGET_COORDINATES, WIDGET_COURSE, WIDGET_CALENDAR)
 
         fun parseWidgets(raw: String): List<String> =
             raw.split(',').map { it.trim() }.filter { it in WIDGETS }.distinct()
@@ -124,7 +127,12 @@ object CarStyles {
     private val _current = MutableStateFlow(CarStyle())
     val current: StateFlow<CarStyle> = _current
 
-    fun photoFile(context: Context) = File(context.filesDir, "car_background.jpg")
+    fun photoFile(context: Context, profileId: String = FTApp.instance.prefs.profileId): File {
+        require(profileId == Prefs.LEGACY_ID || runCatching {
+            java.util.UUID.fromString(profileId).toString() == profileId
+        }.getOrDefault(false))
+        return File(context.filesDir, if (profileId == Prefs.LEGACY_ID) "car_background.jpg" else "car_background_$profileId.jpg")
+    }
 
     fun reload() {
         val p = FTApp.instance.prefs
@@ -135,7 +143,7 @@ object CarStyles {
             tiles = CarStyle.parseTiles(p.carTiles).ifEmpty { CarStyle.parseTiles(CarStyle.DEFAULT_TILES) },
             clock24 = p.carClock24,
             showLink = p.carShowLink,
-            corner = p.aaCorner.coerceIn(0, 3),
+            corner = p.aaCorner.coerceIn(0, CarOverlayPlacement.ABOVE_MICROPHONE),
             aaShowReturnButton = p.aaShowReturnButton,
             photoStamp = if (photo.exists()) photo.lastModified() else 0,
             infoRight = p.carInfoRight,
@@ -179,7 +187,7 @@ object CarStyles {
         }
     }
 
-    fun savePhoto(context: Context, uri: Uri): Boolean = runCatching {
+    fun savePhoto(context: Context, uri: Uri, profileId: String = FTApp.instance.prefs.profileId): Boolean = runCatching {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
@@ -187,7 +195,7 @@ object CarStyles {
         val bitmap = context.contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
         } ?: return false
-        photoFile(context).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it) }
+        photoFile(context, profileId).outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, it) }
         true
     }.getOrDefault(false)
 }

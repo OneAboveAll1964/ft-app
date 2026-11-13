@@ -9,6 +9,8 @@ FT speaks CarLife the way the official Baidu CarLife app does: the same handshak
 
 FT runs in English, Arabic, Kurdish Sorani, Kurdish Badini and Russian, on the phone and on the car screen, in a light, dark or automatic look.
 
+**Experimental ICCOA:** Settings → Car and connection → Car protocol also offers an independent ICCOA Carlink backend, with its own Bluetooth/Wi-Fi connection, car-code authentication, screen stream and input transport. It currently targets car access-point mode with a fresh six-digit code; physical Toyota XA60 testing is still required. CarLife remains the default. See the [tester instructions in Russian](docs/ICCOA-TESTER-RU.md) and [implementation status](docs/ICCOA-DEVELOPMENT.md).
+
 ## How it connects
 
 For the wireless connection sequence, protocol sources and failure diagnosis, see
@@ -35,12 +37,18 @@ Then the CarLife handshake, as Baidu does it:
 - When the car asks for no frame rate, FT starts at 30 frames a second on Hotspot, and at 20 on WiFi Direct before moving to 30. It then follows what the car asks for between 15 and 30; like Baidu, it never paces below 15. A hot phone drops to 24 or 20 to cool down.
 - FT remembers the picture that worked with each car and starts the next connection with it; **Picture** in Settings shows what is being sent now and what is saved. A remembered frame rate can only speed up the start, never slow it down, so a moment where the car asked for less does not carry over to the next drive.
 - H.264 Baseline, a full picture every second, and a quality floor that keeps full pictures small enough for the car to take.
-- The encoder is told to run at full speed, for the quickest picture. **Let the video encoder save power** tells it the picture's own frame rate instead, and the new rate whenever FT changes it, which may keep the phone cooler on long drives but can make the car screen answer touches a little later. It is off by default.
+- **Let the video encoder save power** supplies an optional operating-rate hint at startup and whenever FT changes the frame rate. The hint asks the codec to plan resources for the selected FPS; savings and latency depend on the phone. If startup with the hint fails, FT retries the same encoder without it. The setting is off by default and takes effect on the next projection connection.
+- Android Auto's **Frame rate** setting also caps FT's output to the car while AA is visible. Automatic screen matching adjusts dimensions without changing this selection. Choose 30 FPS to reduce frame processing, or 60 FPS for smoother motion; reconnect AA after changing it. On a static picture, the frame gate sleeps between keepalives instead of polling at full FPS, and a new frame or touch brings the next normal frame deadline forward.
 - The codec header goes out once, with the first full picture. If the car asks for a reset, FT sends the header again with a fresh full picture.
 - While the car shows its own screens (the reverse camera, for example), only heartbeats go out. When it comes back, FT keeps drawing for a moment so the encoder makes its next regular full picture within about a second, even if nothing on FT's screen is moving. FT forces a full picture only if none has come after 2.5 seconds; on the Corolla, forced full pictures on resume left the screen black.
 - A heartbeat goes out at least every 0.9 seconds at any frame rate, so the car's video watchdog never drops the connection.
 
 ## Sound
+
+Android Auto can also send song information to the car's display or instrument
+cluster. Enable **Settings → Sound → Show the song on the car's own display**;
+see [Android Auto song information](docs/android-auto-music.md) for behavior and
+vehicle checks.
 
 - Car sound goes out as 48 kHz stereo on the media channel: FT's own player, Android Auto's media and other apps' sound. The phone speaker is silenced while FT streams, and **Use the car's bluetooth for sound** plays it over Bluetooth instead.
 - When sound starts FT tells the car the way Baidu does: `MEDIA_INIT`, `MEDIA_STOP`, `MEDIA_INIT` and the music module switched on. After 750 ms of quiet it sends `MEDIA_PAUSE` and switches the music module off.
@@ -74,11 +82,15 @@ With root, or once from a computer with one adb line, FT starts a small helper f
 
 ## Android Auto
 
-The head unit speaks CarLife, not Android Auto, so FT shows **your own phone's** Android Auto on the car: it runs an Android Auto head unit inside FT, asks Android Auto to project into it, and draws that picture on the car screen with the car's touchscreen driving it. Home starts it, and it can start by itself after the car connects. The picture fills the car screen without Android Auto's black margins, and touches follow the picture. The FT button over Android Auto can be hidden in Settings.
+**Settings → Car and connection → Check and start Android Auto before connecting** prepares the phone’s head unit server before CarLife/Baidu or ICCOA connects. This per-car option is off by default. A failed check shows its reason and allows the car connection to continue. It is separate from automatically opening Android Auto after connection.
 
-Android Auto only takes FT's head unit when its own head unit server is on, and Android Auto switches that server off whenever the phone restarts or Android Auto updates. FT keeps it on: whenever the car wants Android Auto and the server is off, FT opens Android Auto's settings, taps **Start head unit server** in its menu and comes back, usually in under a second. It does this with root, or without root through FT's accessibility service (the same one the car touchscreen uses). If the phone is locked, FT does it as soon as the phone is unlocked. If Android Auto's developer settings are off, FT says so once instead of trying again and again; the help sheet shows how to switch them on.
+The FT return button uses a compact dark circle on every car screen. **Settings → Car screen → FT button → Position → Above microphone** adds an optional position for Android Auto with a vertical side panel: FT sits above the microphone and app launcher, following the panel side and the displayed AA image scale. Its position is estimated from the panel layout and should be checked on the car. Outside Android Auto, this option uses the bottom left corner; the four existing corner choices remain available.
 
-Android Auto's frame rate is 30 or 60, the only two it takes from a head unit.
+The head unit speaks CarLife, not Android Auto, so FT shows **your own phone's** Android Auto on the car: it runs an Android Auto head unit inside FT, asks Android Auto to project into it, and draws that picture on the car screen with the car's touchscreen driving it. Home starts it, and it can start by itself after the car connects.
+
+Android Auto only takes FT's head unit when its own head unit server is on, and Android Auto switches that server off whenever the phone restarts or Android Auto updates. Without root, enable the separate **FT — Android Auto server** accessibility helper (Russian: **FT — запуск Android Auto**). The car-touch service alone no longer starts the server. Each startup request lasts at most eight seconds: while the phone is unlocked, the helper opens Android Auto settings, selects **Start head unit server**, waits for the server port or the **Stop head unit server** menu item, and returns to FT if Android Auto is still foreground. It stops interacting when the phone locks or the user leaves Android Auto. It cannot inject gestures and uses no coordinate taps or global Back action. Root can still start the AA server directly; a failed direct start uses only the independently enabled helper. FT never enables this helper through root. Enable Android Auto developer settings first; the help sheet also provides the manual startup steps. See [the startup design and limitations](docs/AA-STARTER-2026-11-04.md).
+
+Android Auto's frame rate is 30 or 60, the only two it takes from a head unit. The picture fills the car screen without Android Auto's black margins, and touches follow the picture. The FT button over Android Auto can be hidden in Settings.
 
 When the assistant listens, FT asks the car to record from its own microphone and passes that sound to Android Auto. When the assistant stops, FT ends the recording and turns the car's microphone light off.
 

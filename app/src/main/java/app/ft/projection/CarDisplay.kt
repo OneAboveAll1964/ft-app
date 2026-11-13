@@ -3,6 +3,7 @@ package app.ft.projection
 import android.content.Context
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.MediaCodec
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -10,7 +11,6 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import app.ft.FTApp
-import app.ft.carlife.CarTouch
 import app.ft.core.DiagLog
 import app.ft.core.Sizing
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +20,7 @@ class CarDisplay(private val context: Context) {
     private val tag = "Display"
     private val main = Handler(Looper.getMainLooper())
     private var encoder: SurfaceEncoder? = null
+    private var sessionEpoch = 0L
     private var gate: FrameGate? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var presentation: CarPresentation? = null
@@ -36,6 +37,8 @@ class CarDisplay(private val context: Context) {
         if (t != null) deliver(t)
     }
     @Volatile private var frameIntervalMs = 33L
+    private var requestedFrameRate = 30
+    private var frameRateCap = 0
     private val ticker = object : Runnable {
         override fun run() {
             val p = presentation ?: return
@@ -53,32 +56,68 @@ class CarDisplay(private val context: Context) {
     var streamWidth = 0; private set
     var streamHeight = 0; private set
 
+    @Synchronized
     fun start(
         plan: VideoPlan,
         onConfig: (ByteArray) -> Unit,
         onFrame: (ByteArray, Boolean) -> Unit,
+        onTimedFrame: ((ByteArray, Boolean, Long) -> Unit)? = null,
+        onFailure: ((Throwable) -> Unit)? = null,
+        codecAttempt: Int = 0,
         content: @Composable () -> Unit
     ) {
         stop()
-        val fps = plan.fps
+        val epoch = sessionEpoch
+        // An encoder may die only after the first real EGL frame was submitted.
+        // Retry a bounded compatible AVC candidate without tearing down RTSP or audio.
+        val codecFailure: (Throwable) -> Unit = { error ->
+            main.post {
+                synchronized(this@CarDisplay) {
+                    if (epoch != sessionEpoch) return@synchronized
+                    val failed = encoder
+                    val next = (failed?.selectedCandidateIndex ?: -1) + 1
+                    if (error is MediaCodec.CodecException && failed != null &&
+                        next in 1 until failed.candidateCount
+                    ) {
+                        DiagLog.w(tag, "H264 ASYNC_RETRY candidate=${next + 1}/${failed.candidateCount} format=${plan.streamWidth}x${plan.streamHeight}@${plan.fps}")
+                        runCatching {
+                            // Preserve a rate reduced by the car or thermal protection.
+                            start(plan.copy(fps = requestedFrameRate), onConfig, onFrame, onTimedFrame, onFailure, next, content)
+                        }.onFailure { retryError ->
+                            stop()
+                            DiagLog.e(tag, "H264 retry display rebind failed", retryError)
+                            onFailure?.invoke(retryError)
+                        }
+                    } else {
+                        DiagLog.e(tag, "H264 FINAL_FAILURE candidate=${(failed?.selectedCandidateIndex ?: -1) + 1} total=${failed?.candidateCount ?: 0}", error)
+                        onFailure?.invoke(error)
+                    }
+                }
+            }
+        }
+        requestedFrameRate = plan.fps.coerceIn(1, 60)
+        val fps = VideoPlans.withinCap(requestedFrameRate, frameRateCap)
         val savePower = FTApp.instance.prefs.encoderSavePower
         width = plan.contentWidth
         height = plan.contentHeight
         streamWidth = plan.streamWidth
         streamHeight = plan.streamHeight
         frameIntervalMs = (1000L / fps.coerceIn(1, 120)).coerceAtLeast(8L)
-        var enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, gated = true, savePower = savePower)
+        var enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, gated = true, onTimedFrame = onTimedFrame, savePower = savePower, constantBitrate = plan.constantBitrate, onFailure = codecFailure, startCandidateIndex = codecAttempt)
+        encoder = enc
         enc.start()
-        val g = FrameGate(width, height, streamWidth, streamHeight, enc.surface ?: throw IllegalStateException("no encoder surface"))
+        val g = FrameGate(width, height, streamWidth, streamHeight, enc.surface ?: throw IllegalStateException("no encoder surface"), preserveAspect = plan.preserveAspect, onFailure = codecFailure)
         val surface = if (g.start(fps)) {
             gate = g
             g.input ?: throw IllegalStateException("no frame gate surface")
         } else {
             enc.stop()
+            if (plan.preserveAspect) throw IllegalStateException("Aspect-preserving frame gate required")
             width = streamWidth
             height = streamHeight
             DiagLog.w(tag, "drawing straight at ${streamWidth}x$streamHeight, the car stretches it to fill its screen")
-            enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, savePower = savePower)
+            enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, onTimedFrame = onTimedFrame, savePower = savePower, constantBitrate = plan.constantBitrate, onFailure = codecFailure, startCandidateIndex = codecAttempt)
+            encoder = enc
             enc.start()
             enc.surface ?: throw IllegalStateException("no encoder surface")
         }
@@ -88,24 +127,31 @@ class CarDisplay(private val context: Context) {
         val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
         val vd = dm.createVirtualDisplay("FT", width, height, density, surface, flags)
         virtualDisplay = vd
-        video = plan
+        video = plan.copy(fps = fps)
         onVideoChanged?.invoke(video)
         DiagLog.i(tag, "virtual display ${width}x${height} dpi=$density id=${vd.display.displayId}")
         main.post {
-            try {
-                val p = CarPresentation(context, vd.display, content)
-                p.show()
-                presentation = p
-                _active.value = true
-                watch.start()
-                if (gate == null) {
-                    main.postDelayed(ticker, frameIntervalMs)
-                    DiagLog.i(tag, "presentation shown, redraw every ${frameIntervalMs}ms")
-                } else {
-                    DiagLog.i(tag, "presentation shown, at most ${1000L / frameIntervalMs} frames a second to the car")
+            synchronized(this@CarDisplay) {
+                if (virtualDisplay !== vd) return@synchronized
+                var p: CarPresentation? = null
+                try {
+                    p = CarPresentation(context, vd.display, content)
+                    p.show()
+                    presentation = p
+                    _active.value = true
+                    watch.start()
+                    if (gate == null) {
+                        main.postDelayed(ticker, frameIntervalMs)
+                        DiagLog.i(tag, "presentation shown, redraw every ${frameIntervalMs}ms")
+                    } else {
+                        DiagLog.i(tag, "presentation shown, at most ${1000L / frameIntervalMs} frames a second to the car")
+                    }
+                } catch (t: Throwable) {
+                    if (presentation !== p) runCatching { p?.destroy() }
+                    stop()
+                    DiagLog.e(tag, "presentation failed", t)
+                    onFailure?.invoke(t)
                 }
-            } catch (t: Throwable) {
-                DiagLog.e(tag, "presentation failed", t)
             }
         }
     }
@@ -120,8 +166,22 @@ class CarDisplay(private val context: Context) {
         gate?.wake(WAKE_MS)
     }
 
+    @Synchronized
     fun setFrameRate(fps: Int) {
-        val f = fps.coerceIn(1, 120)
+        requestedFrameRate = fps.coerceIn(1, 60)
+        applyFrameRate()
+    }
+
+    // A temporary projection cap must not overwrite the car/thermal rate to restore.
+    // Keep it across encoder restarts; the projection owner clears it on hiding AA.
+    @Synchronized
+    fun setFrameRateCap(fps: Int) {
+        frameRateCap = if (fps > 0) fps.coerceIn(1, 60) else 0
+        applyFrameRate()
+    }
+
+    private fun applyFrameRate() {
+        val f = VideoPlans.withinCap(requestedFrameRate, frameRateCap)
         val interval = (1000L / f).coerceAtLeast(8L)
         if (interval == frameIntervalMs) return
         frameIntervalMs = interval
@@ -141,6 +201,15 @@ class CarDisplay(private val context: Context) {
         val sw = streamWidth.coerceAtLeast(1)
         val sh = streamHeight.coerceAtLeast(1)
         if (sw == width && sh == height) return x to y
+        if (video?.preserveAspect == true) {
+            val scale = minOf(sw.toDouble() / width, sh.toDouble() / height)
+            val visibleW = width * scale
+            val visibleH = height * scale
+            val left = (sw - visibleW) / 2.0
+            val top = (sh - visibleH) / 2.0
+            return ((x - left) / scale).toInt().coerceIn(0, width - 1) to
+                ((y - top) / scale).toInt().coerceIn(0, height - 1)
+        }
         return (x.toLong() * width / sw).toInt() to (y.toLong() * height / sh).toInt()
     }
 
@@ -154,9 +223,16 @@ class CarDisplay(private val context: Context) {
             if (first) main.post(flushMove)
             return
         }
-        synchronized(moveLock) { pendingMove = null }
+        val finalMove = synchronized(moveLock) { pendingMove.also { pendingMove = null } }
         main.removeCallbacks(flushMove)
-        main.post { deliver(t) }
+        main.post {
+            // A fast finger release may arrive before the coalesced MOVE runs.
+            // Do not discard that MOVE: sliders and swipes need it before UP.
+            if (t.action == CarTouch.UP || t.action == CarTouch.POINTER_UP) {
+                finalMove?.let { deliver(it) }
+            }
+            deliver(t)
+        }
     }
 
     private fun deliver(t: CarTouch) {
@@ -245,17 +321,28 @@ class CarDisplay(private val context: Context) {
         return MotionEvent.obtain(downTime, now, action, 2, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0)
     }
 
+    @Synchronized
     fun stop() {
+        sessionEpoch++
         video = null
         onVideoChanged?.invoke(null)
         watch.stop()
         main.removeCallbacks(ticker)
+        main.removeCallbacks(flushMove)
+        synchronized(moveLock) { pendingMove = null }
+        downTime = 0L
+        fingers = 0
         val p = presentation
         presentation = null
-        if (p != null) main.post { runCatching { p.destroy() } }
-        _active.value = false
-        runCatching { virtualDisplay?.release() }
+        val vd = virtualDisplay
         virtualDisplay = null
+        // Presentation lifecycle and display release must stay ordered on Main.
+        // Holding the same monitor during show prevents stop from losing its owner.
+        if (p != null || vd != null) main.post {
+            runCatching { p?.destroy() }
+            runCatching { vd?.release() }
+        }
+        _active.value = false
         runCatching { gate?.stop() }
         gate = null
         runCatching { encoder?.stop() }

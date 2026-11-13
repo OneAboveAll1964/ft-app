@@ -30,6 +30,7 @@ object DiagReport {
         val name = "FT-report-$who-$stamp.zip"
         val dir = File(c.cacheDir, "reports").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val out = File(dir, name)
+        val recordCoordinates = Prefs(c).vehicleCoordinateLogging
         ZipOutputStream(out.outputStream().buffered()).use { zip ->
             fun put(entry: String, text: String) {
                 zip.putNextEntry(ZipEntry(entry))
@@ -40,15 +41,30 @@ object DiagReport {
             zip.putNextEntry(ZipEntry("ft-log.txt"))
             DiagLog.files().forEach { f ->
                 zip.write("===== ${f.name} (${f.length()} bytes) =====\n".toByteArray())
-                runCatching { f.inputStream().use { it.copyTo(zip) } }
-                    .onFailure { zip.write("could not read: ${it.message}\n".toByteArray()) }
+                runCatching {
+                    if (recordCoordinates) {
+                        f.inputStream().use { it.copyTo(zip) }
+                    } else {
+                        f.bufferedReader().useLines { lines ->
+                            lines.forEach { line ->
+                                zip.write((VehicleCoordinateLog.scrubStoredLine(line) + "\n").toByteArray())
+                            }
+                        }
+                    }
+                }.onFailure { zip.write("could not read: ${it.message}\n".toByteArray()) }
             }
             zip.closeEntry()
             put("exits.txt", exits(c))
-            put("logcat-ft.txt", logcat(arrayOf("logcat", "-d", "-v", "threadtime")))
-            if (Root.granted) {
-                val all = Root.run("logcat -d -v threadtime -b main,system,crash,events")?.stdout.orEmpty()
-                put("logcat-system-filtered.txt", all.lineSequence().filter { SYSTEM_TAGS.containsMatchIn(it) }.joinToString("\n").takeLast(LOGCAT_LIMIT))
+            // System logcat is not under FT's control and may include third-party GPS data.
+            // Fail closed while the owner has not consented to location-bearing diagnostics.
+            if (recordCoordinates) {
+                put("logcat-ft.txt", logcat(arrayOf("logcat", "-d", "-v", "threadtime")))
+                if (Root.granted) {
+                    val all = Root.run("logcat -d -v threadtime -b main,system,crash,events")?.stdout.orEmpty()
+                    put("logcat-system-filtered.txt", all.lineSequence().filter { SYSTEM_TAGS.containsMatchIn(it) }.joinToString("\n").takeLast(LOGCAT_LIMIT))
+                }
+            } else {
+                put("logcat-ft.txt", "System logcat excluded: coordinate recording is disabled in FT settings.\n")
             }
         }
         DiagLog.i("Report", "report ready: $name (${out.length() / 1024} KB)")

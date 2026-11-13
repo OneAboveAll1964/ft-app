@@ -19,15 +19,19 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class FrameGate(
     private val inWidth: Int,
     private val inHeight: Int,
     private val width: Int,
     private val height: Int,
-    private val output: Surface
+    private val output: Surface,
+    private val preserveAspect: Boolean = false,
+    private val onFailure: ((Throwable) -> Unit)? = null
 ) {
     private val tag = "Gate"
+    private val failed = AtomicBoolean(false)
     private var thread: HandlerThread? = null
     @Volatile private var handler: Handler? = null
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
@@ -40,7 +44,13 @@ class FrameGate(
     private var coord = -1
     private var transform = -1
     private val matrix = FloatArray(16)
-    private val quad = floats(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)
+    private val quad = run {
+        // Letterbox without cropping or distorting the incoming presentation.
+        val scale = if (preserveAspect) minOf(width.toFloat() / inWidth, height.toFloat() / inHeight) else 0f
+        val x = if (preserveAspect) inWidth * scale / width else 1f
+        val y = if (preserveAspect) inHeight * scale / height else 1f
+        floats(-x, -y, x, -y, -x, y, x, y)
+    }
     private val uv = floats(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f)
     private var ready = false
     private var fresh = false
@@ -79,17 +89,18 @@ class FrameGate(
 
     fun setRate(fps: Int) {
         intervalNs = 1_000_000_000L / fps.coerceIn(1, 60)
+        handler?.post { requestDraw() }
     }
 
     fun redraw() {
-        handler?.post { draw() }
+        handler?.post { requestDraw() }
     }
 
     fun wake(ms: Long) {
         awakeUntilNs = System.nanoTime() + ms * 1_000_000L
         handler?.post {
             empty = 0
-            draw()
+            requestDraw()
         }
     }
 
@@ -151,12 +162,20 @@ class FrameGate(
         fresh = true
         empty = 0
         ready = true
+        requestDraw()
+    }
+
+    // All requests run on the gate handler, including touch wakeups and redraws.
+    private fun requestDraw() {
         val h = handler ?: return
+        if (!ready) return
         val wait = lastNs + intervalNs - System.nanoTime()
         if (wait <= SLACK_NS) {
             h.removeCallbacks(tick)
             draw()
-        } else if (!h.hasCallbacks(tick)) {
+        } else {
+            // A fresh frame or touch replaces a distant idle keepalive deadline.
+            h.removeCallbacks(tick)
             h.postDelayed(tick, (wait + 999_999) / 1_000_000)
         }
     }
@@ -164,13 +183,14 @@ class FrameGate(
     private fun onTick() {
         val h = handler ?: return
         if (!ready) return
+        val wait = lastNs + intervalNs - System.nanoTime()
+        if (wait > SLACK_NS) {
+            h.removeCallbacks(tick)
+            h.postDelayed(tick, (wait + 999_999) / 1_000_000)
+            return
+        }
         if (!fresh) {
-            empty++
-            if (empty > IDLE_TICKS && empty % IDLE_EVERY != 0 && System.nanoTime() >= awakeUntilNs) {
-                h.removeCallbacks(tick)
-                h.postDelayed(tick, intervalNs / 1_000_000)
-                return
-            }
+            empty = (empty + 1).coerceAtMost(IDLE_TICKS)
         }
         draw()
     }
@@ -183,6 +203,10 @@ class FrameGate(
         try {
             st.getTransformMatrix(matrix)
             GLES20.glViewport(0, 0, width, height)
+            if (preserveAspect) {
+                GLES20.glClearColor(0f, 0f, 0f, 1f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            }
             GLES20.glUseProgram(program)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureName)
@@ -193,15 +217,20 @@ class FrameGate(
             GLES20.glUniformMatrix4fv(transform, 1, false, matrix, 0)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             EGLExt.eglPresentationTimeANDROID(display, surface, now)
-            EGL14.eglSwapBuffers(display, surface)
+            check(EGL14.eglSwapBuffers(display, surface)) { "eglSwapBuffers error=${EGL14.eglGetError()}" }
         } catch (t: Throwable) {
-            DiagLog.e(tag, "could not pass a frame on", t)
+            if (handler != null && failed?.compareAndSet(false, true) == true) {
+                DiagLog.e(tag, "FRAME_GATE_FATAL stage=draw", t)
+                onFailure?.invoke(t)
+            }
         }
         if (fresh) newFrames++ else repeats++
         fresh = false
         lastNs = now
         h.removeCallbacks(tick)
-        h.postDelayed(tick, intervalNs / 1_000_000)
+        // Sleep between keepalives instead of waking at full FPS to skip work.
+        val delayNs = intervalNs * if (empty >= IDLE_TICKS && now >= awakeUntilNs) IDLE_EVERY else 1
+        h.postDelayed(tick, (delayNs + 999_999) / 1_000_000)
         if (now - reportedNs >= REPORT_NS) {
             DiagLog.i(tag, "last ${(now - reportedNs) / 1_000_000_000}s at ${1_000_000_000L / intervalNs} fps: $newFrames new frames sent, $repeats repeats, $skipped skipped")
             newFrames = 0

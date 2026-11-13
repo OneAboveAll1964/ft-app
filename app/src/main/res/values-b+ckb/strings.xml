@@ -47,17 +47,25 @@
     <string name="aa_help_4_body">FT خۆی پێیەوە پەیوەست دەبێت. دوای ڕیستارتکردنی مۆبایل یان نوێبوونەوەی Android Auto، هەنگاوەکانی 1 و 3 و 4 دووبارە بکەرەوە.</string>
     <string name="aa_match_car">بە قەبارەی شاشەی ئۆتۆمبێلەکە پیشانی بدە</string>
     <string name="aa_controls_left">کۆنترۆڵەکانی بخە لای چەپ</string>
+    <string name="aa_return_to_ft">گەڕانەوە بۆ FT</string>
     <string name="aa_cluster_navigation">ڕێنمایی ڕێگا لەسەر پانێڵی ئامێرەکان</string>
     <string name="aa_cluster_navigation_body">سووڕانەوەکانی Android Auto لەسەر پانێڵی ئامێرەکان یان HUD پیشان بدە، ئەگەر ئۆتۆمبێلەکە پشتگیری بکات. گۆڕانکارییەکان دەستبەجێ جێبەجێ دەبن.</string>
     <string name="aa_port">پۆرتی TCP</string>
     <string name="aa_width">پانیی ڤیدیۆ</string>
     <string name="aa_height">بەرزیی ڤیدیۆ</string>
     <string name="aa_fps">ڕێژەی فرەیم</string>
+    <string name="aa_fps_body">کاتێک Android Auto دیارە، ڕێژەی فرەیمی ناردن بۆ ئۆتۆمبێلیش سنووردار دەکات. 30 FPS بار کەم دەکاتەوە؛ 60 FPS جووڵەی نەرمتر دەدات. لە پەیوەندیی داهاتووی Android Auto دا جێبەجێ دەبێت.</string>
     <string name="aa_density">چڕیی پیکسڵ</string>
     <string name="action_add">زیادکردن</string>
     <string name="action_allow">ڕێگەدان</string>
     <string name="action_back">گەڕانەوە</string>
     <string name="action_cancel">هەڵوەشاندنەوە</string>
+    <string name="car_remembered">ئۆتۆمبێلی پاشەکەوتکراو بۆ Baidu Connect / CarLife</string>
+    <string name="car_remembered_empty">ئۆتۆمبێلەکە دوای یەکەم دانیشتنی سەرکەوتووی پیشاندانی شاشە بە Wi-Fi Direct پاشەکەوت دەکرێت.</string>
+    <string name="car_change">گۆڕینی ئۆتۆمبێل</string>
+    <string name="car_change_about">ئۆتۆمبێلی پاشەکەوتکراو لەبیر بکرێت و FT بکوژێنرێتەوە؟ بۆ بەکارهێنانی ئۆتۆمبێلێکی تر، FT دووبارە هەڵبکە و بە Baidu Connect / CarLife پەیوەندی پێوە بکە.</string>
+    <string name="show_other_devices_logs">پیشاندانی ئامێرەکانی تر لە تۆمارەکاندا</string>
+    <string name="show_other_devices_logs_about">ئامێرە نزیکەکان و خزمەتگوزارییەکانیان لە تۆمارەکانی دەستنیشانکردنی کێشەی Baidu Connect / CarLife دەخاتە ناوەوە. بە بنەڕەت کوژاوەتەوە: تەنها ئۆتۆمبێلەکە و ڕووداوەکانی پەیوەندی پیشان دەدرێن. دۆزینەوەی ئامێر و هەڵبژاردنی ئۆتۆمبێل ناگۆڕێت.</string>
     <string name="action_close">داخستن</string>
     <string name="action_copy">کۆپی</string>
     <string name="action_next">دواتر</string>
@@ -83,6 +91,8 @@
     <string name="car_name_label">ئەو ناوەی لەسەر شاشەی ئۆتۆمبێل دەردەکەوێت</string>
     <string name="car_p2p_label">ناوی WiFi Direct (بەتاڵ = هەر CarLifeێک)</string>
     <string name="car_bt_label">ناوی بلوتوس بۆ دەستپێکردنی خۆکار (بەتاڵ = هەر ئامێرێک)</string>
+    <string name="car_bt_reconnect">پەیوەستکردنەوەی بلوتوسی ئۆتۆمبێل</string>
+    <string name="car_bt_reconnect_about">کاتێک FT چالاکە، دوای پچڕانی پەیوەندی تا سێ جار هەوڵی پەیوەستکردنەوە بدە، تەنها ئەگەر دوا ئۆتۆمبێلی هاوتاکراو لە نزیکدا بدۆزرێتەوە. پێویستە ئۆتۆمبێلەکە لە گەڕانی بلوتوسدا دەرکەوێت. بەردەستبوونی تایبەتمەندییەکە بە مۆبایلەکەتەوە بەستراوە.</string>
     <string name="car_pin_label">PINی WiFi Direct (بەتاڵ = بە دوگمە)</string>
     <string name="car_swap_keys">شوێنی دوگمەکانی دواتر و پێشووی سەر سوکان بگۆڕەوە</string>
     <string name="sound_bluetooth">لە جیاتی ئەوە بلوتوسی ئۆتۆمبێل بۆ دەنگ بەکاربهێنە</string>
@@ -122,7 +132,7 @@
     <string name="picture_min_fps">کەمترین ڕێژەی فرەیم کە وەردەگیرێت، 0 واتە بێ سنوور</string>
     <string name="picture_density">ڕوونیی ئەپەکان لەسەر شاشەی ئۆتۆمبێل</string>
     <string name="picture_save_power">با ئینکۆدەری ڤیدیۆ وزە پاشەکەوت بکات</string>
-    <string name="picture_save_power_body">ئینکۆدەری ڤیدیۆی مۆبایلەکە بە ڕێژەی فرەیمی وێنەکە کار دەکات، نەک بە تەواوی خێرایی. لەوانەیە مۆبایلەکە لە ڕێگا درێژەکاندا کەمتر گەرم بێت، بەڵام شاشەی ئۆتۆمبێل کەمێک درەنگتر وەڵامی دەستلێدان دەداتەوە.</string>
+    <string name="picture_save_power_body">لە دەستپێکی ئینکۆدەر و گۆڕینی FPS دا سەرچاوە بۆ ڕێژەی فرەیمی هەڵبژێردراو داوا دەکات. پاشەکەوتی وزە و دواخستنی دەستلێدان بە مۆبایلەکەوە بەستراون. لە پەیوەندیی داهاتووی پیشانداندا جێبەجێ دەبێت.</string>
     <string name="picture_at_defaults">هەر لەسەر ڕێکخستنە بنەڕەتییەکانە</string>
     <string name="picture_reset">هەموو شتێک بگەڕێنەوە بۆ ڕێکخستنە بنەڕەتییەکان</string>
     <string name="corner_title">دوگمەی FT لەسەر شاشەی ئۆتۆمبێل</string>
@@ -177,6 +187,7 @@
     <string name="step_wifi_direct_connected">WiFi Direct پەیوەستە</string>
     <string name="step_joining">پەیوەست دەبێت بە %1$s</string>
     <string name="step_asking_car">داوا لە ئۆتۆمبێلەکە دەکات هەڵیبکات</string>
+    <string name="step_car_wifi_recovery">Wi-Fi Direct دوای چەند هەوڵێک پەیوەست نەبوو. CarLife لەسەر شاشەی ئۆتۆمبێلەکە دووبارە بکەرەوە. ئەگەر CarPlay چالاکە، پەیوەندییەکەی بپچڕێنە و دووبارە هەوڵ بدەرەوە.</string>
     <string name="step_waiting_car_connect">چاوەڕێی پەیوەستبوونی ئۆتۆمبێلەکە</string>
     <string name="refused_hotspot">ئۆتۆمبێلەکە هەوڵی دا بە هۆتسپۆت پەیوەست ببێت، بەڵام FT لەسەر WiFi + BL دانراوە</string>
     <string name="refused_direct">ئۆتۆمبێلەکە هەوڵی دا بە WiFi Direct پەیوەست ببێت، بەڵام FT لەسەر هۆتسپۆت دانراوە</string>
@@ -285,7 +296,7 @@
     <string name="keyboard_go">بڕۆ</string>
     <string name="keyboard_space">بۆشایی</string>
     <string name="keyboard_delete">سڕینەوە</string>
-    <string name="touch_service_desc">ڕێگە بە شاشەی دەستلێدانی ئۆتۆمبێل دەدات ئەو ئەپانە کۆنترۆڵ بکات کە لەم مۆبایلەوە پیشان دەدرێن، و سێرڤەری head unitی Android Auto بۆت هەڵدەکات.</string>
+    <string name="touch_service_desc">ڕێگە بە شاشەی دەستلێدانی ئۆتۆمبێل دەدات ئەو ئەپانە کۆنترۆڵ بکات کە لەم مۆبایلەوە پیشان دەدرێن.</string>
     <string name="touch_service_label">FT – دەستلێدانی ئۆتۆمبێل</string>
     <string-array name="car_days">
         <item>یەکشەممە</item>
@@ -330,6 +341,8 @@
     <string name="widget_weather">کەشوهەوا</string>
     <string name="widget_battery">باتریی مۆبایل</string>
     <string name="widget_speed">خێرایی</string>
+    <string name="widget_coordinates">شوێنەوار</string>
+    <string name="widget_course">ئاڕاستە</string>
     <string name="widget_calendar">چالاکیی داهاتوو</string>
     <string name="widget_no_event">هیچ شتێکی داهاتوو نییە</string>
     <string name="widget_temperature">پلەی گەرمی</string>
@@ -402,6 +415,8 @@
     <string name="corner_top_right">سەرەوەی ڕاست</string>
     <string name="corner_bottom_left">خوارەوەی چەپ</string>
     <string name="corner_bottom_right">خوارەوەی ڕاست</string>
+    <string name="corner_above_microphone">لە سەرەوەی مایکرۆفۆن</string>
+    <string name="corner_above_microphone_about">بۆ Android Auto بە پانێڵی لایەنی ستوونی. دوگمەی FT لە سەرەوەی مایکرۆفۆن و لیستی ئەپەکان، لە لای پانێڵەکە دەردەکەوێت. لە شاشەکانی تر لە خوارەوەی چەپە.</string>
     <string name="connect_section">کاتێک ئۆتۆمبێلەکە پەیوەست دەبێت</string>
     <string name="look_default_buttons">دوگمە بنەڕەتییەکان بگەڕێنەوە</string>
     <string name="sound_music_section">مۆسیقا</string>
@@ -419,8 +434,17 @@
     <string name="aa_switch_on">بیکەرەوە</string>
     <string name="aa_switching_on">دەکرێتەوە</string>
     <string name="aa_switch_failed">FT نەیتوانی بە تەنها بیکاتەوە، بۆیە لە خوارەوە بە دەستی بیکەرەوە.</string>
+    <string name="aa_helper_ready">یارمەتیدەری Android Auto پەیوەستە. FT دەتوانێت هەوڵی هەڵکردنی سێرڤەر بدات کاتێک مۆبایلەکە کراوەیە.</string>
+    <string name="aa_helper_disconnected">یارمەتیدەری Android Auto لە ڕێکخستنەکان هەڵکراوە، بەڵام Android پەیوەستی نەکردووە بە FT. ڕێکخستنەکانی Accessibility بکەرەوە، «FT — Android Auto server» بکوژێنەوە و دووبارە هەڵیبکە، پاشان بگەڕێوە بۆ FT.</string>
+    <string name="aa_helper_settings">پشکنینی یارمەتیدەر لە ڕێکخستنەکان</string>
+    <string name="aa_switch_no_window">FT ڕێکخستنەکانی Android Auto کردەوە، بەڵام نەیتوانی دەستی بگات بە پەنجەرەکەی. یارمەتیدەر لە ڕێکخستنەکانی Accessibility بپشکنە و دووبارە هەوڵ بدەوە.</string>
+    <string name="aa_switch_no_menu">FT دوگمەی مێنیوی لە Android Auto نەدۆزییەوە. Android Auto بکەرەوە و سێرڤەری head unit بە دەستی هەڵبکە. قۆناغی شکستهێنان لە تۆمارەکە نووسراوە بۆ دەستنیشانکردنی کێشەکە.</string>
+    <string name="aa_switch_no_start">FT پەنجەی بە دوگمەی مێنیودا نا، بەڵام بژاردەی هەڵکردنی سێرڤەری نەدۆزییەوە. ڕێکخستنەکانی گەشەپێدەری Android Auto هەڵبکە و ئەم بژاردەیە بە دەستی بپشکنە.</string>
+    <string name="aa_switch_action_rejected">Android Auto پەنجەلێدانی یارمەتیدەری قبوڵ نەکرد. هەوڵ بدە سێرڤەر بە دەستی لە Android Auto هەڵبکەیت.</string>
+    <string name="aa_switch_not_confirmed">FT پەنجەی بە بژاردەی هەڵکردنی سێرڤەردا نا، بەڵام نەیتوانی هەڵبوونی پشتڕاست بکاتەوە. سێرڤەر لە Android Auto بپشکنە.</string>
+    <string name="aa_switch_focus_lost">Android Auto فوکەسی لەدەست دا. بگەڕێوە بۆ FT و لە کاتی کراوەبوونی مۆبایلەکەدا دووبارە هەوڵ بدەوە.</string>
     <string name="aa_let_ft">با FT هەڵیبکات</string>
-    <string name="aa_let_ft_body">FT لە ڕێکخستنەکانی Accessibilityی مۆبایلەکەت هەڵبکە، ئیتر هەر کاتێک ئۆتۆمبێلەکە پێویستی بە Android Auto بوو، FT خۆی سێرڤەرەکە هەڵدەکات، تەنانەت دوای ڕیستارتیش.</string>
+    <string name="aa_let_ft_body">«FT — Android Auto server» لە ڕێکخستنەکانی Accessibilityی مۆبایلەکەت هەڵبکە، ئیتر هەر کاتێک ئۆتۆمبێلەکە پێویستی بە Android Auto بوو، FT خۆی سێرڤەرەکە هەڵدەکات، تەنانەت دوای ڕیستارتیش.</string>
     <string name="aa_no_developer">ڕێکخستنەکانی گەشەپێدەری Android Auto کوژاونەتەوە. هەنگاوەکانی 1 و 2 لە «پیشانم بدە چۆن» بکە، پاشان دووبارە هەوڵ بدەرەوە.</string>
     <string name="supercast_not_set_up">ئەپەکان لەسەر ئۆتۆمبێل هێشتا ڕێک نەخراوە. FT لەسەر مۆبایلەکەت بکەرەوە، ڕێکخستن، ئەپەکان لەسەر ئۆتۆمبێل.</string>
     <string name="supercast_which_apps">ئەو ئەپانەی لەسەر ئۆتۆمبێل دەردەکەون</string>
@@ -451,6 +475,10 @@
     <string name="car_join_timeout">کاتی چاوەڕوانی پەیوەندی WiFi Direct</string>
     <string name="car_join_timeout_about">ماوەی چاوەڕوانی پێش ئەوەی FT دووبارە هەوڵی پەیوەندییەک بداتەوە کە وەڵامی نەدراوەتەوە. ئەگەر ئۆتۆمبێلەکە درەنگتر پەیوەست دەبێت، زیادی بکە. لە هەوڵی داهاتووەوە کار دەکات.</string>
     <string name="car_join_timeout_seconds">%1$d چرکە</string>
+    <string name="car_join_timeout_custom">Custom value…</string>
+    <string name="car_join_timeout_custom_value">%1$d s (custom)</string>
+    <string name="car_join_timeout_input">Timeout, seconds</string>
+    <string name="car_join_timeout_range">Enter a whole number from %1$d to %2$d seconds.</string>
     <string name="car_join_timeout_error">لە ماوەی %1$d چرکەدا نەتوانرا بە WiFi Direct پەیوەندی بە ئۆتۆمبێلەکەوە بکرێت. خۆکارانە هەوڵ دەدرێتەوە. دڵنیابە CarLife لەسەر شاشەی ئۆتۆمبێل کراوەتەوە، یان کاتی چاوەڕوانی پەیوەندی زیاد بکە.</string>
     <string name="car_join_timeout_action">ڕێکخستنەکانی پەیوەندی</string>
     <string name="look_phone_style">ڕووکاری ئەپ</string>
@@ -458,5 +486,42 @@
     <string name="look_phone_classic">بنەڕەتی</string>
     <string name="look_phone_modern">جۆرێکی تر</string>
     <string name="aa_show_return_button">پیشاندانی دوگمەی گەڕانەوە بۆ FT لە Android Auto</string>
-    <string name="aa_show_return_button_about">دوگمەکە دەتگەڕێنێتەوە بۆ شاشەی سەرەکی FT لە ئۆتۆمبێلدا. ئەگەر بیشاریتەوە، دەتوانیت لێرە لەسەر مۆبایلەکەت دووبارە پیشانی بدەیتەوە.</string>
+    <string name="aa_show_return_button_about">The button returns to FT without disconnecting Android Auto. To return without the floating button, try FT/Exit in the Android Auto app menu. You can restore this button in these settings on your phone.</string>
+    <string name="aa_back_to_ft">Back to FT</string>
+    <string name="iccoa_mic_gain">ICCOA microphone gain</string>
+    <string name="iccoa_mic_gain_value">×%1$d</string>
+    <string name="iccoa_mic_gain_about">Amplifies the car microphone for Android Auto. ×1 keeps the original level. Choose a value from ×1 to ×16; high values can distort speech. Applies to the next voice request.</string>
+    <string name="vehicle_coordinate_log">Save GPS coordinates in diagnostic logs</string>
+    <string name="vehicle_coordinate_log_about">Off by default. Enable only for a test you choose: exact vehicle position can reveal where you travel. GPS navigation works regardless. Previously recorded locations and exported reports are not deleted when you switch this off.</string>
+    <string name="aa_prepare_before_connect">Check and start Android Auto before connecting</string>
+    <string name="aa_prepare_before_connect_body">Prepare the phone’s head unit server before connecting to this car. Uses root or the separate FT Android Auto helper on an unlocked phone. Opening Android Auto on the car is configured separately.</string>
+    <string name="aa_prepare_helper_body">Enable “FT — Android Auto server” in Accessibility and enable Android Auto developer mode manually. If preparation fails, FT still connects to the car.</string>
+    <string name="aa_prepare_checking">Checking Android Auto before connecting…</string>
+    <string name="aa_prepare_ready">Android Auto server is ready.</string>
+    <string name="aa_prepare_locked">Unlock the phone to start Android Auto. Continuing connection to the car.</string>
+    <string name="aa_prepare_no_helper">Android Auto helper is not enabled. Continuing connection to the car; enable the helper in connection settings.</string>
+    <string name="aa_prepare_not_installed">Android Auto is not installed or is only a placeholder. Continuing connection to the car.</string>
+    <string name="aa_prepare_failed">Could not confirm Android Auto server startup. Continuing connection to the car; check Android Auto developer mode or start the server manually.</string>
+    <string name="aa_starter_service_label">FT — Android Auto server</string>
+    <string name="aa_starter_service_desc">During a short server-start request, reads Android Auto settings and selects Start head unit server. Returns to FT when finished. Cannot inject gestures. Enabled separately from FT car touch.</string>
+    <string name="voice_assistant_title">یاریدەدەری دوگمەی دەنگ</string>
+    <string name="voice_assistant_default">بنەڕەت (Android Auto / سیستەم)</string>
+    <string name="voice_assistant_alice">ئەلیس (Yandex)</string>
+    <string name="voice_assistant_about">بۆ دوگمەی دەنگی سوکان و کرداری دەنگ. هەڵبژاردەی بنەڕەتی یاریدەدەری Android Auto (Google) بەکاردەهێنێت، لە دەرەوەی AA یاریدەدەری مۆبایل. ئەلیس لە پانێڵێک لە شاشەی ئۆتۆمبێل بە SuperCast دەردەکەوێت. سەرەتا SuperCast و Yandex لەگەڵ ئەلیس ڕێک بخە. ئەم وەشانە مایکرۆفۆنی مۆبایل بەکاردەهێنێت.</string>
+    <string name="voice_alice_adb_about">پانێڵی ئەلیس %1$s (SuperCast) بەکاردەهێنێت. پێویستی بە دەستگەیشتنی ADB لە ڕێگەی دیباگی Android یان root هەیە. یاریدەدەری بنەڕەتی پێویستی بەم ڕێکخستنە نییە.\n\nبێ root: لە کۆمپیوتەر ADB دابمەزرێنە، USB debugging لە مۆبایل چالاک بکە، بە کابڵ بیبەستەوە و ڕێگە بە دیباگی ئەم کۆمپیوتەرە بدە. فەرمانی خوارەوە کۆپی بکە و لە Windows Command Prompt (cmd) جێبەجێی بکە. دوای ڕیستارتی مۆبایل دووبارەی بکەرەوە. بە root، FT خۆکارانە SuperCast دەست پێ دەکات.</string>
+    <string name="voice_alice_test">تاقیکردنەوەی ئەلیس لە مۆبایل</string>
+    <string name="voice_alice_unavailable">ئەلیس نەکرایەوە. Yandex لەگەڵ ئەلیس دابمەزرێنە و ڕێکی بخە، پشکنە تەلەفۆن ڕێگە بە کردنەوەی بەرنامەکە دەدات.</string>
+    <string name="voice_default_unavailable">یاریدەدەری دەنگی سیستەم نەکرایەوە.</string>
+    <string name="voice_alice_panel_starting">ئەلیس دەست پێ دەکات…</string>
+    <string name="voice_alice_panel_mic">مایکرۆفۆنی مۆبایل بەکاردێت</string>
+    <string name="voice_alice_panel_helper_error">پانێڵی ئەلیس دەستی پێ نەکرد. SuperCast لە مۆبایل ڕێک بخە. ئەگەر FT نوێ کراوەتەوە، SuperCast دووبارە دەست پێ بکە و هەوڵ بدەوە.</string>
+    <string name="voice_alice_panel_display_error">مۆبایل نەیتوانی شاشەیەک بۆ ئەلیس دروست بکات. پانێڵەکە دابخە و هەوڵ بدەوە.</string>
+    <string name="voice_alice_panel_moved">Yandex ئەلیسی لە شاشەی ئۆتۆمبێل نەکردەوە. پانێڵەکە دابخە، قفڵی مۆبایل بکەرەوە و هەوڵ بدەوە.</string>
+    <string name="aa_phone_screen_off">کوژاندنەوەی شاشەی مۆبایل</string>
+    <string name="aa_phone_screen_off_body">کاتێک Android Auto بەستراوەتەوە، یاریدەدەری SuperCast شاشەی فیزیکی مۆبایل دەکوژێنێتەوە. ڕێنیشاندەر و دەنگ بەردەوام دەبن. دوگمەی پاوەر شاشەکە بۆ ماوەیەک هەڵدەکات؛ دوای کاتی دیاریکراوی شاشەی مۆبایل دەکوژێتەوە. بە پچڕاندنی AA، کۆنترۆڵی شاشە دەگەڕێتەوە بۆ Android. پشتگیری بە فیرموێرەوە بەستراوە؛ پاشەکەوتی باتری دەبێت لە ئامێرەکە بپێوردرێت.</string>
+    <string name="aa_phone_screen_helper">بۆ کۆنترۆڵی شاشە، یاریدەدەری SuperCast دەبێت کار بکات.</string>
+    <string name="aa_phone_screen_adb">پێویست ناکات بەرنامەکان بگۆڕدرێن بۆ دۆخی SuperCast. یاریدەدەر پێویستی بە root یان دەستپێکردن بە ADB هەیە. لە کۆمپیوتەرەوە، USB debugging چالاک بکە، مۆبایل ببەستەوە، ڕێگە بە دیباگ بدە و فەرمانی خوارەوە جێبەجێ بکە. لەوانەیە دوای ڕیستارتی مۆبایل دووبارەکردنەوەی پێویست بێت.</string>
+    <string name="aa_phone_screen_active">کۆنترۆڵی شاشە چالاکە. بۆ هەڵکردنی کاتیی شاشە دوگمەی پاوەر دابگرە.</string>
+    <string name="aa_phone_screen_waiting">یاریدەدەر ئامادەیە. کاتێک Android Auto ببەسترێتەوە، شاشە دەکوژێتەوە.</string>
+    <string name="aa_phone_screen_failed">کۆنترۆڵی شاشەی مۆبایل سەرکەوتوو نەبوو. مۆڵەتەکانی یاریدەدەر و گونجانی فیرموێر بپشکنە و هەوڵ بدەوە.</string>
 </resources>

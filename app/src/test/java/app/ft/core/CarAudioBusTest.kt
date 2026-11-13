@@ -15,11 +15,85 @@ class CarAudioBusTest {
         CarAudioBus.sink = null
         CarAudioBus.voice = null
         CarAudioBus.soundLevel = 1f
+        CarAudioBus.inCall = false
+        CarAudioBus.guidance = CarAudioBus.GUIDANCE_UNTOUCHED
         got.clear()
     }
 
     private fun listen() {
         CarAudioBus.sink = { pcm -> got.add(pcm) }
+    }
+
+    @Test fun incompleteStereoFramesCannotShiftMixedSamples() {
+        listen()
+        val music = loud(8, 1000)
+        val guidance = loud(4, 2000) + byteArrayOf(0x7f)
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, music)
+        CarAudioBus.write(CarAudioBus.LANE_SPEECH, guidance)
+        CarAudioBus.write(CarAudioBus.LANE_SYSTEM, loud(4, 3000))
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, music + byteArrayOf(0x7f, 0x7f, 0x7f))
+        assertArrayEquals(loud(4, 3000) + loud(4, 4000), got.last())
+        assertTrue(got.all { it.size % 4 == 0 })
+    }
+
+    @Test fun packetsWithoutACompleteStereoFrameAreIgnored() {
+        listen()
+        for (size in 1..3) CarAudioBus.write(CarAudioBus.LANE_MEDIA, ByteArray(size))
+        assertTrue(got.isEmpty())
+    }
+
+    @Test fun nativeRateConversionAlsoDropsAnIncompleteStereoFrame() {
+        val frame = loud(4, 1000)
+        for (size in 1..3) assertArrayEquals(frame, CarAudioBus.toCarFormat(frame + ByteArray(size), 48000, 2))
+    }
+
+    @Test fun overflowingGuidanceDiscardsThePartlyConsumedPacketWithoutShiftingStereo() {
+        listen()
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, loud(4, 1000))
+        CarAudioBus.write(CarAudioBus.LANE_SPEECH, loud(12, 2000) + byteArrayOf(0x7f))
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, loud(4, 1000))
+        CarAudioBus.write(CarAudioBus.LANE_SPEECH, loud(48000 * 4, 3000) + byteArrayOf(0x7f))
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, loud(8, 1000))
+        assertArrayEquals(loud(8, 4000), got.last())
+    }
+
+    @Test fun callDiscardsQueuedGuidanceBeforeMusicResumes() {
+        listen()
+        val music = loud(512, 1000)
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, music)
+        CarAudioBus.write(CarAudioBus.LANE_SPEECH, loud(512, 5000))
+        assertEquals(1, got.size)
+        CarAudioBus.inCall = true
+        CarAudioBus.inCall = false
+        CarAudioBus.write(CarAudioBus.LANE_MEDIA, music)
+        assertEquals(2, got.size)
+        assertArrayEquals("old guidance must not be mixed into resumed music", music, got.last())
+    }
+
+    @Test fun voiceCanOpenAgainAfterCallEnds() {
+        listen()
+        var begins = 0
+        var blocks = 0
+        var ends = 0
+        val voice = object : CarAudioBus.Voice {
+            override fun begin(rate: Int, channels: Int) {
+                assertEquals(16000, rate)
+                assertEquals(1, channels)
+                begins++
+            }
+            override fun data(pcm: ByteArray) { blocks++ }
+            override fun end() { ends++ }
+        }
+        CarAudioBus.voice = voice
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(512), 16000, 1)
+        CarAudioBus.inCall = true
+        assertEquals(1, ends)
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(512), 16000, 1)
+        assertEquals(1, blocks)
+        CarAudioBus.inCall = false
+        CarAudioBus.play(CarAudioBus.LANE_SPEECH, loud(512), 16000, 1)
+        assertEquals(2, begins)
+        assertEquals(2, blocks)
     }
 
     @Test

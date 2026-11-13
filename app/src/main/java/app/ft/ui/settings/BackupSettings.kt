@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import app.ft.FTApp
 import app.ft.R
 import app.ft.core.Backup
+import app.ft.core.CarConnection
 import app.ft.core.DiagLog
 import app.ft.core.Lang
 import app.ft.core.Language
@@ -70,6 +71,10 @@ fun BackupSettings() {
 
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        if (CarConnection.isBusy || prefs.profileId != FTApp.instance.prefs.profileId) {
+            Toast.makeText(context, R.string.cars_backup_idle, Toast.LENGTH_LONG).show()
+            return@rememberLauncherForActivityResult
+        }
         val text = runCatching {
             context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
         }.getOrNull()
@@ -84,9 +89,13 @@ fun BackupSettings() {
     }
 
     Text(stringResource(R.string.backup_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.cars_backup_about), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = { save.launch("FT-settings.json") }) { Text(stringResource(R.string.backup_save)) }
-        TextButton(onClick = { open.launch(arrayOf("application/json", "*/*")) }) { Text(stringResource(R.string.backup_load)) }
+        TextButton(onClick = {
+            if (CarConnection.isBusy) Toast.makeText(context, R.string.cars_backup_idle, Toast.LENGTH_LONG).show()
+            else open.launch(arrayOf("application/json", "*/*"))
+        }) { Text(stringResource(R.string.backup_load)) }
     }
 
     Text(stringResource(R.string.backup_look_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -15,6 +15,9 @@ import android.os.PowerManager
 import android.os.SystemClock
 import app.ft.R
 import app.ft.FTApp
+import app.ft.core.Prefs
+import app.ft.core.CarConnection
+import app.ft.core.ServiceLaunches
 import app.ft.MainActivity
 import app.ft.carlife.NetUtil
 import app.ft.core.DiagLog
@@ -41,8 +44,12 @@ data class AaState(
     val deviceName: String = "",
     val bluetooth: String = "idle",
     val selfServer: Boolean = false,
-    val hotspot: HotspotInfo? = null
-)
+    val hotspot: HotspotInfo? = null,
+    val display: AaDisplayConfig? = null,
+    val videoFocus: AaVideoFocus = AaVideoFocus.PROJECTED
+) {
+    val showProjection: Boolean get() = connected && videoFocus == AaVideoFocus.PROJECTED
+}
 
 class AaHeadUnitService : Service() {
     companion object {
@@ -54,6 +61,10 @@ class AaHeadUnitService : Service() {
 
         private val _state = MutableStateFlow(AaState())
         val state: StateFlow<AaState> = _state
+        private val videoFocusOwner = AaVideoFocusOwner()
+        private val _music = MutableStateFlow(app.ft.core.MusicInfo())
+        val music: StateFlow<app.ft.core.MusicInfo> = _music
+        internal fun publishMusic(info: app.ft.core.MusicInfo) { _music.value = info }
         private val disconnectHelp = AaDisconnectHelp()
         val disconnectHelpPending: StateFlow<Boolean> = disconnectHelp.pending
         fun dismissDisconnectHelp() = disconnectHelp.dismiss()
@@ -61,8 +72,17 @@ class AaHeadUnitService : Service() {
             private set
         @Volatile var micReady = false
             private set
+        private val launches = ServiceLaunches { lifecycleChanged() }
+        private val _busy = MutableStateFlow(false)
+        val busy: StateFlow<Boolean> = _busy
+        val isBusy: Boolean get() = running || launches.hasPending
         @Volatile var running = false
             private set
+        private fun lifecycleChanged() {
+            _busy.value = isBusy
+            CarConnection.lifecycleChanged()
+        }
+
         @Volatile var lastDisconnect = "none"
             private set
 
@@ -74,21 +94,34 @@ class AaHeadUnitService : Service() {
                 DiagLog.i("AA", "FT is switched off, Android Auto is not started")
                 return
             }
-            runCatching { context.startForegroundService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START).putExtra(EXTRA_BLUETOOTH, bluetooth)) }
-                .onFailure { DiagLog.w("AA", "Android would not let FT start Android Auto right now (${it.javaClass.simpleName})") }
+            val intent = Intent(context, AaHeadUnitService::class.java).setAction(ACTION_START)
+                .putExtra(EXTRA_BLUETOOTH, bluetooth)
+            launches.dispatch(intent)
+            runCatching { context.startForegroundService(intent) }
+                .onFailure { launches.finished(); DiagLog.w("AA", "Android would not let FT start Android Auto right now (${it.javaClass.simpleName})") }
         }
 
         fun feedCarMicrophone(pcm: ByteArray) {
             current?.feedCarMicrophone(pcm)
         }
 
+        /** Remember explicit UI intent even while discovery/reconnect has no usable channel. */
+        fun requestVideoFocus(projected: Boolean, source: String): Boolean {
+            videoFocusOwner.select(if (projected) AaVideoFocus.PROJECTED else AaVideoFocus.NATIVE)
+            return current?.requestVideoFocus(projected, source) == true
+        }
+
         fun stop(context: Context) {
             disconnectHelp.stop()
-            runCatching { context.startService(Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP)) }
+            if (!isBusy) return
+            val intent = Intent(context, AaHeadUnitService::class.java).setAction(ACTION_STOP)
+            launches.dispatch(intent)
+            runCatching { context.startService(intent) }.onFailure { launches.finished() }
         }
     }
 
     private val tag = "AA"
+    private lateinit var prefs: Prefs
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var server: ServerSocket? = null
     private var acceptJob: Job? = null
@@ -102,12 +135,15 @@ class AaHeadUnitService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        prefs = (application as FTApp).prefs
         running = true
+        lifecycleChanged()
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, Lang.str(R.string.channel_aa), NotificationManager.IMPORTANCE_LOW))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        launches.received(intent)
         if (intent == null) {
             stopSelf()
             return START_NOT_STICKY
@@ -145,9 +181,8 @@ class AaHeadUnitService : Service() {
 
     private fun listen(bluetooth: Boolean) {
         if (decoder != null) return
-        val app = application as FTApp
-        val port = app.prefs.aaPort
-        val dec = AaVideoDecoder(app.prefs.aaWidth, app.prefs.aaHeight)
+        val port = prefs.aaPort
+        val dec = AaVideoDecoder(prefs.aaWidth, prefs.aaHeight)
         decoder = dec
         val run = connections.start()
         disconnectHelp.start()
@@ -197,7 +232,7 @@ class AaHeadUnitService : Service() {
                         candidate.apply {
                             tcpNoDelay = true
                             keepAlive = true
-                            connect(InetSocketAddress("127.0.0.1", app.prefs.aaSelfPort), 1200)
+                            connect(InetSocketAddress("127.0.0.1", prefs.aaSelfPort), 1200)
                         }
                     }.getOrElse { runCatching { candidate.close() }; null }
                     if (s != null) {
@@ -226,16 +261,16 @@ class AaHeadUnitService : Service() {
                 val sessionJob = SupervisorJob(scope.coroutineContext[Job])
                 val sessionScope = CoroutineScope(scope.coroutineContext + sessionJob)
                 lateinit var session: AaSession
-                session = AaSession(this, s.getInputStream(), s.getOutputStream(), (application as FTApp).prefs, sessionScope, dec) { reason ->
+                session = AaSession(this, s.getInputStream(), s.getOutputStream(), prefs, sessionScope, dec, videoFocusOwner) { reason ->
                     val details = "#$id $source ${SystemClock.elapsedRealtime() - since}ms: $reason; ${phoneState()}"
                     DiagLog.i(tag, "phone session over: $details")
                     runCatching { s.close() }
                     sessionJob.cancel()
                     connections.release(session) { enabled ->
-                        disconnectHelp.closed(session.hasStreamed, reason, enabled && FTApp.instance.prefs.autoConnect, session.remoteBye)
+                        disconnectHelp.closed(session.hasStreamed, reason, enabled && prefs.autoConnect, session.remoteBye)
                         lastDisconnect = "${java.util.Date()} $details"
                         current = null
-                        _state.update { it.copy(connected = false, phase = null, deviceName = "", selfServer = false) }
+                        _state.update { it.copy(connected = false, phase = null, deviceName = "", selfServer = false, display = null, videoFocus = session.videoFocus.value) }
                         if (enabled) {
                             updateNotification(Lang.str(R.string.note_aa_ready))
                             reconnect.wake()
@@ -245,7 +280,7 @@ class AaHeadUnitService : Service() {
                 sessionScope.launch {
                     session.phase.collect { p ->
                         connections.withCurrent(session) {
-                            _state.update { it.copy(phase = p) }
+                            _state.update { it.copy(phase = p, display = session.displayConfig) }
                             if (p == AaSession.Phase.STREAMING) {
                                 DiagLog.i(tag, "session #$id streaming after ${SystemClock.elapsedRealtime() - since}ms ($source)")
                                 updateNotification(Lang.str(R.string.note_aa_streaming))
@@ -256,11 +291,16 @@ class AaHeadUnitService : Service() {
                 sessionScope.launch {
                     session.deviceName.collect { n -> connections.withCurrent(session) { _state.update { it.copy(deviceName = n) } } }
                 }
+                sessionScope.launch {
+                    session.videoFocus.collect { focus ->
+                        connections.withCurrent(session) { _state.update { it.copy(videoFocus = focus) } }
+                    }
+                }
                 DiagLog.i(tag, "session #$id connected ($source); ${phoneState()}")
                 session
             }) { session ->
                 current = session
-                _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED, deviceName = "", selfServer = selfServer) }
+                _state.update { it.copy(connected = true, phase = AaSession.Phase.CONNECTED, deviceName = "", selfServer = selfServer, display = null, videoFocus = session.videoFocus.value) }
                 session.start()
             }
         }.getOrElse {
@@ -295,6 +335,7 @@ class AaHeadUnitService : Service() {
         bt = null
         decoder?.reset()
         decoder = null
+        videoFocusOwner.select(AaVideoFocus.PROJECTED)
         _state.value = AaState()
     }
 
@@ -316,6 +357,7 @@ class AaHeadUnitService : Service() {
         shutdown()
         scope.cancel()
         running = false
+        lifecycleChanged()
         super.onDestroy()
     }
 

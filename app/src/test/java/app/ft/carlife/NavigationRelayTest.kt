@@ -126,6 +126,20 @@ class NavigationRelayTest {
         assertEquals(1, turns.size)
     }
 
+    @Test fun staleVoiceCannotReclaimOrReleaseTheNavigationModule() {
+        relay.voiceAndWait(true) { false }
+        assertFalse(relay.active)
+        assertTrue(modules.isEmpty())
+        relay.voiceAndWait(true)
+        relay.voiceAndWait(false) { false }
+        assertTrue(relay.active)
+        assertEquals(listOf(true), modules)
+        relay.reset()
+        relay.voiceAndWait(true) { false }
+        assertFalse(relay.active)
+        assertEquals(listOf(true), modules)
+    }
+
     @Test fun blockedWriteDoesNotBlockChangesOrResetAndKeepsOneConsumer() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)

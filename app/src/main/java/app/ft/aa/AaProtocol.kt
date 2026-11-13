@@ -13,6 +13,9 @@ object AaProtocol {
     const val CH_MEDIA_STATUS = 9
     const val CH_NAVIGATION = 10
 
+    const val MEDIA_PLAYBACK_STATUS = 0x8001
+    const val MEDIA_PLAYBACK_METADATA = 0x8003
+
     const val NAV_START = 0x8001
     const val NAV_STATUS = 0x8003
     const val NAV_NEXT_TURN = 0x8004
@@ -65,6 +68,7 @@ object AaProtocol {
     const val SENSOR_START_REQUEST = 0x8001
     const val SENSOR_START_RESPONSE = 0x8002
     const val SENSOR_EVENT_INDICATION = 0x8003
+    const val SENSOR_ERROR = 0x8004
 
     const val INPUT_EVENT_INDICATION = 0x8001
     const val BINDING_REQUEST = 0x8002
@@ -120,6 +124,7 @@ object AaProtocol {
         CH_CONTROL -> "CONTROL"; CH_INPUT -> "INPUT"; CH_SENSOR -> "SENSOR"; CH_VIDEO -> "VIDEO"
         CH_MEDIA_AUDIO -> "MEDIA_AUDIO"; CH_SPEECH_AUDIO -> "SPEECH_AUDIO"; CH_SYSTEM_AUDIO -> "SYSTEM_AUDIO"
         CH_AV_INPUT -> "AV_INPUT"; CH_BLUETOOTH -> "BLUETOOTH"
+        CH_MEDIA_STATUS -> "MEDIA_STATUS"
         CH_NAVIGATION -> "NAVIGATION"; else -> "CH$ch"
     }
 

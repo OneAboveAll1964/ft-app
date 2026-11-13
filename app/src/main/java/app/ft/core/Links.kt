@@ -8,6 +8,7 @@ import android.view.Display
 
 object Links {
     const val GITHUB = "https://github.com/OneAboveAll1964"
+    const val RELEASES = "https://github.com/mykolaq/ft-app/releases"
 
     fun openOnPhone(context: Context, url: String) {
         val app = context.applicationContext

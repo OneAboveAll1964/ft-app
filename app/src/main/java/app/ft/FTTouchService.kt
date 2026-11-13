@@ -94,9 +94,42 @@ class FTTouchService : AccessibilityService() {
         if (!ok) stroke = null
     }
 
-    fun tap(x: Float, y: Float) {
-        val p = Path().apply { moveTo(x, y); lineTo(x, y) }
-        runCatching { dispatchGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(p, 0L, 50L)).build(), null, null) }
+    private var atomicTapAccepted = 0L
+    private var atomicTapCompleted = 0L
+    private var atomicTapCancelled = 0L
+    private var atomicTapRejected = 0L
+
+    private fun logAtomicTapSummary(reason: String) {
+        // No x/y, package, activity or other user input is collected.
+        DiagLog.i("MirrorTouch", "$reason requests=$atomicTapAccepted completed=$atomicTapCompleted " +
+            "cancelled=$atomicTapCancelled rejected=$atomicTapRejected")
+    }
+
+    /** A single, completed Accessibility gesture for a mirrored stationary touch. */
+    fun tap(x: Float, y: Float, durationMs: Long = 50L) {
+        val duration = durationMs.coerceIn(60L, 1_200L)
+        val path = Path().apply { moveTo(x, y); lineTo(x, y) }
+        val result = runCatching {
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0L, duration)).build()
+            dispatchGesture(gesture, object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription) {
+                    atomicTapCompleted++
+                    if (atomicTapCompleted <= 3L ||
+                        ((atomicTapCompleted and (atomicTapCompleted - 1L)) == 0L))
+                        logAtomicTapSummary("completed")
+                }
+                override fun onCancelled(gestureDescription: GestureDescription) {
+                    atomicTapCancelled++
+                    logAtomicTapSummary("cancelled")
+                }
+            }, null)
+        }
+        if (result.getOrDefault(false)) atomicTapAccepted++
+        else {
+            atomicTapRejected++
+            logAtomicTapSummary("rejected")
+        }
     }
 
     fun back() = performGlobalAction(GLOBAL_ACTION_BACK)

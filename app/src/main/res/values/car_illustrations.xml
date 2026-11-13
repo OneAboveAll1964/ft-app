@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="drawable" name="car_suv">@drawable/car_rav4_xa50</item>
+    <item type="drawable" name="car_sedan">@drawable/car_corolla</item>
+    <item type="drawable" name="car_other">@drawable/car_hatchback</item>
+</resources>
