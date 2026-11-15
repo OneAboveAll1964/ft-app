@@ -43,6 +43,21 @@ class CarProfilesTest {
         assertTrue(i.selected.aaPrepareBeforeConnect)
     }
 
+    @Test fun automaticP2pRoleRetryIsOptInAndBoundToVehicle() {
+        val i = Installation()
+        val first = i.selected
+        assertFalse(first.carP2pAutoRole)
+        first.carP2pAutoRole = true
+        i.create()
+        assertFalse(i.selected.carP2pAutoRole)
+        assertTrue(first.carP2pAutoRole)
+        Backup.restore(i.selected, Backup.write(mapOf("carP2pAutoRole" to true)))
+        assertTrue(i.selected.carP2pAutoRole)
+        assertEquals(true, i.selected.all["carP2pAutoRole"])
+        first.carP2pAutoRole = false
+        assertTrue(i.selected.carP2pAutoRole)
+    }
+
     private class Store {
         val values = linkedMapOf<String, Any>()
         val listeners = linkedSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()

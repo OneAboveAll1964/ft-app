@@ -26,7 +26,8 @@ class SurfaceEncoder(
     private val savePower: Boolean = false,
     private val constantBitrate: Boolean = false,
     private val onFailure: ((Throwable) -> Unit)? = null,
-    private val startCandidateIndex: Int = 0
+    private val startCandidateIndex: Int = 0,
+    private val allowFormatCapabilityProbe: Boolean = false
 ) {
     private val tag = "Encoder"
     private val fps = fps.coerceIn(1, 60)
@@ -65,25 +66,30 @@ class SurfaceEncoder(
         // Optional resource-planning hint; retry the same portable AVC candidate
         // without it if the vendor rejects it. Never force a guessed AVC level.
         // Bounded attempts. Each fallback keeps the exact RTSP-agreed stream geometry.
-        val candidates = encoders().flatMap { codecName ->
-            listOf("minimal", "baseline").map { label -> codecName to label }
-        }.take(MAX_CANDIDATES).flatMap { (name, label) ->
+        val candidates = encoders().flatMap { choice ->
+            (if (choice.probe) listOf("minimal") else listOf("minimal", "baseline")).map { label ->
+                Candidate(choice.name, label, probe = choice.probe)
+            }
+        }.take(MAX_CANDIDATES).flatMap { candidate ->
             // Keep the portable retry as a numbered candidate, including when
             // the hint is rejected asynchronously after configure/start return.
-            (if (savePower) listOf(true, false) else listOf(false)).map { rateHint ->
-                Triple(name, label, rateHint)
+            (if (savePower && !candidate.probe) listOf(true, false) else listOf(false)).map { rateHint ->
+                candidate.copy(rateHint = rateHint)
             }
         }
         candidateCount = candidates.size
         for ((index, candidate) in candidates.withIndex()) {
             if (index < startCandidateIndex) continue
-            val (name, label, rateHint) = candidate
+            val (name, label, rateHint, probe) = candidate
             val format = minimal(baseline = label == "baseline").apply {
                 if (rateHint) setFloat(MediaFormat.KEY_OPERATING_RATE, fps.toFloat())
             }
-            val c = runCatching { MediaCodec.createByCodecName(name) }.getOrNull() ?: continue
+            val c = runCatching { MediaCodec.createByCodecName(name) }.onFailure {
+                DiagLog.w(tag, "codec CREATE_REJECTED name=$name error=${it.javaClass.simpleName}")
+            }.getOrNull() ?: continue
             val attemptActive = AtomicBoolean(true)
             try {
+                if (probe) DiagLog.w(tag, "codec FORMAT_CAPABILITY_PROBE name=$name format=${width}x${height}@$fps bitrate=$bitrate CBR=$constantBitrate; only isFormatSupported=false, trying unchanged minimal format once")
                 c.setCallback(callback(attemptActive), h)
                 c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 surface = c.createInputSurface()
@@ -91,11 +97,11 @@ class SurfaceEncoder(
                 codec = c
                 operatingRateHintEnabled = rateHint
                 selectedCandidateIndex = index
-                DiagLog.i(tag, "codec STARTED_PENDING_OUTPUT name=${c.name} candidate=${index + 1}/${candidateCount} format=${width}x${height}@$fps bitrate=$bitrate CBR=$constantBitrate profile=$label rateHint=$rateHint; SPS/PPS/IDR not yet proven")
+                DiagLog.i(tag, "codec STARTED_PENDING_OUTPUT name=${c.name} candidate=${index + 1}/${candidateCount} format=${width}x${height}@$fps bitrate=$bitrate CBR=$constantBitrate profile=$label rateHint=$rateHint capabilityProbe=$probe; SPS/PPS/IDR not yet proven")
                 return
             } catch (t: Throwable) {
                 attemptActive.set(false)
-                DiagLog.w(tag, "codec CONFIGURE_REJECTED name=$name candidate=${index + 1}/${candidateCount} mode=$label rateHint=$rateHint error=${t.javaClass.simpleName}")
+                DiagLog.w(tag, "codec CONFIGURE_REJECTED name=$name candidate=${index + 1}/${candidateCount} mode=$label rateHint=$rateHint capabilityProbe=$probe error=${t.javaClass.simpleName}")
                 runCatching { surface?.release() }
                 surface = null
                 runCatching { c.release() }
@@ -105,29 +111,48 @@ class SurfaceEncoder(
         runCatching { thread?.quitSafely() }
         thread = null
         handler = null
-        throw IllegalStateException("no H.264 encoder on this phone accepted ${width}x$height")
+        val reason = if (candidates.isEmpty()) "no eligible advertised capabilities" else "startup candidates exhausted"
+        throw IllegalStateException("no H.264 encoder on this phone accepted ${width}x$height: $reason")
     }
 
-    private fun encoders(): List<String> {
+    private data class EncoderChoice(val name: String, val probe: Boolean = false)
+    private data class Candidate(val name: String, val label: String, val rateHint: Boolean = false, val probe: Boolean = false)
+
+    private fun encoders(): List<EncoderChoice> {
         val all = runCatching {
             android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
                 .filter { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
         }.getOrDefault(emptyList())
-        val fits = all.filter { info ->
-            runCatching {
-                val caps = info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
-                val video = caps.videoCapabilities
-                caps.colorFormats.contains(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) &&
-                    video.areSizeAndRateSupported(width, height, fps.toDouble()) &&
-                    video.bitrateRange.contains(bitrate) &&
-                    (!constantBitrate || caps.encoderCapabilities.isBitrateModeSupported(
-                        MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR
-                    )) &&
-                    caps.isFormatSupported(minimal())
-            }.getOrDefault(false)
+        val fits = mutableListOf<EncoderChoice>()
+        val probes = mutableListOf<EncoderChoice>()
+        for (info in all.sortedBy { if (it.isHardwareAccelerated) 0 else 1 }.distinctBy { it.name }) {
+            val caps = runCatching { info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC) }.onFailure {
+                DiagLog.w(tag, "codec CAPABILITIES name=${info.name} error=${it.javaClass.simpleName}")
+            }.getOrNull() ?: continue
+            val errors = mutableListOf<String>()
+            fun <T> read(label: String, block: () -> T): T? = runCatching(block).onFailure {
+                errors += "$label:${it.javaClass.simpleName}"
+            }.getOrNull()
+            // Evaluate independently: a size rejection must not hide CBR/format results.
+            val surface = read("surface") { caps.colorFormats.contains(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) }
+            val size = read("size") { caps.videoCapabilities?.isSizeSupported(width, height) }
+            val rate = read("sizeRate") { caps.videoCapabilities?.areSizeAndRateSupported(width, height, fps.toDouble()) }
+            val bitrateOk = read("bitrate") { caps.videoCapabilities?.bitrateRange?.contains(bitrate) }
+            val cbr = read("CBR") { caps.encoderCapabilities?.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR) }
+            val vbr = read("VBR") { caps.encoderCapabilities?.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR) }
+            val format = read("format") { caps.isFormatSupported(minimal()) }
+            val widthAlignment = read("widthAlignment") { caps.videoCapabilities?.widthAlignment }
+            val heightAlignment = read("heightAlignment") { caps.videoCapabilities?.heightAlignment }
+            val eligible = surface == true && rate == true && bitrateOk == true && (!constantBitrate || cbr == true)
+            val probe = allowFormatCapabilityProbe && info.isHardwareAccelerated && eligible && size == true && format == false
+            DiagLog.i(tag, "codec CAPABILITIES name=${info.name} hw=${info.isHardwareAccelerated} target=${width}x${height}@$fps bitrate=$bitrate requireCBR=$constantBitrate alignment=${widthAlignment}x$heightAlignment surface=$surface size=$size sizeRate=$rate bitrateSupported=$bitrateOk CBR=$cbr VBR=$vbr format=$format probeEligible=$probe errors=${errors.joinToString(",").ifEmpty { "none" }}")
+            if (eligible && format == true) fits += EncoderChoice(info.name)
+            else if (probe) probes += EncoderChoice(info.name, probe = true)
         }
         if (fits.isEmpty()) DiagLog.w(tag, "no advertised AVC Surface encoder for ${width}x${height}@$fps ${bitrate / 1000} kbps")
-        return fits.sortedBy { if (it.isHardwareAccelerated) 0 else 1 }.map { it.name }.distinct()
+        // ICCOA opt-in only. Do not bypass a size/rate/bitrate/CBR rejection or
+        // replace advertised candidates. One hardware codec, one unchanged format.
+        return fits.ifEmpty { probes.take(1) }
     }
 
     private fun base(): MediaFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {

@@ -5,6 +5,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class IccoaVideoPlanTest {
+    @Test fun jettaKeepsNegotiated904LineGeometryAndCbr() {
+        val plan = IccoaVideoPlan.from(IccoaVideoConfig("127.0.0.1", 1920, 904, 30))
+        assertEquals(1920, plan.contentWidth)
+        assertEquals(904, plan.contentHeight)
+        assertEquals(1920, plan.streamWidth)
+        assertEquals(904, plan.streamHeight)
+        assertEquals(30, plan.fps)
+        assertEquals(8_000_000, plan.bitrate)
+        assertTrue(plan.constantBitrate)
+    }
+
     @Test fun xa60UsesLevelFourGeometryWhileKeepingNativeContent() {
         val plan = IccoaVideoPlan.from(IccoaVideoConfig("127.0.0.1", 2422, 1272, 60))
         assertEquals(2422, plan.contentWidth)

@@ -1206,6 +1206,264 @@ class CarFinderRecoveryTest {
         }
     }
 
+    @Test
+    fun automaticRoleRetryWaitsForCleanupAndAlternatesEvenWithInvitedSnapshots() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        h.finder.connectByName("CarLife")
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            advanceTimeBy(4_999)
+            runCurrent()
+            verify(h.manager, never()).connect(any(), any(), any())
+            advanceTimeBy(1)
+            runCurrent()
+            verify(h.manager, never()).connect(any(), any(), any())
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 1))
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 2))
+        }
+    }
+
+    @Test
+    fun roleExperimentStartsNormallyAndCanBeDisabledBeforeTheNextRetry() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            assertEquals(0, lastOwnerIntent(h, 1))
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 2))
+            `when`(h.prefs.carP2pAutoRole).thenReturn(false)
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 3))
+        }
+    }
+
+    @Test
+    fun roleExperimentOffKeepsTheExistingOwnerPreferenceAfterTimeout() = check { h ->
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 2))
+        }
+    }
+
+    @Test
+    fun busyAndLateCallbacksDoNotChangeTheRolePreference() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            val callback = ArgumentCaptor.forClass(WifiP2pManager.ActionListener::class.java)
+            verify(h.manager).connect(any(), any(), callback.capture())
+            callback.value.onFailure(WifiP2pManager.BUSY)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 2))
+            callback.value.onSuccess()
+            callback.value.onFailure(WifiP2pManager.ERROR)
+            advanceTimeBy(5_000)
+            runCurrent()
+            assertEquals(2, h.cancels.size)
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 3))
+        }
+    }
+
+    @Test
+    fun manualRetryResetsTheExperimentalRolePreference() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 2))
+            h.finder.retry()
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 3))
+        }
+    }
+
+    @Test
+    fun phoneOwnedGroupIsAcceptedAndSuccessResetsTheRetryPreference() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 2))
+            var link: CarFinder.Link? = null
+            h.finder.onJoined = { link = it }
+            h.finder.checkExisting()
+            h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
+            val group = mock(WifiP2pGroup::class.java)
+            `when`(group.clientList).thenReturn(emptyList())
+            h.groups.last().onGroupInfoAvailable(group)
+            assertFalse("an empty phone-owned group is not a car connection", h.finder.joined)
+            runCurrent()
+            advanceTimeBy(500)
+            runCurrent()
+            h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
+            `when`(group.clientList).thenReturn(listOf(h.car))
+            h.groups.last().onGroupInfoAvailable(group)
+            assertEquals(true, link?.weAreOwner)
+            assertEquals(h.car.deviceAddress, h.finder.connectedPeerAddress)
+            advanceTimeBy(10_000)
+            runCurrent()
+            assertEquals("a live group must not trigger role retries", 1, h.cancels.size)
+            h.broadcastConnection(false)
+            h.broadcastPeers()
+            assertEquals(0, lastOwnerIntent(h, 3))
+        }
+    }
+
+    @Test
+    fun aDifferentPeerCannotInheritTheExperimentalRolePreference() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            advanceTimeBy(5_000)
+            runCurrent()
+            val other = WifiP2pDevice().apply {
+                deviceName = "CarLife"
+                deviceAddress = "02:00:00:00:00:99"
+                status = WifiP2pDevice.AVAILABLE
+            }
+            h.visible = listOf(other)
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 2))
+        }
+    }
+
+    @Test
+    fun manualRetryDuringCleanupResetsTheScheduledRole() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            advanceTimeBy(5_000)
+            runCurrent()
+            h.finder.retry()
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(1, h.cancels.size)
+        }
+    }
+
+    @Test
+    fun oldBluetoothCallerCannotScheduleAnExperimentalRoleForTheNextCaller() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.finder.beginBluetoothExchange("22:33:44:55:66:77")
+            startAvailableRoleJoin(h)
+            h.finder.beginBluetoothExchange("22:33:44:55:66:88")
+            h.finder.connectByName("CarLife")
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 2))
+        }
+    }
+
+    @Test
+    fun phoneOwnedGroupWithoutTheCarTimesOutAndReturnsToTheNormalRole() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 2))
+            h.finder.checkExisting()
+            h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
+            val group = mock(WifiP2pGroup::class.java)
+            val stranger = WifiP2pDevice().apply { deviceAddress = "02:00:00:00:00:99" }
+            `when`(group.clientList).thenReturn(listOf(stranger))
+            h.groups.last().onGroupInfoAvailable(group)
+            assertFalse(h.finder.joined)
+            runCurrent()
+            advanceTimeBy(JoinWatch.GROUP_DETAILS_MS)
+            runCurrent()
+            assertEquals(2, h.cancels.size)
+            assertFalse(h.finder.joined)
+            finishRoleCleanup(h)
+            assertEquals(0, lastOwnerIntent(h, 3))
+        }
+    }
+
+    @Test
+    fun pinnedCarCanJoinThePhoneOwnedGroupAfterItsFirstEmptySnapshot() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn("22:33:44:55:66:77")
+        `when`(h.prefs.carLifeWifiAddress).thenReturn(h.car.deviceAddress)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            advanceTimeBy(5_000)
+            runCurrent()
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 2))
+            h.finder.checkExisting()
+            h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
+            val group = mock(WifiP2pGroup::class.java)
+            `when`(group.clientList).thenReturn(emptyList())
+            h.groups.last().onGroupInfoAvailable(group)
+            assertFalse(h.finder.joined)
+            runCurrent()
+            advanceTimeBy(500)
+            runCurrent()
+            h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
+            `when`(group.clientList).thenReturn(listOf(h.car))
+            h.groups.last().onGroupInfoAvailable(group)
+            assertTrue(h.finder.joined)
+            assertEquals(h.car.deviceAddress, h.finder.connectedPeerAddress)
+            val generation = h.finder.connectionGeneration
+            var left = 0
+            h.finder.onLeft = { left++ }
+            h.finder.checkExisting()
+            h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
+            `when`(group.clientList).thenReturn(emptyList())
+            h.groups.last().onGroupInfoAvailable(group)
+            assertFalse("the car left even though the phone-owned group remains", h.finder.joined)
+            assertEquals("", h.finder.connectedPeerAddress)
+            assertEquals("", h.finder.connectedBluetoothAddress)
+            assertEquals(generation + 1, h.finder.connectionGeneration)
+            assertEquals(1, left)
+        }
+    }
+
+    private fun startAvailableRoleJoin(h: Harness) {
+        h.broadcastEnabled(false)
+        h.car.status = WifiP2pDevice.AVAILABLE
+        h.broadcastEnabled(true)
+        h.broadcastPeers()
+        h.finder.connectByName("CarLife")
+    }
+
+    private fun lastOwnerIntent(h: Harness, count: Int): Int {
+        val config = ArgumentCaptor.forClass(WifiP2pConfig::class.java)
+        verify(h.manager, times(count)).connect(any(), config.capture(), any())
+        return config.value.groupOwnerIntent
+    }
+
+    private fun TestScope.finishRoleCleanup(h: Harness) {
+        h.cancels.last().onSuccess()
+        runCurrent()
+        h.removals.last().onSuccess()
+        runCurrent()
+        h.groups.last().onGroupInfoAvailable(null)
+        runCurrent()
+        advanceTimeBy(JoinWatch.retryDelayMs(h.cancels.size))
+        runCurrent()
+    }
+
     private fun check(block: suspend TestScope.(Harness) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {

@@ -273,6 +273,8 @@ private fun PageContent(page: SettingsPage) {
                 TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
                 TextSetting(stringResource(R.string.car_pin_label), p.carWpsPin) { p.carWpsPin = it }
                 CarJoinTimeoutSetting(p.carJoinTimeoutSeconds) { p.carJoinTimeoutSeconds = it }
+                BoolSetting(stringResource(R.string.car_p2p_auto_role), p.carP2pAutoRole,
+                    detail = stringResource(R.string.car_p2p_auto_role_about)) { p.carP2pAutoRole = it }
                 BoolSetting(stringResource(R.string.car_swap_keys), p.swapTrackKeys) { p.swapTrackKeys = it }
                 Text(stringResource(R.string.wheel_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                 Text(

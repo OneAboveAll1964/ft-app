@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 183
-        versionName = "3.9.68-aa-screen-off"
+        versionCode = 184
+        versionName = "3.9.69-p2p-role-test"
     }
 
     signingConfigs {

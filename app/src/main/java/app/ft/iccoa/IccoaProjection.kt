@@ -72,7 +72,7 @@ class IccoaProjection(
         }) { AaHeadUnitService.current?.sendKey(84) }
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val display = CarDisplay(context)
+    private val display = CarDisplay(context, allowFormatCapabilityProbe = true)
     private val mirror = PhoneMirror()
     private val audio = AudioCapture { CarAudioBus.write(CarAudioBus.LANE_PHONE, it) }
     private val mutableState = MutableStateFlow(CarControls.ScreenState())
