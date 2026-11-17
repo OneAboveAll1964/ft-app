@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 184
-        versionName = "3.9.69-p2p-role-test"
+        versionCode = 186
+        versionName = "3.9.71-p2p-go-diagnostics"
     }
 
     signingConfigs {

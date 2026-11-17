@@ -473,7 +473,7 @@
     <string name="supercast_show_dock">نیشادانا ئەپان</string>
     <string name="supercast_screen_off_about">دوگمەیا پاوەری بگرە دا مۆبایلێ ب کار بینی. پشتی دەمێ ڤەمراندنا شاشا مۆبایلی دێ دیسا تاری بیت.</string>
     <string name="car_p2p_auto_role">Automatically try another Wi-Fi Direct role (experimental)</string>
-    <string name="car_p2p_auto_role_about">If a connection attempt times out before a group forms, FT cleans it up and retries with the phone preferred as group owner. Further timeouts alternate the preference. The car and Android determine the actual role. Applies to the next retry; an active connection is kept.</string>
+    <string name="car_p2p_auto_role_about">FT prefers the phone as group owner from the first connection attempt. If a connection attempt times out before a group forms, FT cleans it up and alternates the preference. The car and Android determine the actual role. Applies to the next connection attempt; an active connection is kept.</string>
     <string name="car_join_timeout">دەمێ چاڤەرێکرنا گرێدانا WiFi Direct</string>
     <string name="car_join_timeout_about">ماوێ FT چاڤەرێ دکەت بەری کو دووبارە هەولا گرێدانەکێ بدەت یا بەرسڤ نەهاتیە دان. ئەگەر ترومبێل درەنگتر گرێ ددەت، زێدە بکە. ژ هەولا بهێت ڤە کار دکەت.</string>
     <string name="car_join_timeout_seconds">%1$d چرکە</string>

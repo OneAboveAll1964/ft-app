@@ -54,13 +54,14 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var failures = 0
     // Retry preference is local to this peer and connection sequence, never persisted.
     private var roleRetryAddress = ""
-    private var retryOwnerIntent = 0
+    private var retryOwnerIntent = defaultOwnerIntent()
     private var bluetoothGeneration = 0L
     private var joiningRoleGeneration: Long? = null
     private var joiningOwnerIntent = 0
     private var waitingForRoleClient = false
     private var lastNoMatch = ""
     private var lastSnapshot = ""
+    private var lastGroupSnapshot = ""
     private var announcedName = ""
     private var awaitingRetryAnnouncement = false
     private var joiningAddress = ""
@@ -220,9 +221,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private fun current(ch: WifiP2pManager.Channel, life: Long) =
         lifecycle == life && receiver != null && channel === ch
 
+    private fun defaultOwnerIntent() = if (prefs.carP2pAutoRole) 15 else 0
+
     private fun resetRoleRetry() {
         roleRetryAddress = ""
-        retryOwnerIntent = 0
+        retryOwnerIntent = defaultOwnerIntent()
     }
 
     private fun planRoleRetry(address: String, ownerIntent: Int, generation: Long) {
@@ -566,6 +569,25 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 selected?.address ?: if (locked) prefs.carLifeWifiAddress.orEmpty() else ""
             }
             val matched = devices.firstOrNull { expected.isNotBlank() && it.deviceAddress.equals(expected, true) }
+            // Keep the owner's IP separate from its P2P device MAC. Report membership
+            // before accepting a group, including an empty phone-owned group.
+            val ownerAddress = g.owner?.deviceAddress.orEmpty()
+            fun loggedAddress(address: String): String = when {
+                address.isBlank() -> "unknown"
+                prefs.showOtherDevicesInLogs || expected.isNotBlank() && address.equals(expected, true) -> address
+                else -> "omitted"
+            }
+            val clients = g.clientList.map { loggedAddress(it.deviceAddress.orEmpty()) }.sorted()
+            val snapshot = "group snapshot attempt=$id groupVersion=$group formed=${info.groupFormed} " +
+                "phoneRole=${if (info.isGroupOwner) "GO" else "GC"} ownerIp=$ip " +
+                "ownerMac=${loggedAddress(ownerAddress)} iface=${g.`interface`} " +
+                "expectedPeer=${expected.ifBlank { "unknown" }} peerMatched=${matched != null} " +
+                "peerPosition=${if (matched == null) "absent" else if (info.isGroupOwner) "client" else "owner"} " +
+                "clientCount=${g.clientList.size} clients=$clients"
+            if (snapshot != lastGroupSnapshot) {
+                lastGroupSnapshot = snapshot
+                DiagLog.i(tag, snapshot)
+            }
             // A locally created group is not a car connection until the expected
             // client joins. Keep the bounded probe running for this experiment.
             waitingForRoleClient = info.isGroupOwner && joiningRoleGeneration != null &&
@@ -586,7 +608,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 return@requestGroupInfo
             }
             val previous = _link.value
-            val ownerAddress = g.owner?.deviceAddress.orEmpty()
             val transportChanged = previous == null || previous.groupOwnerIp != ip ||
                 previous.iface != g.`interface` || previous.weAreOwner != info.isGroupOwner ||
                 (connectedPeerAddress.isNotBlank() &&
@@ -742,6 +763,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 .setDeviceAddress(android.net.MacAddress.fromString(p.address))
                 .enablePersistentMode(false)
                 .build()
+        }.onFailure {
+            DiagLog.w(tag, "temporary P2P config builder failed (${it.javaClass.simpleName}); using legacy config")
         }.getOrNull()
         val cfg = (fresh ?: WifiP2pConfig()).apply {
             deviceAddress = p.address
@@ -755,8 +778,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             groupOwnerIntent = ownerIntent
         }
         attemptAt = android.os.SystemClock.elapsedRealtime()
+        val networkId = if (Build.VERSION.SDK_INT >= 30) cfg.networkId.toString() else "unavailable"
         DiagLog.d(tag, "join attempt=$id peerStatus=${statusName(p.status)} peerOwner=${p.groupOwner} " +
-            "wps=${if (cfg.wps.setup == WpsInfo.PBC) "push-button" else "keypad"} ownerIntent=${cfg.groupOwnerIntent} persistentSave=false")
+            "wps=${if (cfg.wps.setup == WpsInfo.PBC) "push-button" else "keypad"} ownerIntent=${cfg.groupOwnerIntent} " +
+            "configSource=${if (fresh != null) "builder" else "legacy"} networkId=$networkId " +
+            "persistentSave=${if (fresh != null) "false" else "default"}")
         // Android can omit the action callback altogether. Bound the whole
         // request, including that wait, without extending it on a late success.
         watch(p, timeoutMs, ownerIntent)
