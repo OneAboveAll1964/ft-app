@@ -28,6 +28,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class CarFinder(private val context: Context, private val prefs: Prefs, private val scope: CoroutineScope) {
     data class Peer(val name: String, val address: String, val status: Int, val groupOwner: Boolean)
     data class Link(val groupOwnerIp: String, val iface: String?, val weAreOwner: Boolean, val name: String)
+    private data class ServiceMatch(val address: String, val name: String)
 
     private val tag = "P2P"
     private val manager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
@@ -42,6 +43,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var watchdog: Job? = null
     private var recovery: Job? = null
     private var preparation: Job? = null
+    private var ownerDiscovery: Job? = null
+    private var awaitingFreshPeers = false
+    private var pendingServiceMatch: ServiceMatch? = null
+    private val waitingForOwnerPeers get() = ownerDiscovery != null || awaitingFreshPeers
     internal val preparingRetry: Boolean get() = recovery != null || preparation?.isActive == true
     private var groupProbe: Job? = null
     private var busyProbe: Job? = null
@@ -105,6 +110,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
         bluetoothAddress = address
         announcedName = ""
+        pendingServiceMatch = null
     }
 
     // Remembered names keep legacy discovery working, but are not proof that a new
@@ -237,6 +243,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     }
 
     private fun cancelAttempt() {
+        cancelOwnerDiscovery()
         resetRoleRetry()
         attempt++
         busyProbe?.cancel()
@@ -260,6 +267,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         groupProbe?.cancel()
         groupProbe = null
         waitingForRoleClient = false
+    }
+
+    private fun cancelOwnerDiscovery() {
+        ownerDiscovery?.cancel()
+        ownerDiscovery = null
+        awaitingFreshPeers = false
+        pendingServiceMatch = null
     }
 
     fun search() {
@@ -351,18 +365,22 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         })
     }
 
+    private fun matchesService(base: String): Boolean {
+        val want = targetName.trim()
+        return want.isNotEmpty() && (base.equals(want, true) ||
+            (!locked && base.isNotEmpty() && want.startsWith(base, true) && base.startsWith("_")))
+    }
+
     private fun onService(kind: String, instance: String, type: String, device: WifiP2pDevice?) {
         val d = device ?: return
-        val want = targetName.trim()
         val base = instance.substringBefore('.')
-        val match = want.isNotEmpty() && (base.equals(want, true) ||
-            (!locked && base.isNotEmpty() && want.startsWith(base, true) && base.startsWith("_")))
+        val match = matchesService(base)
         val peer = Peer(d.deviceName.orEmpty(), d.deviceAddress.orEmpty(), d.status, d.isGroupOwner)
         val key = "${d.deviceAddress}|$instance"
         if ((match || visible(peer)) && servicesSeen.add(key)) DiagLog.i(tag, "WiFi Direct $kind service '$instance' $type from '${d.deviceName}' (${d.deviceAddress})")
         if (!enabled || recovery != null || groupProbe != null || _link.value != null || connecting != null || !match) return
         DiagLog.i(tag, "WiFi Direct: '${d.deviceName}' (${d.deviceAddress}) offers the car's service '$base', joining it")
-        connect(peer, serviceMatch = true)
+        connect(peer, serviceName = base)
     }
 
     private fun describe(d: WifiP2pDevice) {
@@ -509,6 +527,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val version = ++peersVersion
         m.requestPeers(ch) { list ->
             if (!current(ch, life) || version != peersVersion) return@requestPeers
+            // The request at expiry supersedes every request sent during the window.
+            val completedOwnerDiscovery = awaitingFreshPeers
+            awaitingFreshPeers = false
             val ps = list.deviceList.map { Peer(it.deviceName ?: "", it.deviceAddress ?: "", it.status, it.isGroupOwner) }
             _peers.value = ps
             list.deviceList.forEach { describe(it) }
@@ -518,6 +539,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 DiagLog.d(tag, "car peers: $snapshot")
             }
             autoMatch(ps)
+            if (completedOwnerDiscovery) pendingServiceMatch = null
         }
     }
 
@@ -629,6 +651,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             } else connectedBluetoothAddress = ""
             val name = if (matched != null) g.networkName ?: connecting ?: "" else ""
             val l = Link(ip, g.`interface`, info.isGroupOwner, name)
+            cancelOwnerDiscovery()
             connecting = null
             watchdog?.cancel()
             watchdog = null
@@ -667,6 +690,14 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (!enabled || recovery != null || groupProbe != null || _link.value != null || connecting != null) return
         val want = targetName.trim()
         val target = theCar(ps, want)
+        val service = pendingServiceMatch
+        if (service != null && matchesService(service.name)) {
+            val peer = ps.singleOrNull { it.address.equals(service.address, true) && it.status == WifiP2pDevice.AVAILABLE }
+            if (peer != null && (peer.groupOwner || (!waitingForOwnerPeers && target?.groupOwner != true))) {
+                connect(peer, service.name)
+                return
+            }
+        }
         if (target == null) {
             val nearby = if (prefs.showOtherDevicesInLogs) "; nearby: " + ps.joinToString { "'${it.name}'" }.ifBlank { "nothing" } else ""
             val sig = "$want|$nearby"
@@ -685,6 +716,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                     connect(target)
                     return
                 }
+                cancelOwnerDiscovery()
                 attempt++
                 connecting = target.name
                 joiningAddress = target.address
@@ -738,19 +770,24 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         restart(p, "manual retry requested")
     }
 
-    fun connect(p: Peer) = connect(p, serviceMatch = false)
+    fun connect(p: Peer) = connect(p, serviceName = null)
 
-    private fun connect(p: Peer, serviceMatch: Boolean) {
-        if (locked && (if (serviceMatch) trustedAnnouncement.isBlank() else pick(listOf(p)) == null)) return
+    private fun connect(p: Peer, serviceName: String?) {
+        if (locked && (if (serviceName != null) trustedAnnouncement.isBlank() else pick(listOf(p)) == null)) return
         if (awaitingAnnouncement || awaitingRetryAnnouncement) return
         val m = manager ?: return
         val ch = channel ?: return
         if (!enabled || recovery != null || groupProbe != null || _link.value != null || connecting != null) return
+        if (waitingForOwnerPeers && !p.groupOwner && p.status == WifiP2pDevice.AVAILABLE) {
+            if (serviceName != null) pendingServiceMatch = ServiceMatch(p.address, serviceName)
+            return
+        }
+        cancelOwnerDiscovery()
         val life = lifecycle
         val id = ++attempt
         connecting = p.name
         joiningAddress = p.address
-        joiningBluetoothAddress = if (serviceMatch && trustedAnnouncement.isNotBlank()) bluetoothAddress else bluetoothFor(p.address)
+        joiningBluetoothAddress = if (serviceName != null && trustedAnnouncement.isNotBlank()) bluetoothAddress else bluetoothFor(p.address)
         connectedPeerAddress = ""
         if (!prefs.carP2pAutoRole || !roleRetryAddress.equals(p.address, true)) resetRoleRetry()
         val ownerIntent = retryOwnerIntent
@@ -830,6 +867,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val ch = channel ?: return
         val life = lifecycle
         val id = ++attempt
+        cancelOwnerDiscovery()
         busyProbe?.cancel()
         busyProbe = null
         watchdog?.cancel()
@@ -875,6 +913,17 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             peersVersion++
             _peers.value = emptyList()
             recovery = null
+            if (prefs.carP2pAutoRole) {
+                // ColorOS can reinvoke a persistent profile even with netId=-1.
+                // Give the car time to advertise its current group before negotiation.
+                DiagLog.i(tag, "allowing 3000ms for the car's current group before retrying ordinary negotiation")
+                ownerDiscovery = scope.launch(Dispatchers.Main) {
+                    delay(3_000)
+                    ownerDiscovery = null
+                    awaitingFreshPeers = true
+                    refreshPeers()
+                }
+            }
             DiagLog.i(tag, "recovery complete; waiting for the car in a fresh WiFi Direct peer list")
             refreshPeers()
             discover()

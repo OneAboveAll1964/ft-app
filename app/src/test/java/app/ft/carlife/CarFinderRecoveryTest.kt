@@ -1439,6 +1439,141 @@ class CarFinderRecoveryTest {
         }
     }
 
+    @Test
+    fun recoveryCanJoinTheCarsCurrentOwnerBeforeTheDiscoveryWindowExpires() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            h.finder.retry()
+            runCurrent()
+            finishRoleCleanup(h, waitForOwner = false)
+            lastOwnerIntent(h, 1)
+            advanceTimeBy(500)
+            val owner = spy(h.car)
+            `when`(owner.isGroupOwner).thenReturn(true)
+            h.visible = listOf(owner)
+            h.broadcastPeers()
+            lastOwnerIntent(h, 2)
+            advanceTimeBy(3_000)
+            runCurrent()
+            lastOwnerIntent(h, 2)
+            assertEquals(1, h.cancels.size)
+        }
+    }
+
+    @Test
+    fun nonOwnerRetryHasABoundedWindowEvenWithRepeatedBluetoothAnnouncements() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            h.finder.retry()
+            runCurrent()
+            finishRoleCleanup(h, waitForOwner = false)
+            repeat(2) {
+                advanceTimeBy(1_000)
+                h.finder.connectByName("CarLife")
+                h.broadcastPeers()
+                runCurrent()
+                lastOwnerIntent(h, 1)
+            }
+            advanceTimeBy(999)
+            runCurrent()
+            lastOwnerIntent(h, 1)
+            advanceTimeBy(1)
+            runCurrent()
+            lastOwnerIntent(h, 2)
+            assertEquals(1, h.cancels.size)
+        }
+    }
+
+    @Test
+    fun ownerDiscoveryExpiryWaitsForTheNewPeerReplyBeforeJoining() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            h.finder.retry()
+            runCurrent()
+            finishRoleCleanup(h, waitForOwner = false)
+            val replies = mutableListOf<() -> Unit>()
+            h.pendingPeerReplies = replies
+            h.broadcastPeers()
+            h.visible = emptyList()
+            advanceTimeBy(3_000)
+            h.finder.connectByName("CarLife")
+            lastOwnerIntent(h, 1)
+            runCurrent()
+            assertEquals(2, replies.size)
+            replies.first().invoke()
+            h.finder.connectByName("CarLife")
+            lastOwnerIntent(h, 1)
+            replies.last().invoke()
+            lastOwnerIntent(h, 1)
+            h.pendingPeerReplies = null
+            h.visible = listOf(h.car)
+            h.broadcastPeers()
+            lastOwnerIntent(h, 2)
+        }
+    }
+
+    @Test
+    fun ownerDiscoveryCanJoinACarKnownOnlyByItsServiceAnnouncement() = check { h ->
+        val caller = "64:FE:15:28:C8:E4"
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        `when`(h.prefs.carLifeVehicleAddress).thenReturn(caller)
+        h.broadcastEnabled(false)
+        h.visible = emptyList()
+        h.broadcastEnabled(true)
+        h.finder.beginBluetoothExchange(caller)
+        h.finder.connectByName("_CarA")
+        h.finder.search()
+        advanceTimeBy(15_000)
+        runCurrent()
+
+        val car = WifiP2pDevice().apply {
+            deviceName = "Generic head unit"
+            deviceAddress = "02:00:00:00:00:99"
+            status = WifiP2pDevice.AVAILABLE
+        }
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.finder.retry()
+            runCurrent()
+            h.visible = listOf(car)
+            finishRoleCleanup(h, waitForOwner = false)
+            h.serviceListener.onDnsSdServiceAvailable("_CarA", "_tcp", car)
+            verify(h.manager, never()).connect(any(), any(), any())
+
+            advanceTimeBy(3_000)
+            runCurrent()
+            val config = ArgumentCaptor.forClass(WifiP2pConfig::class.java)
+            verify(h.manager).connect(any(), config.capture(), any())
+            assertEquals(car.deviceAddress, config.value.deviceAddress)
+
+            h.broadcastConnection(true)
+            val group = mock(WifiP2pGroup::class.java)
+            `when`(group.owner).thenReturn(car)
+            h.groups.last().onGroupInfoAvailable(group)
+            assertTrue(h.finder.joined)
+            assertEquals(caller, h.finder.connectedBluetoothAddress)
+        }
+    }
+
+    @Test
+    fun stoppingDuringOwnerDiscoveryCancelsThePendingPeerQuery() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            h.finder.retry()
+            runCurrent()
+            finishRoleCleanup(h, waitForOwner = false)
+            h.finder.stop()
+            clearInvocations(h.manager)
+            advanceTimeBy(4_000)
+            runCurrent()
+            verify(h.manager, never()).requestPeers(any(), any())
+            verify(h.manager, never()).connect(any(), any(), any())
+        }
+    }
+
     private fun startAvailableRoleJoin(h: Harness) {
         h.broadcastEnabled(false)
         h.car.status = WifiP2pDevice.AVAILABLE
@@ -1453,7 +1588,7 @@ class CarFinderRecoveryTest {
         return config.value.groupOwnerIntent
     }
 
-    private fun TestScope.finishRoleCleanup(h: Harness) {
+    private fun TestScope.finishRoleCleanup(h: Harness, waitForOwner: Boolean = true) {
         h.cancels.last().onSuccess()
         runCurrent()
         h.removals.last().onSuccess()
@@ -1462,6 +1597,10 @@ class CarFinderRecoveryTest {
         runCurrent()
         advanceTimeBy(JoinWatch.retryDelayMs(h.cancels.size))
         runCurrent()
+        if (waitForOwner && h.prefs.carP2pAutoRole && h.car.status == WifiP2pDevice.AVAILABLE) {
+            advanceTimeBy(3_000)
+            runCurrent()
+        }
     }
 
     private fun check(block: suspend TestScope.(Harness) -> Unit) = runTest {
@@ -1503,6 +1642,7 @@ class CarFinderRecoveryTest {
             status = WifiP2pDevice.INVITED
         }
         var visible: List<WifiP2pDevice> = listOf(car)
+        var pendingPeerReplies: MutableList<() -> Unit>? = null
         private lateinit var receiver: BroadcastReceiver
         val finder: CarFinder
         lateinit var serviceListener: WifiP2pManager.DnsSdServiceResponseListener
@@ -1517,7 +1657,10 @@ class CarFinderRecoveryTest {
             doAnswer {
                 val peers = mock(WifiP2pDeviceList::class.java)
                 `when`(peers.deviceList).thenReturn(visible.toList())
-                it.getArgument<WifiP2pManager.PeerListListener>(1).onPeersAvailable(peers)
+                val listener = it.getArgument<WifiP2pManager.PeerListListener>(1)
+                val reply = { listener.onPeersAvailable(peers) }
+                val pending = pendingPeerReplies
+                if (pending == null) reply() else pending += reply
                 null
             }.`when`(manager).requestPeers(any(), any())
             doAnswer { it.getArgument<WifiP2pManager.ActionListener?>(1)?.let(cancels::add); null }
