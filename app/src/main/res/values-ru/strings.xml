@@ -167,6 +167,8 @@
     <string name="home_aa_missing">На этом телефоне нет Android Auto. Установите его из Play Store или разрешите FT установить его в разделе «Настройки» → «Android Auto».</string>
     <string name="home_aa_open_settings">Открыть «Настройки» → «Android Auto»</string>
     <string name="home_aa_start_with_car">Запускать с автомобилем</string>
+    <string name="home_aa_only">Использовать только Android Auto</string>
+    <string name="home_aa_only_description">Android Auto запускается при подключении к машине. Отключаются главный экран FT в машине и кнопка возврата к нему, виджеты (скорость, координаты, курс, погода, календарь и заряд телефона), встроенный плеер, браузер, зеркалирование телефона, SuperCast и автозапуск других приложений через FT. Голосовая кнопка на руле работает с Android Auto.</string>
     <string name="home_aa_start">Запустить Android Auto в автомобиле</string>
     <string name="home_aa_works_once">Работает, когда FT на экране автомобиля.</string>
     <string name="home_aa_turn_on_first">Сначала включите FT.</string>
@@ -264,6 +266,7 @@
     <string name="car_aa_your_phone">вашему телефону</string>
     <string name="car_aa_waiting">Ожидание телефона на порту %1$d</string>
     <string name="car_aa_starting">Подготовка подключения Android Auto…</string>
+    <string name="car_aa_not_showing">Android Auto пока не отображается</string>
     <string name="car_touch_needs_accessibility">Чтобы управлять касаниями здесь, включите FT в разделе «Специальные возможности» на телефоне</string>
     <string name="car_am">AM</string>
     <string name="car_pm">PM</string>

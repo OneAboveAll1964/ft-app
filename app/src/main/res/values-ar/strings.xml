@@ -167,6 +167,8 @@
     <string name="home_aa_missing">Android Auto غير مثبّت على هذا الهاتف. ثبّته من متجر Play، أو دع FT يثبّته من الإعدادات، قسم Android Auto.</string>
     <string name="home_aa_open_settings">افتح قسم Android Auto في الإعدادات</string>
     <string name="home_aa_start_with_car">التشغيل مع السيارة</string>
+    <string name="home_aa_only">استخدام Android Auto فقط</string>
+    <string name="home_aa_only_description">يبدأ Android Auto عند الاتصال بالسيارة. يتوقف عرض شاشة FT الرئيسية في السيارة وزر العودة إليها، والبطاقات الصغيرة (السرعة والإحداثيات والاتجاه والطقس والتقويم وبطارية الهاتف). ويتوقف أيضا المشغل المدمج والمتصفح وعرض شاشة الهاتف وميزة SuperCast والتشغيل التلقائي للتطبيقات الأخرى عبر FT. يستخدم زر الأوامر الصوتية على المقود Android Auto.</string>
     <string name="home_aa_start">شغّل Android Auto على شاشة السيارة</string>
     <string name="home_aa_works_once">يعمل بعد ظهور FT على شاشة السيارة.</string>
     <string name="home_aa_turn_on_first">شغّل FT أولًا.</string>
@@ -264,6 +266,7 @@
     <string name="car_aa_your_phone">هاتفك</string>
     <string name="car_aa_waiting">بانتظار هاتف على المنفذ %1$d</string>
     <string name="car_aa_starting">جارٍ تشغيل شاشة Android Auto…</string>
+    <string name="car_aa_not_showing">لم يظهر Android Auto على الشاشة بعد</string>
     <string name="car_touch_needs_accessibility">فعّل FT من إعدادات إمكانية الوصول في هاتفك لتستخدم اللمس هنا</string>
     <string name="car_am">ص</string>
     <string name="car_pm">م</string>

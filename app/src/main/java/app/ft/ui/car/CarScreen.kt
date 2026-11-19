@@ -108,6 +108,7 @@ import app.ft.FTApp
 import app.ft.FTTouchService
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
+import app.ft.aa.AaState
 import app.ft.aa.AaVideoSink
 import app.ft.projection.CarControls
 import app.ft.projection.CarControls.Phase
@@ -160,21 +161,53 @@ private fun sidePadding(corner: Int): PaddingValues =
 @Composable
 fun CarScreen() {
     val style by CarStyles.current.collectAsState()
+    val state by CarControls.state.collectAsState()
+    val aa by AaHeadUnitService.state.collectAsState()
+    val showAa = state.aaOverlay && !state.waitingForShare
     CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 1f)) {
         Localized {
             CarTheme(style.accentColor) {
-                CompositionLocalProvider(LocalContentColor provides Color.White) { CarRoot(style) }
+                CompositionLocalProvider(LocalContentColor provides Color.White) {
+                    Box(Modifier.fillMaxSize()) {
+                        if (showAa) LeftToRight { AaOverlay(aa) }
+                        if (style.aaOnly) {
+                            CarPhoneScreen(aa.connected, panesVisible = false)
+                            if (!showAa) AaOnlyCarScreen(state, aa)
+                        } else {
+                            CarRoot(style, state, aa, showAa)
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CarRoot(style: CarStyle) {
-    val state by CarControls.state.collectAsState()
-    val aa by AaHeadUnitService.state.collectAsState()
+private fun AaOnlyCarScreen(state: ScreenState, aa: AaState) {
+    when {
+        state.waitingForShare && state.shareForSound -> ShareWait("", forSound = true)
+        else -> Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.home_aa_only), style = MaterialTheme.typography.titleLarge)
+                LinkChip(state)
+                if (state.phase == Phase.PROJECTING) {
+                    Text(
+                        if (aa.listening && !aa.connected) stringResource(R.string.car_aa_waiting, aa.port)
+                        else stringResource(R.string.car_aa_not_showing),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(onClick = { CarControls.startAa() }) { Text(stringResource(R.string.home_aa_start)) }
+                }
+            }
+        }
+    }
+    if (!state.aaOverlay && !state.mirroring) TouchCalibrationOverlay()
+}
+
+@Composable
+private fun CarRoot(style: CarStyle, state: ScreenState, aa: AaState, showAa: Boolean) {
     val assistant by app.ft.core.CarAssistantPanel.state.collectAsState()
-    val touchCal by CarTouchCalibration.state.collectAsState()
     var view by remember { mutableStateOf(CarView.LAUNCHER) }
     var nowPlaying by remember { mutableStateOf(false) }
     var wasAaVisible by remember { mutableStateOf(state.aaOverlay) }
@@ -198,6 +231,10 @@ private fun CarRoot(style: CarStyle) {
         onDispose {
             browser.destroy()
             youtube.destroy()
+            if (FTApp.instance.prefs.aaOnly && panes.isNotEmpty()) {
+                val names = panes.map { it.name }
+                SuperCast.later { names.forEach(SuperCast::closePane) }
+            }
         }
     }
     val pad = sidePadding(style.corner)
@@ -262,10 +299,10 @@ private fun CarRoot(style: CarStyle) {
         LocalPillRow provides pillRowInset(style.corner, PILL_SPACE - 28.dp)
     ) {
         Box(Modifier.fillMaxSize()) {
-            CarBackground(style)
+            if (!showAa) CarBackground(style)
             when {
                 state.waitingForShare -> ShareWait(state.mirrorPackage, state.shareForSound)
-                state.aaOverlay -> LeftToRight { AaOverlay(aa) }
+                showAa -> Unit
                 state.mirroring -> LeftToRight { MirrorOverlay(style.corner) }
                 view == CarView.DRAWER -> AppDrawer(drawerGrid, pad) { view = CarView.LAUNCHER }
                 view == CarView.BROWSER -> CarBrowser(browser) { view = CarView.LAUNCHER }
@@ -337,30 +374,7 @@ private fun CarRoot(style: CarStyle) {
                     if (state.notice != 0) Text(stringResource(state.notice), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
                 }
             }
-            if (!state.aaOverlay && !state.mirroring && touchCal.step in 1..4) {
-                Box(Modifier.fillMaxSize().background(Color(0xFF0B1220))) {
-                    val targetX = if (touchCal.step == 1 || touchCal.step == 3) .15f else .85f
-                    val targetY = if (touchCal.step <= 2) .15f else .85f
-                    Canvas(Modifier.fillMaxSize()) {
-                        drawCircle(
-                            color = Color(0xFF53E5BB),
-                            radius = 22.dp.toPx(),
-                            center = Offset(size.width * targetX, size.height * targetY)
-                        )
-                    }
-                    Text(
-                        "Касание ${touchCal.step}/4: нажмите точно в центр зелёного круга",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 36.dp)
-                    )
-                    Text(
-                        "Для отмены нажмите в верхнем левом углу экрана",
-                        color = Color.White,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 30.dp)
-                    )
-                }
-            }
+            if (!state.aaOverlay && !state.mirroring) TouchCalibrationOverlay()
             if ((state.aaOverlay || state.mirroring || view != CarView.LAUNCHER) && !castFullNow && (!state.aaOverlay || style.aaShowReturnButton)) {
                 // FT163 field log: top-corner taps were intercepted by FT's return pill
                 // rather than reaching small close buttons inside Android Auto.
@@ -378,6 +392,35 @@ private fun CarRoot(style: CarStyle) {
             }
             assistant?.let { request -> key(request.id) { LeftToRight { AlicePanel(request) } } }
         }
+    }
+}
+
+@Composable
+private fun TouchCalibrationOverlay() {
+    val calibration by CarTouchCalibration.state.collectAsState()
+    val step = calibration.step
+    if (step !in 1..4) return
+    Box(Modifier.fillMaxSize().background(Color(0xFF0B1220))) {
+        val targetX = if (step == 1 || step == 3) .15f else .85f
+        val targetY = if (step <= 2) .15f else .85f
+        Canvas(Modifier.fillMaxSize()) {
+            drawCircle(
+                color = Color(0xFF53E5BB),
+                radius = 22.dp.toPx(),
+                center = Offset(size.width * targetX, size.height * targetY)
+            )
+        }
+        Text(
+            "Касание $step/4: нажмите точно в центр зелёного круга",
+            color = Color.White,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 36.dp)
+        )
+        Text(
+            "Для отмены нажмите в верхнем левом углу экрана",
+            color = Color.White,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 30.dp)
+        )
     }
 }
 

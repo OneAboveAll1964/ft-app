@@ -19,7 +19,7 @@ object Backup {
     private val booleanKeys = setOf(
         "aaDensityBoost167", "aaPhoneScreenOff", "aaControlsLeft", "aaClusterNavigation", "aaMatchCar",
         "encoderSavePower", "carSizedApps", "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio",
-        "aaBluetooth", "aaAutoStart", "aaPrepareBeforeConnect", "aaShowReturnButton", "carClock24",
+        "aaBluetooth", "aaAutoStart", "aaOnly", "aaPrepareBeforeConnect", "aaShowReturnButton", "carClock24",
         "carShowLink", "carSongInfo", "modernPhoneUi", "autoConnect", "carBtReconnect",
         "showOtherDevicesInLogs", "vehicleCoordinateLogging", "swapTrackKeys", "carP2pAutoRole",
         "carInfoRight", "carShowClock", "carShowMusic", "carShowAa", "carShowCarHome",

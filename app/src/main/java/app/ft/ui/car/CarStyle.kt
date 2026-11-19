@@ -58,7 +58,8 @@ data class CarStyle(
     val dayNight: Boolean = false,
     val nightBackground: String = "",
     val nightAccent: Int = 0,
-    val night: Boolean = false
+    val night: Boolean = false,
+    val aaOnly: Boolean = false
 ) {
     private val dark: Boolean get() = dayNight && night
 
@@ -158,7 +159,8 @@ object CarStyles {
             dayNight = p.carDayNight,
             nightBackground = p.carNightBackground,
             nightAccent = p.carNightAccent,
-            night = nightNow(p)
+            night = nightNow(p),
+            aaOnly = p.aaOnly
         )
     }
 

@@ -144,7 +144,7 @@ class IccoaProjection(
                 width = plan.streamWidth, height = plan.streamHeight, fps = plan.fps
             ) }
             startCapturedAudio()
-            if (firstStart && prefs.aaAutoStart) startAa()
+            if (firstStart && prefs.shouldAutoStartAa) startAa()
         } catch (t: Throwable) {
             projectionFailed(t)
         }
@@ -248,7 +248,7 @@ class IccoaProjection(
             voiceAssistant.press()
         } else if (state.value.aaOverlay) {
             AaHeadUnitService.current?.sendKey(code)
-        } else when (code) {
+        } else if (!prefs.aaOnly) when (code) {
             3 -> { goHome(); keys.tryEmit(code) }
             4 -> if (state.value.mirroring) navBack() else keys.tryEmit(code)
             85 -> CarPlayer.toggle()
@@ -346,7 +346,7 @@ class IccoaProjection(
     }
 
     private fun launchMirror(intent: Intent, pkg: String) {
-        if (!active) return
+        if (!active || prefs.aaOnly) return
         stopAa()
         val mp = ensureProjection()
         if (mp == null) {

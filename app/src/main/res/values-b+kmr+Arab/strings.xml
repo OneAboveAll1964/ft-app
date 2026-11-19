@@ -167,6 +167,8 @@
     <string name="home_aa_missing">Android Auto ل سەر ڤی مۆبایلی نینە. ژ Play Store دابمەزرینە، یان بهێلە FT ژ رێکخستنان، پشکا Android Auto دابمەزرینیت.</string>
     <string name="home_aa_open_settings">پشکا Android Auto ل رێکخستنان ڤەکە</string>
     <string name="home_aa_start_with_car">دگەل ترومبێلێ دەست ب کار ببیت</string>
+    <string name="home_aa_only">بتنێ Android Auto ب کار بینە</string>
+    <string name="home_aa_only_description">دەمێ پەیوەندی دگەل ترومبێلێ چێ دبیت، Android Auto دەست پێ دکەت. شاشەیا سەرەکی یا FT ل ترومبێلێ و دوگمەیا ڤەگەڕیانێ بۆ وێ، ویجێت (لەز، کۆردینات، ئاراستە، کەشوهەوا، رۆژژمێر و باتریا مۆبایلی)، پلەیەرێ ناڤخۆیی، وێبگەر، نیشاندانا شاشەیا مۆبایلی، SuperCast و دەستپێکرنا ئۆتۆماتیک یا ئەپێن دی ب رێکا FT دهێنە ناچالاککرن. دوگمەیا دەنگی ل سەر فرمانێ Android Auto ب کار دئینیت.</string>
     <string name="home_aa_start">Android Auto ل سەر ترومبێلێ دەست پێ بکە</string>
     <string name="home_aa_works_once">کار دکەت دەمێ FT ل سەر شاشەیا ترومبێلێ بیت.</string>
     <string name="home_aa_turn_on_first">بەری هەمییێ FT ڤەکە.</string>
@@ -264,6 +266,7 @@
     <string name="car_aa_your_phone">مۆبایلێ تە</string>
     <string name="car_aa_waiting">ل هیڤیا مۆبایلەکێ ل سەر پۆرتێ %1$d</string>
     <string name="car_aa_starting">شاشەیا Android Auto دەست پێ دکەت…</string>
+    <string name="car_aa_not_showing">Android Auto هێشتا ل سەر شاشێ دیار نەبوویە</string>
     <string name="car_touch_needs_accessibility">FT ل رێکخستنێن Accessibility یێن مۆبایلێ خۆ ڤەکە دا ل ڤێرێ دەست لێدانێ ب کار بینی</string>
     <string name="car_am">ب.ن</string>
     <string name="car_pm">پ.ن</string>

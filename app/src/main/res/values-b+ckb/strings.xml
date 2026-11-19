@@ -167,6 +167,8 @@
     <string name="home_aa_missing">Android Auto لەسەر ئەم مۆبایلە نییە. لە Play Store دایبمەزرێنە، یان با FT لە ڕێکخستنەکان، بەشی Android Auto دایبمەزرێنێت.</string>
     <string name="home_aa_open_settings">بەشی Android Auto لە ڕێکخستنەکان بکەرەوە</string>
     <string name="home_aa_start_with_car">لەگەڵ ئۆتۆمبێل دەست بەکار ببێت</string>
+    <string name="home_aa_only">تەنها Android Auto بەکاربهێنە</string>
+    <string name="home_aa_only_description">کاتێک پەیوەندی بە ئۆتۆمبێلەوە دەبەسترێت، Android Auto دەست پێدەکات. شاشەی سەرەکی FT لە ئۆتۆمبێل و دوگمەی گەڕانەوە بۆی، ویجێتەکان (خێرایی، شوێنەوار، ئاڕاستە، کەشوهەوا، ڕۆژژمێر و باتریی مۆبایل)، پلەیەری ناوخۆیی، وێبگەڕ، پیشاندانی شاشەی مۆبایل، SuperCast و دەستپێکردنی خۆکاری ئەپەکانی تر لە ڕێگەی FT ناچالاک دەبن. دوگمەی دەنگ لەسەر فرمان Android Auto بەکاردەهێنێت.</string>
     <string name="home_aa_start">Android Auto لەسەر ئۆتۆمبێل دەست پێبکە</string>
     <string name="home_aa_works_once">کار دەکات کاتێک FT لەسەر شاشەی ئۆتۆمبێل بێت.</string>
     <string name="home_aa_turn_on_first">سەرەتا FT هەڵبکە.</string>
@@ -264,6 +266,7 @@
     <string name="car_aa_your_phone">مۆبایلەکەت</string>
     <string name="car_aa_waiting">چاوەڕێی مۆبایلێک لەسەر پۆرتی %1$d</string>
     <string name="car_aa_starting">شاشەی Android Auto دەست پێدەکات…</string>
+    <string name="car_aa_not_showing">Android Auto هێشتا لەسەر شاشە دەرنەکەوتووە</string>
     <string name="car_touch_needs_accessibility">FT لە ڕێکخستنەکانی Accessibilityی مۆبایلەکەت هەڵبکە بۆ ئەوەی لێرە دەستلێدان بەکاربهێنیت</string>
     <string name="car_am">پ.ن</string>
     <string name="car_pm">د.ن</string>

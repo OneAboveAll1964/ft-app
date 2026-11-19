@@ -98,6 +98,9 @@ import app.ft.core.CarProtocol
 import app.ft.iccoa.IccoaService
 import app.ft.projection.CarTouchCalibration
 import app.ft.projection.CarControls
+import app.ft.media.CarPlayer
+import app.ft.core.CarAssistantPanel
+import app.ft.ui.car.CarStyles
 import app.ft.ui.components.rememberCarProtocol
 import app.ft.ui.components.CarProtocolSetting
 import app.ft.ui.components.BluetoothCallsSetting
@@ -113,6 +116,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val modern = LocalModernPhoneUi.current
     val context = LocalContext.current
     val app = FTApp.instance
+    val prefs = app.prefs
     val profiles by app.cars.state.collectAsState()
     val activeCar = profiles.profiles.firstOrNull { it.id == profiles.activeId }
     val iccoa = rememberCarProtocol() == CarProtocol.ICCOA
@@ -125,16 +129,19 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val disconnectHelp by AaHeadUnitService.disconnectHelpPending.collectAsState()
     var systemHelp by rememberSaveable { mutableStateOf(false) }
     if (systemHelp) SystemReportHelp(onDismiss = { systemHelp = false })
-    var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
-    DisposableEffect(app.prefs) {
+    var autoConnect by remember(prefs) { mutableStateOf(prefs.autoConnect) }
+    var aaAuto by remember(prefs) { mutableStateOf(prefs.aaAutoStart) }
+    var aaOnly by remember(prefs) { mutableStateOf(prefs.aaOnly) }
+    DisposableEffect(prefs) {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == null || key == "autoConnect") autoConnect = app.prefs.autoConnect
+            if (key == null || key == "autoConnect") autoConnect = prefs.autoConnect
+            if (key == null || key == "aaAutoStart") aaAuto = prefs.aaAutoStart
+            if (key == null || key == "aaOnly") aaOnly = prefs.aaOnly
         }
-        app.prefs.registerListener(listener)
-        onDispose { app.prefs.unregisterListener(listener) }
+        prefs.registerListener(listener)
+        onDispose { prefs.unregisterListener(listener) }
     }
     var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
-    var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
@@ -365,10 +372,26 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                         AaStart(rememberAaServerOn(), aaOwnCopy)
                         Spacer(Modifier.height(8.dp))
                     }
-                    SwitchRow(stringResource(R.string.home_aa_start_with_car), aaAuto) {
-                        aaAuto = it
-                        app.prefs.aaAutoStart = it
+                    SwitchRow(stringResource(R.string.home_aa_start_with_car), aaOnly || aaAuto, enabled = !aaOnly) {
+                        prefs.aaAutoStart = it
                     }
+                }
+                SwitchRow(
+                    title = stringResource(R.string.home_aa_only),
+                    checked = aaOnly,
+                    description = stringResource(R.string.home_aa_only_description)
+                ) { enabled ->
+                    prefs.aaOnly = enabled
+                    if (enabled) {
+                        CarPlayer.stop()
+                        CarAssistantPanel.state.value?.let(CarAssistantPanel::dismiss)
+                        if (screenState.waitingForShare && !screenState.shareForSound) CarControls.cancelShareWait()
+                        if (screenState.mirroring) CarControls.stopMirror()
+                        if (projecting && !screenState.aaOverlay) CarControls.startAa()
+                    }
+                    CarStyles.reload()
+                }
+                if (aaInstalled) {
                     FilledTonalButton(
                         onClick = { CarControls.startAa() },
                         enabled = projecting,
@@ -549,11 +572,27 @@ private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
 }
 
 @Composable
-private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
+private fun SwitchRow(
+    title: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    description: String? = null,
+    onChange: (Boolean) -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        }
+        if (description != null) {
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
     }
 }
 

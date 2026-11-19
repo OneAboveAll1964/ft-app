@@ -177,6 +177,8 @@
     <string name="home_aa_missing">Android Auto is not on this phone. Install it from the Play Store, or let FT install it in Settings, Android Auto.</string>
     <string name="home_aa_open_settings">Open Settings, Android Auto</string>
     <string name="home_aa_start_with_car">Start with the car</string>
+    <string name="home_aa_only">Use only Android Auto</string>
+    <string name="home_aa_only_description">Android Auto starts when the car connects. This turns off the FT home screen in the car and its return button, widgets (speed, coordinates, heading, weather, calendar, and phone battery), built-in player, browser, phone mirroring, SuperCast, and automatic launch of other apps through FT. The steering-wheel voice button uses Android Auto.</string>
     <string name="home_aa_start">Start Android Auto on the car</string>
     <string name="home_aa_works_once">Works once FT is on the car screen.</string>
     <string name="home_aa_turn_on_first">Turn FT on first.</string>
@@ -274,6 +276,7 @@
     <string name="car_aa_your_phone">your phone</string>
     <string name="car_aa_waiting">Waiting for a phone on port %1$d</string>
     <string name="car_aa_starting">Starting Android Auto head unit…</string>
+    <string name="car_aa_not_showing">Android Auto isn’t showing yet</string>
     <string name="car_touch_needs_accessibility">Turn on FT in your phone\'s accessibility settings to use touch here</string>
     <string name="car_am">AM</string>
     <string name="car_pm">PM</string>

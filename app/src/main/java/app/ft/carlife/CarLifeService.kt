@@ -1574,7 +1574,7 @@ class CarLifeService : Service() {
                     routePlayer()
                     stopSoundWatch()
                 }
-                if (st is CarLifeSession.State.Projecting && prefs.aaAutoStart && !aaAutoLaunched) {
+                if (st is CarLifeSession.State.Projecting && prefs.shouldAutoStartAa && !aaAutoLaunched) {
                     aaAutoLaunched = true
                     DiagLog.i(tag, "auto-starting Android Auto after connection")
                     startAndroidAuto()
@@ -1582,10 +1582,11 @@ class CarLifeService : Service() {
                 if (st is CarLifeSession.State.Projecting && !autoOpened) {
                     autoOpened = true
                     openOnConnect()
-                    if (prefs.supercastOn && !SuperCast.ready.value) {
+                    if (!prefs.aaOnly && prefs.supercastOn && !SuperCast.ready.value) {
                         val request = SuperCast.prepareStart(prefs = prefs)
                         try {
                             scope.launch(Dispatchers.IO) {
+                                if (prefs.aaOnly) return@launch
                                 DiagLog.i(tag, "starting the apps-on-the-car helper after connection")
                                 request.start(applicationContext)
                             }.invokeOnCompletion { request.close() }
@@ -1702,7 +1703,7 @@ class CarLifeService : Service() {
         }
         if (!carPaused) return
         carPaused = false
-        if (CarPlayer.hasTrack && !CarPlayer.playing) {
+        if (!prefs.aaOnly && CarPlayer.hasTrack && !CarPlayer.playing) {
             CarPlayer.resume()
             DiagLog.i(tag, "FT's music playing again for the car")
         }
@@ -1795,6 +1796,7 @@ class CarLifeService : Service() {
     }
 
     private fun startAndroidAuto() {
+        if (prefs.aaOnly && _state.value.session is CarLifeSession.State.Projecting) aaAutoLaunched = true
         val pkg = prefs.aaPackage
         if (runCatching { packageManager.getPackageInfo(pkg, 0) }.isFailure) {
             DiagLog.w(tag, "Android Auto ($pkg) is not installed on this phone")
@@ -2051,11 +2053,13 @@ class CarLifeService : Service() {
     }
 
     private fun openOnConnect() {
+        if (prefs.aaOnly) return
         val wanted = prefs.openOnConnect.trim()
         if (wanted.isEmpty()) return
         if (prefs.aaAutoStart && wanted == "aa") return
         scope.launch {
             delay(1500)
+            if (prefs.aaOnly) return@launch
             DiagLog.i(tag, "opening $wanted because the car connected")
             when {
                 wanted == "aa" -> startAndroidAuto()
@@ -2162,7 +2166,7 @@ class CarLifeService : Service() {
         }
         if (move.resume) {
             if (gearPausedFt) {
-                if (CarPlayer.hasTrack && !CarPlayer.playing) CarPlayer.resume()
+                if (!prefs.aaOnly && CarPlayer.hasTrack && !CarPlayer.playing) CarPlayer.resume()
             } else {
                 phoneMediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
             }
@@ -2276,7 +2280,7 @@ class CarLifeService : Service() {
             WheelAction.CAR_HOME -> _screenKeys.tryEmit(3)
             WheelAction.MAPS -> launch(prefs.mapsPackage)
             WheelAction.PHONE_SCREEN -> phoneScreen()
-            WheelAction.PLAY_PAUSE -> mediaKey(85)
+            WheelAction.PLAY_PAUSE -> if (prefs.aaOnly) AaHeadUnitService.current?.sendKey(85) else mediaKey(85)
             WheelAction.VOICE -> voiceAssistant.press()
         }
     }
@@ -2307,6 +2311,7 @@ class CarLifeService : Service() {
                 in MEDIA_KEYS -> mediaKey(mapped)
                 else -> DiagLog.i(tag, "steering wheel key $key ignored while mirroring")
             }
+            prefs.aaOnly -> Unit
             else -> when (mapped) {
                 in MEDIA_KEYS -> mediaKey(mapped)
                 3, 4 -> _screenKeys.tryEmit(mapped)
@@ -2317,7 +2322,7 @@ class CarLifeService : Service() {
 
     private fun mediaKey(key: Int) {
         val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        if (CarPlayer.playing || (CarPlayer.hasTrack && !am.isMusicActive)) {
+        if (!prefs.aaOnly && (CarPlayer.playing || (CarPlayer.hasTrack && !am.isMusicActive))) {
             when (key) {
                 85 -> CarPlayer.toggle()
                 126 -> CarPlayer.resume()
@@ -2340,6 +2345,7 @@ class CarLifeService : Service() {
     }
 
     private fun launch(pkg: String) {
+        if (prefs.aaOnly) return
         val ticket = launchTicket.incrementAndGet()
         soundLater {
             val intent = packageManager.getLaunchIntentForPackage(pkg)
@@ -2361,6 +2367,7 @@ class CarLifeService : Service() {
     }
 
     private fun phoneScreen() {
+        if (prefs.aaOnly) return
         val ticket = launchTicket.incrementAndGet()
         soundLater {
             val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
@@ -2370,6 +2377,7 @@ class CarLifeService : Service() {
     }
 
     private fun launchIntent(intent: Intent, pkg: String, phone: Boolean = intent.hasCategory(Intent.CATEGORY_HOME), ticket: Int = launchTicket.get()) {
+        if (prefs.aaOnly) return
         if (ticket != launchTicket.get()) {
             DiagLog.i(tag, "$pkg was not opened because something else was chosen on the car first")
             return

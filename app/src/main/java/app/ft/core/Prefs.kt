@@ -144,6 +144,8 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var aaPackage: String get() = str("aaPackage", "com.google.android.projection.gearhead"); set(v) = set("aaPackage", v)
     var aaServerPackage: String get() = str("aaServerPackage", ""); set(v) = set("aaServerPackage", v)
     var aaAutoStart: Boolean get() = bool("aaAutoStart", false); set(v) = set("aaAutoStart", v)
+    var aaOnly: Boolean get() = bool("aaOnly", false); set(v) = set("aaOnly", v)
+    val shouldAutoStartAa: Boolean get() = aaOnly || aaAutoStart
     var aaPrepareBeforeConnect: Boolean get() = bool("aaPrepareBeforeConnect", false); set(v) = set("aaPrepareBeforeConnect", v)
     var aaShowReturnButton: Boolean get() = bool("aaShowReturnButton", true); set(v) = set("aaShowReturnButton", v)
     var aaCorner: Int get() = int("aaCorner", 0); set(v) = set("aaCorner", v)
@@ -265,7 +267,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
             "cmdPort", "videoPort", "mediaPort", "ttsPort", "vrPort", "touchPort",
             "aaPort", "aaSelfPort", "aaWidth", "aaHeight", "aaFps", "aaDensity", "aaDensityBoost167",
             "aaControlsLeft", "aaClusterNavigation", "aaMatchCar", "aaBluetooth", "aaPackage", "aaServerPackage",
-            "aaPhoneScreenOff", "aaAutoStart", "aaPrepareBeforeConnect", "aaShowReturnButton", "aaCorner",
+            "aaPhoneScreenOff", "aaAutoStart", "aaOnly", "aaPrepareBeforeConnect", "aaShowReturnButton", "aaCorner",
             "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps", "pictureBitrate", "videoQpFloor",
             "carDensity", "encoderSavePower", "savedVideoProfile", "videoProfileGeneration", "carSizedApps",
             "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio", "iccoaMicGain", "directions",
