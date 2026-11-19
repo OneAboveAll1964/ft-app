@@ -2,6 +2,8 @@ package app.ft.projection
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR
+import android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR
 import android.media.MediaFormat
 import android.os.Bundle
 import android.os.Handler
@@ -27,7 +29,8 @@ class SurfaceEncoder(
     private val constantBitrate: Boolean = false,
     private val onFailure: ((Throwable) -> Unit)? = null,
     private val startCandidateIndex: Int = 0,
-    private val allowFormatCapabilityProbe: Boolean = false
+    private val allowFormatCapabilityProbe: Boolean = false,
+    private val allowVbrFallback: Boolean = false
 ) {
     private val tag = "Encoder"
     private val fps = fps.coerceIn(1, 60)
@@ -63,10 +66,20 @@ class SurfaceEncoder(
         thread = t
         val h = Handler(t.looper)
         handler = h
+        var bitrateMode = if (constantBitrate) BITRATE_MODE_CBR else null
+        var choices = encoders(bitrateMode)
+        if (choices.isEmpty() && constantBitrate && allowVbrFallback) {
+            bitrateMode = BITRATE_MODE_VBR
+            choices = encoders(bitrateMode)
+            if (choices.isNotEmpty()) {
+                DiagLog.i(tag, "codec VBR_FALLBACK format=${width}x${height}@$fps bitrate=$bitrate")
+            }
+        }
+        val modeLabel = bitrateModeLabel(bitrateMode)
         // Optional resource-planning hint; retry the same portable AVC candidate
         // without it if the vendor rejects it. Never force a guessed AVC level.
         // Bounded attempts. Each fallback keeps the exact RTSP-agreed stream geometry.
-        val candidates = encoders().flatMap { choice ->
+        val candidates = choices.flatMap { choice ->
             (if (choice.probe) listOf("minimal") else listOf("minimal", "baseline")).map { label ->
                 Candidate(choice.name, label, probe = choice.probe)
             }
@@ -81,7 +94,7 @@ class SurfaceEncoder(
         for ((index, candidate) in candidates.withIndex()) {
             if (index < startCandidateIndex) continue
             val (name, label, rateHint, probe) = candidate
-            val format = minimal(baseline = label == "baseline").apply {
+            val format = minimal(bitrateMode, baseline = label == "baseline").apply {
                 if (rateHint) setFloat(MediaFormat.KEY_OPERATING_RATE, fps.toFloat())
             }
             val c = runCatching { MediaCodec.createByCodecName(name) }.onFailure {
@@ -89,7 +102,7 @@ class SurfaceEncoder(
             }.getOrNull() ?: continue
             val attemptActive = AtomicBoolean(true)
             try {
-                if (probe) DiagLog.w(tag, "codec FORMAT_CAPABILITY_PROBE name=$name format=${width}x${height}@$fps bitrate=$bitrate CBR=$constantBitrate; only isFormatSupported=false, trying unchanged minimal format once")
+                if (probe) DiagLog.w(tag, "codec FORMAT_CAPABILITY_PROBE name=$name format=${width}x${height}@$fps bitrate=$bitrate bitrateMode=$modeLabel; only isFormatSupported=false, trying unchanged minimal format once")
                 c.setCallback(callback(attemptActive), h)
                 c.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 surface = c.createInputSurface()
@@ -97,11 +110,11 @@ class SurfaceEncoder(
                 codec = c
                 operatingRateHintEnabled = rateHint
                 selectedCandidateIndex = index
-                DiagLog.i(tag, "codec STARTED_PENDING_OUTPUT name=${c.name} candidate=${index + 1}/${candidateCount} format=${width}x${height}@$fps bitrate=$bitrate CBR=$constantBitrate profile=$label rateHint=$rateHint capabilityProbe=$probe; SPS/PPS/IDR not yet proven")
+                DiagLog.i(tag, "codec STARTED_PENDING_OUTPUT name=${c.name} candidate=${index + 1}/${candidateCount} format=${width}x${height}@$fps bitrate=$bitrate bitrateMode=$modeLabel profile=$label rateHint=$rateHint capabilityProbe=$probe; SPS/PPS/IDR not yet proven")
                 return
             } catch (t: Throwable) {
                 attemptActive.set(false)
-                DiagLog.w(tag, "codec CONFIGURE_REJECTED name=$name candidate=${index + 1}/${candidateCount} mode=$label rateHint=$rateHint capabilityProbe=$probe error=${t.javaClass.simpleName}")
+                DiagLog.w(tag, "codec CONFIGURE_REJECTED name=$name candidate=${index + 1}/${candidateCount} bitrateMode=$modeLabel profile=$label rateHint=$rateHint capabilityProbe=$probe error=${t.javaClass.simpleName}")
                 runCatching { surface?.release() }
                 surface = null
                 runCatching { c.release() }
@@ -118,14 +131,24 @@ class SurfaceEncoder(
     private data class EncoderChoice(val name: String, val probe: Boolean = false)
     private data class Candidate(val name: String, val label: String, val rateHint: Boolean = false, val probe: Boolean = false)
 
-    private fun encoders(): List<EncoderChoice> {
+    private fun bitrateModeLabel(mode: Int?): String = when (mode) {
+        BITRATE_MODE_CBR -> "CBR"
+        BITRATE_MODE_VBR -> "VBR"
+        else -> "default"
+    }
+
+    private fun encoders(bitrateMode: Int?): List<EncoderChoice> {
         val all = runCatching {
             android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
                 .filter { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
         }.getOrDefault(emptyList())
         val fits = mutableListOf<EncoderChoice>()
         val probes = mutableListOf<EncoderChoice>()
-        for (info in all.sortedBy { if (it.isHardwareAccelerated) 0 else 1 }.distinctBy { it.name }) {
+        val vbrFallback = bitrateMode == BITRATE_MODE_VBR
+        val modeLabel = bitrateModeLabel(bitrateMode)
+        val infos = all.sortedBy { if (it.isHardwareAccelerated) 0 else 1 }
+            .distinctBy { if (vbrFallback) it.canonicalName else it.name }
+        for (info in infos) {
             val caps = runCatching { info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC) }.onFailure {
                 DiagLog.w(tag, "codec CAPABILITIES name=${info.name} error=${it.javaClass.simpleName}")
             }.getOrNull() ?: continue
@@ -138,34 +161,36 @@ class SurfaceEncoder(
             val size = read("size") { caps.videoCapabilities?.isSizeSupported(width, height) }
             val rate = read("sizeRate") { caps.videoCapabilities?.areSizeAndRateSupported(width, height, fps.toDouble()) }
             val bitrateOk = read("bitrate") { caps.videoCapabilities?.bitrateRange?.contains(bitrate) }
-            val cbr = read("CBR") { caps.encoderCapabilities?.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR) }
-            val vbr = read("VBR") { caps.encoderCapabilities?.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR) }
-            val format = read("format") { caps.isFormatSupported(minimal()) }
+            val cbr = read("CBR") { caps.encoderCapabilities?.isBitrateModeSupported(BITRATE_MODE_CBR) }
+            val vbr = read("VBR") { caps.encoderCapabilities?.isBitrateModeSupported(BITRATE_MODE_VBR) }
+            val format = read("format") { caps.isFormatSupported(minimal(bitrateMode)) }
             val widthAlignment = read("widthAlignment") { caps.videoCapabilities?.widthAlignment }
             val heightAlignment = read("heightAlignment") { caps.videoCapabilities?.heightAlignment }
-            val eligible = surface == true && rate == true && bitrateOk == true && (!constantBitrate || cbr == true)
+            val modeSupported = when (bitrateMode) {
+                BITRATE_MODE_CBR -> cbr == true
+                BITRATE_MODE_VBR -> info.isHardwareAccelerated && size == true && vbr == true
+                else -> true
+            }
+            val eligible = surface == true && rate == true && bitrateOk == true && modeSupported
             val probe = allowFormatCapabilityProbe && info.isHardwareAccelerated && eligible && size == true && format == false
-            DiagLog.i(tag, "codec CAPABILITIES name=${info.name} hw=${info.isHardwareAccelerated} target=${width}x${height}@$fps bitrate=$bitrate requireCBR=$constantBitrate alignment=${widthAlignment}x$heightAlignment surface=$surface size=$size sizeRate=$rate bitrateSupported=$bitrateOk CBR=$cbr VBR=$vbr format=$format probeEligible=$probe errors=${errors.joinToString(",").ifEmpty { "none" }}")
+            DiagLog.i(tag, "codec CAPABILITIES name=${info.name} hw=${info.isHardwareAccelerated} target=${width}x${height}@$fps bitrate=$bitrate bitrateMode=$modeLabel alignment=${widthAlignment}x$heightAlignment surface=$surface size=$size sizeRate=$rate bitrateSupported=$bitrateOk CBR=$cbr VBR=$vbr format=$format probeEligible=$probe errors=${errors.joinToString(",").ifEmpty { "none" }}")
             if (eligible && format == true) fits += EncoderChoice(info.name)
             else if (probe) probes += EncoderChoice(info.name, probe = true)
         }
-        if (fits.isEmpty()) DiagLog.w(tag, "no advertised AVC Surface encoder for ${width}x${height}@$fps ${bitrate / 1000} kbps")
-        // ICCOA opt-in only. Do not bypass a size/rate/bitrate/CBR rejection or
-        // replace advertised candidates. One hardware codec, one unchanged format.
+        if (fits.isEmpty()) DiagLog.w(tag, "no advertised AVC Surface encoder for ${width}x${height}@$fps ${bitrate / 1000} kbps bitrateMode=$modeLabel")
+        // A probe relaxes only the composite format check for one hardware codec.
         return fits.ifEmpty { probes.take(1) }
     }
 
-    private fun base(): MediaFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-        setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-        setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-        setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-        setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-        if (constantBitrate) setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
-    }
-
-    private fun minimal(baseline: Boolean = false): MediaFormat = base().apply {
-        if (baseline) setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
-    }
+    private fun minimal(bitrateMode: Int?, baseline: Boolean = false): MediaFormat =
+        MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+            setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+            setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            if (bitrateMode != null) setInteger(MediaFormat.KEY_BITRATE_MODE, bitrateMode)
+            if (baseline) setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+        }
 
     private fun callback(attemptActive: AtomicBoolean) = object : MediaCodec.Callback() {
             override fun onInputBufferAvailable(codec: MediaCodec, index: Int) = Unit

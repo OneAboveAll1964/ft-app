@@ -9,7 +9,8 @@ data class VideoPlan(
     val bitrate: Int,
     val qpFloor: Int = 0,
     val constantBitrate: Boolean = false,
-    val preserveAspect: Boolean = false
+    val preserveAspect: Boolean = false,
+    val allowVbrFallback: Boolean = false
 )
 
 object VideoPlans {

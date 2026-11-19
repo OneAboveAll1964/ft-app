@@ -493,7 +493,7 @@ class IccoaService : Service() {
         lastVideoConfig = config
         val plan = IccoaVideoPlan.from(config)
         val output = media ?: return
-        DiagLog.i("ICCOA", "video profile ${plan.streamWidth}x${plan.streamHeight}@${plan.fps} CBR ${plan.bitrate / 1000} kbps; receiver asked ${config.fps} fps")
+        DiagLog.i("ICCOA", "video profile ${plan.streamWidth}x${plan.streamHeight}@${plan.fps} ${plan.bitrate / 1000} kbps; CBR preferred, VBR fallback allowed; receiver asked ${config.fps} fps")
         projection?.start(plan, output::configure, output::frame)
         if (media !== output) return // A synchronous projection failure has already ended this connection.
         if (!ftProjectionSensorAssist) {

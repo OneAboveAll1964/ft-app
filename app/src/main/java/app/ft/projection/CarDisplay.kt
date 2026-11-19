@@ -103,9 +103,17 @@ class CarDisplay(private val context: Context, private val allowFormatCapability
         streamWidth = plan.streamWidth
         streamHeight = plan.streamHeight
         frameIntervalMs = (1000L / fps.coerceIn(1, 120)).coerceAtLeast(8L)
-        var enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, gated = true, onTimedFrame = onTimedFrame, savePower = savePower, constantBitrate = plan.constantBitrate, onFailure = codecFailure, startCandidateIndex = codecAttempt, allowFormatCapabilityProbe = allowFormatCapabilityProbe)
-        encoder = enc
-        enc.start()
+        fun startEncoder(gated: Boolean): SurfaceEncoder = SurfaceEncoder(
+            streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame,
+            gated = gated, onTimedFrame = onTimedFrame, savePower = savePower,
+            constantBitrate = plan.constantBitrate, onFailure = codecFailure,
+            startCandidateIndex = codecAttempt, allowFormatCapabilityProbe = allowFormatCapabilityProbe,
+            allowVbrFallback = plan.allowVbrFallback
+        ).also {
+            encoder = it
+            it.start()
+        }
+        val enc = startEncoder(gated = true)
         val g = FrameGate(width, height, streamWidth, streamHeight, enc.surface ?: throw IllegalStateException("no encoder surface"), preserveAspect = plan.preserveAspect, onFailure = codecFailure)
         val surface = if (g.start(fps)) {
             gate = g
@@ -116,12 +124,8 @@ class CarDisplay(private val context: Context, private val allowFormatCapability
             width = streamWidth
             height = streamHeight
             DiagLog.w(tag, "drawing straight at ${streamWidth}x$streamHeight, the car stretches it to fill its screen")
-            enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, onTimedFrame = onTimedFrame, savePower = savePower, constantBitrate = plan.constantBitrate, onFailure = codecFailure, startCandidateIndex = codecAttempt, allowFormatCapabilityProbe = allowFormatCapabilityProbe)
-            encoder = enc
-            enc.start()
-            enc.surface ?: throw IllegalStateException("no encoder surface")
+            startEncoder(gated = false).surface ?: throw IllegalStateException("no encoder surface")
         }
-        encoder = enc
         val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val density = Sizing.carDpi(height)
         val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION

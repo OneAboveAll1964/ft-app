@@ -2,6 +2,8 @@ package app.ft.projection
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR
+import android.media.MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Handler
@@ -35,7 +37,9 @@ class SurfaceEncoderCapabilityTest {
         assertTrue(it.names.isEmpty())
     }
 
-    @Test fun unsupportedCbrIsNotProbed() = startup(listOf(Capabilities(cbr = false)), expectFailure = true) {
+    @Test fun unsupportedCbrDoesNotEnableVbrByDefault() = startup(
+        listOf(Capabilities(cbr = false, vbr = true, vbrFormat = true)), expectFailure = true
+    ) {
         assertTrue(it.names.isEmpty())
     }
 
@@ -74,6 +78,42 @@ class SurfaceEncoderCapabilityTest {
         assertEquals(1, it.encoder.candidateCount)
     }
 
+    @Test fun tecnoUsesHardwareVbrAtNegotiatedFormatWhenCbrIsUnavailable() {
+        val hardware = Capabilities(cbr = false, vbr = true, vbrFormat = true)
+        val software = Capabilities(hardware = false, size = false, rate = false, bitrate = false, vbr = true)
+        startup(
+            listOf(hardware, hardware.copy(canonicalIndex = 0), software, software.copy(canonicalIndex = 2)),
+            allowVbr = true, expectedBitrateMode = BITRATE_MODE_VBR
+        ) {
+            assertEquals(listOf("test.avc.0"), it.names)
+            assertEquals(4, it.encoder.candidateCount)
+            verify(it.codecs.single()).start()
+        }
+    }
+
+    @Test fun vbrFallbackCanProbeOneOtherwiseSupportedHardwareFormat() = startup(
+        listOf(Capabilities(cbr = false, vbr = true)), allowVbr = true, expectedBitrateMode = BITRATE_MODE_VBR
+    ) {
+        assertEquals(listOf("test.avc.0"), it.names)
+        assertEquals(1, it.encoder.candidateCount)
+    }
+
+    @Test fun vbrFallbackRequiresHardwareAndNegotiatedSize() = startup(
+        listOf(
+            Capabilities(cbr = false, vbr = true, vbrFormat = true, size = false),
+            Capabilities(cbr = false, vbr = true, vbrFormat = true, hardware = false)
+        ), allowVbr = true, expectFailure = true
+    ) {
+        assertTrue(it.names.isEmpty())
+    }
+
+    @Test fun cbrProbeTakesPriorityOverVbrFallback() = startup(
+        listOf(Capabilities(cbr = false, vbr = true, vbrFormat = true), Capabilities()), allowVbr = true
+    ) {
+        assertEquals(listOf("test.avc.1"), it.names)
+        assertEquals(1, it.encoder.candidateCount)
+    }
+
     private data class Capabilities(
         val size: Boolean = true,
         val rate: Boolean = true,
@@ -83,7 +123,10 @@ class SurfaceEncoderCapabilityTest {
         val format: Boolean = false,
         val hardware: Boolean = true,
         val formatError: Boolean = false,
-        val sizeError: Boolean = false
+        val sizeError: Boolean = false,
+        val vbr: Boolean = false,
+        val vbrFormat: Boolean = false,
+        val canonicalIndex: Int? = null
     )
 
     private data class Startup(val encoder: SurfaceEncoder, val names: List<String>, val codecs: List<MediaCodec>)
@@ -93,6 +136,8 @@ class SurfaceEncoderCapabilityTest {
         allowProbe: Boolean = true,
         rejectConfigure: Boolean = false,
         expectFailure: Boolean = false,
+        allowVbr: Boolean = false,
+        expectedBitrateMode: Int = BITRATE_MODE_CBR,
         check: (Startup) -> Unit
     ) {
         val infos = capabilities.mapIndexed { index, values ->
@@ -100,6 +145,7 @@ class SurfaceEncoderCapabilityTest {
                 `when`(info.isEncoder).thenReturn(true)
                 `when`(info.isHardwareAccelerated).thenReturn(values.hardware)
                 `when`(info.name).thenReturn("test.avc.$index")
+                `when`(info.canonicalName).thenReturn("test.avc.${values.canonicalIndex ?: index}")
                 `when`(info.supportedTypes).thenReturn(arrayOf(MediaFormat.MIMETYPE_VIDEO_AVC))
                 val caps = info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
                 val video = requireNotNull(caps.videoCapabilities)
@@ -113,10 +159,12 @@ class SurfaceEncoderCapabilityTest {
                 `when`(video.bitrateRange.contains(8_000_000)).thenReturn(values.bitrate)
                 `when`(video.widthAlignment).thenReturn(2)
                 `when`(video.heightAlignment).thenReturn(2)
-                `when`(modes.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)).thenReturn(values.cbr)
+                `when`(modes.isBitrateModeSupported(BITRATE_MODE_CBR)).thenReturn(values.cbr)
+                `when`(modes.isBitrateModeSupported(BITRATE_MODE_VBR)).thenReturn(values.vbr)
                 `when`(caps.isFormatSupported(any(MediaFormat::class.java))).thenAnswer {
                     if (values.formatError) throw IllegalArgumentException("format query failed")
-                    values.format
+                    val format = it.getArgument<MediaFormat>(0)
+                    if (format.getInteger(MediaFormat.KEY_BITRATE_MODE) == BITRATE_MODE_VBR) values.vbrFormat else values.format
                 }
             }
         }
@@ -130,7 +178,16 @@ class SurfaceEncoderCapabilityTest {
                 }.use {
                     mockStatic(MediaFormat::class.java).use { formats ->
                         formats.`when`<MediaFormat> { MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1920, 904) }
-                            .thenAnswer { mock(MediaFormat::class.java) }
+                            .thenAnswer {
+                                mock(MediaFormat::class.java).also { format ->
+                                    var bitrateMode = -1
+                                    doAnswer {
+                                        bitrateMode = it.getArgument<Int>(1)
+                                        null
+                                    }.`when`(format).setInteger(eq(MediaFormat.KEY_BITRATE_MODE), anyInt())
+                                    `when`(format.getInteger(MediaFormat.KEY_BITRATE_MODE)).thenAnswer { bitrateMode }
+                                }
+                            }
                         mockStatic(MediaCodec::class.java).use { codecs ->
                             codecs.`when`<MediaCodec> { MediaCodec.createByCodecName(anyString()) }.thenAnswer { invocation ->
                                 names += invocation.getArgument<String>(0)
@@ -145,7 +202,8 @@ class SurfaceEncoderCapabilityTest {
                                 }
                             }
                             val encoder = SurfaceEncoder(1920, 904, 30, 8_000_000, 0, {}, { _, _ -> },
-                                constantBitrate = true, savePower = true, allowFormatCapabilityProbe = allowProbe)
+                                constantBitrate = true, savePower = true, allowFormatCapabilityProbe = allowProbe,
+                                allowVbrFallback = allowVbr)
                             try {
                                 if (expectFailure) {
                                     assertThrows(IllegalStateException::class.java) { encoder.start() }
@@ -157,20 +215,20 @@ class SurfaceEncoderCapabilityTest {
                                     verify(format).setInteger(MediaFormat.KEY_BIT_RATE, 8_000_000)
                                     verify(format).setInteger(MediaFormat.KEY_FRAME_RATE, 30)
                                     verify(format).setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                                    verify(format).setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                                    verify(format).setInteger(MediaFormat.KEY_BITRATE_MODE, expectedBitrateMode)
                                     verify(format, never()).setInteger(eq(MediaFormat.KEY_PROFILE), anyInt())
                                     verify(format, never()).setInteger(eq(MediaFormat.KEY_LEVEL), anyInt())
-                                    if (!capabilities.any { values -> values.format }) {
+                                    if (encoder.candidateCount == 1) {
                                         verify(format, never()).setFloat(eq(MediaFormat.KEY_OPERATING_RATE), anyFloat())
                                     }
                                 }
                                 // All checks run even when an earlier capability is false or throws.
                                 for (info in infos) {
                                     val caps = info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
-                                    verify(requireNotNull(caps.videoCapabilities)).isSizeSupported(1920, 904)
-                                    verify(requireNotNull(caps.videoCapabilities)).areSizeAndRateSupported(1920, 904, 30.0)
-                                    verify(requireNotNull(caps.encoderCapabilities)).isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
-                                    verify(caps).isFormatSupported(any(MediaFormat::class.java))
+                                    verify(requireNotNull(caps.videoCapabilities), atLeastOnce()).isSizeSupported(1920, 904)
+                                    verify(requireNotNull(caps.videoCapabilities), atLeastOnce()).areSizeAndRateSupported(1920, 904, 30.0)
+                                    verify(requireNotNull(caps.encoderCapabilities), atLeastOnce()).isBitrateModeSupported(BITRATE_MODE_CBR)
+                                    verify(caps, atLeastOnce()).isFormatSupported(any(MediaFormat::class.java))
                                 }
                                 check(Startup(encoder, names, created))
                             } finally { encoder.stop() }

@@ -5,7 +5,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class IccoaVideoPlanTest {
-    @Test fun jettaKeepsNegotiated904LineGeometryAndCbr() {
+    @Test fun jettaKeepsNegotiated904LineGeometryAndPrefersCbr() {
         val plan = IccoaVideoPlan.from(IccoaVideoConfig("127.0.0.1", 1920, 904, 30))
         assertEquals(1920, plan.contentWidth)
         assertEquals(904, plan.contentHeight)
@@ -14,6 +14,7 @@ class IccoaVideoPlanTest {
         assertEquals(30, plan.fps)
         assertEquals(8_000_000, plan.bitrate)
         assertTrue(plan.constantBitrate)
+        assertTrue(plan.allowVbrFallback)
     }
 
     @Test fun xa60UsesLevelFourGeometryWhileKeepingNativeContent() {
@@ -36,6 +37,8 @@ class IccoaVideoPlanTest {
     }
 
     @Test fun existingTransportPlansRetainTheirBitrateMode() {
-        assertFalse(VideoPlan(1920, 1080, 1280, 720, 60, 3_000_000).constantBitrate)
+        val plan = VideoPlan(1920, 1080, 1280, 720, 60, 3_000_000)
+        assertFalse(plan.constantBitrate)
+        assertFalse(plan.allowVbrFallback)
     }
 }

@@ -13,6 +13,6 @@ internal object IccoaVideoPlan {
         val streamWidth = if (capNative) 1920 else width
         val streamHeight = if (capNative) 1080 else height
         return VideoPlan(width, height, streamWidth, streamHeight, config.fps.coerceIn(1, 30),
-            8_000_000, constantBitrate = true, preserveAspect = capNative)
+            8_000_000, constantBitrate = true, preserveAspect = capNative, allowVbrFallback = true)
     }
 }
