@@ -1516,6 +1516,31 @@ class CarFinderRecoveryTest {
     }
 
     @Test
+    fun ownerDiscoveryRestartsWhenThePeerCallbackDoesNotArrive() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            h.finder.retry()
+            runCurrent()
+            finishRoleCleanup(h, waitForOwner = false)
+            val replies = mutableListOf<() -> Unit>()
+            h.pendingPeerReplies = replies
+
+            advanceTimeBy(3_000)
+            runCurrent()
+            assertEquals(1, replies.size)
+            advanceTimeBy(3_000)
+            runCurrent()
+            assertEquals(2, replies.size)
+
+            replies.first().invoke()
+            lastOwnerIntent(h, 1)
+            replies.last().invoke()
+            lastOwnerIntent(h, 2)
+        }
+    }
+
+    @Test
     fun ownerDiscoveryCanJoinACarKnownOnlyByItsServiceAnnouncement() = check { h ->
         val caller = "64:FE:15:28:C8:E4"
         `when`(h.prefs.carP2pAutoRole).thenReturn(true)

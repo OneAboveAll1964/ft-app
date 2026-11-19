@@ -6,8 +6,54 @@ OUT="${2:-/tmp/ft_e2e}"
 SIMDIR="$ROOT/tools/sim"
 CERTDIR="${CERTDIR:-$OUT/certs}"
 unset ADB_VENDOR_KEYS
-ADB="adb"
+serial="${FT_TEST_ADB_SERIAL:-}"
+abort(){ echo "$*" >&2; exit 1; }
+[[ "${FT_ALLOW_E2E_RESET:-}" = 1 && "$serial" =~ ^emulator-[0-9]+$ ]] ||
+  abort 'Set FT_TEST_ADB_SERIAL to a disposable local emulator and FT_ALLOW_E2E_RESET=1.'
+[[ -f "$APK" ]] || abort "APK not found: $APK"
+adb_test(){ command adb -s "$serial" "$@"; }
+ADB=adb_test
 PKG="app.ft"
+[ "$($ADB get-state)" = device ] || abort "Emulator not connected: $serial"
+avd=$($ADB emu avd name) || abort "Cannot verify emulator: $serial"
+[[ -n "$avd" && "$avd" != KO* ]] || abort "Not an Android emulator: $serial"
+
+forwarded_ports=()
+udp_redirected=0
+logcat_pid=
+start_logcat(){
+  (exec adb -s "$serial" logcat -v time) > "$1" 2>&1 &
+  logcat_pid=$!
+}
+stop_logcat(){
+  if [ -n "$logcat_pid" ]; then
+    kill "$logcat_pid" 2>/dev/null || true
+    wait "$logcat_pid" 2>/dev/null || true
+    logcat_pid=
+  fi
+}
+forward_test(){
+  local port=$1 prior
+  for prior in "${forwarded_ports[@]}"; do
+    [ "$prior" = "$port" ] && return 0
+  done
+  $ADB forward --no-rebind "tcp:$port" "tcp:$port" >/dev/null ||
+    abort "Cannot forward local TCP port $port to $serial"
+  forwarded_ports+=("$port")
+}
+cleanup(){
+  local port
+  stop_logcat
+  for port in "${forwarded_ports[@]}"; do
+    $ADB forward --remove "tcp:$port" >/dev/null 2>&1
+  done
+  if [ "$udp_redirected" = 1 ]; then
+    $ADB emu redir del udp:18999 >/dev/null 2>&1
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$OUT/carlife" "$OUT/aa" "$OUT/frames" "$CERTDIR"
 pass=0; fail=0
 ok(){ echo "PASS  $1"; pass=$((pass+1)); }
@@ -34,15 +80,19 @@ logged(){
 }
 
 echo "== device =="
-$ADB devices | sed -n '2p'
+printf '%s\n' "$serial"
 [ -f "$CERTDIR/sim_srv.pem" ] || openssl req -x509 -newkey rsa:2048 -nodes -keyout "$CERTDIR/sim_srv.key" -out "$CERTDIR/sim_srv.pem" -days 365 -subj "/CN=FT AA phone sim" >/dev/null 2>&1
 
 echo "== install =="
+$ADB install -r -g "$APK" || abort "APK installation failed on $serial"
+$ADB shell pm clear "$PKG" | tr -d '\r' | grep -qx Success ||
+  abort "Could not reset $PKG on $serial"
+ok "apk installed"
 $ADB shell "su -c 'pkill -f app.ft.server.Main'" >/dev/null 2>&1
 $ADB shell "su -c 'input keyevent 224'" >/dev/null 2>&1
-$ADB shell pm clear $PKG >/dev/null 2>&1
-$ADB install -r -g "$APK" >/dev/null 2>&1 && ok "apk installed" || ko "apk install"
-$ADB shell am start -n $PKG/.MainActivity --ez off true >/dev/null 2>&1
+startup=$($ADB shell am start -W -n $PKG/.DevelopmentActivity --ez off true 2>&1) ||
+  abort "$startup"
+[[ "$startup" = *"Status: ok"* ]] || abort "The e2e suite requires a debug APK. $startup"
 sleep 2
 $ADB shell appops set $PKG SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1
 $ADB shell settings put secure enabled_accessibility_services $PKG/$PKG.FTTouchService >/dev/null 2>&1
@@ -70,11 +120,10 @@ for f in /sdcard/Music/alpha_tone.mp3 /sdcard/Music/bravo_tone.mp3 /sdcard/Movie
 done
 sleep 3
 check "test songs are in the phone's library with their tags" "$ADB shell content query --uri content://media/external/audio/media --projection title:artist 2>/dev/null | grep -q 'title=Alpha Tone, artist=FT Band'"
-for p in 5277 7240 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
+for p in 5277 7240 8240 9240 9241 9242 9340; do forward_test "$p"; done
 
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/logcat.txt" 2>&1 &
-LOGPID=$!
+start_logcat "$OUT/logcat.txt"
 
 echo "== screen-mirror consent =="
 dump(){ $ADB shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; $ADB pull /sdcard/ui.xml "$OUT/consent_ui.xml" >/dev/null 2>&1; }
@@ -93,7 +142,7 @@ PY
 grant_mirror(){
   local before
   before=$(grep -c 'screen mirror permitted' "$OUT/logcat.txt" 2>/dev/null); before=${before:-0}
-  $ADB shell am start -n $PKG/.MainActivity --ez mirror true --es pkgMaps com.android.settings >/dev/null 2>&1
+  $ADB shell am start -n $PKG/.DevelopmentActivity --ez mirror true --es pkgMaps com.android.settings >/dev/null 2>&1
   sleep 3
   for round in 1 2 3 4; do
     dump
@@ -119,7 +168,7 @@ check "Home shows the connection steps and no setup left to do" "grep -q 'text=\
 check "Home no longer asks for screen sharing up front" "! grep -q 'text=\"Screen mirror\"' '$OUT/home_after_consent.xml'"
 
 echo "== start services (auto-connect, Android Auto auto-start on) =="
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei pictureSize 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings --ez carSongInfo true --ei guidance 2 \
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ei pictureSize 0 --ei aaCorner 0 --ez auto true --ez wifi true --es aaPkg com.android.settings --ez aaAuto true --es pkgMaps com.android.settings --ez carSongInfo true --ei guidance 2 \
   --es carTiles music,videos,youtube,maps,browser,apps --es carBackground deep --ei carAccent -10492992 --ez carClock24 true >/dev/null 2>&1
 sleep 7
 listening "$OUT/logcat.txt"
@@ -141,7 +190,9 @@ except socket.timeout:
     print("no answer")
 PY2
 }
-$ADB emu redir add udp:18999:8999 >/dev/null 2>&1
+redirect=$($ADB emu redir add udp:18999:8999) || abort "Cannot set up emulator UDP redirection"
+[[ "$redirect" = *OK* ]] || abort "$redirect"
+udp_redirected=1
 check "a car looking for FT on udp 8999 gets the ready answer" "udpcall | grep -q '\"status\":\"ready\"'"
 
 echo "== plain head unit (no content encryption, 1024x600) =="
@@ -154,7 +205,7 @@ check "content encryption reported off for the plain unit" "grep -q 'content enc
 sleep 3
 
 grant_mirror
-$ADB shell am start -n $PKG/.MainActivity --ez auto true --ez wifi true >/dev/null 2>&1
+$ADB shell am start -n $PKG/.DevelopmentActivity --ez auto true --ez wifi true >/dev/null 2>&1
 sleep 3
 
 echo "== run the head unit simulator =="
@@ -163,7 +214,7 @@ python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 1 --hold-init 3 --width 1280 --hei
   --tail-seconds 6 --out "$OUT/carlife" > "$OUT/carlife_sim.log" 2>&1
 CL=$?
 sleep 2
-kill $LOGPID 2>/dev/null
+stop_logcat
 
 echo "== carlife (per-channel TCP, content encryption on) =="
 check "carlife sim passed" "[ $CL = 0 ]"
@@ -331,15 +382,14 @@ check "the phone's rotation is put back when the car goes" "grep -q 'phone rotat
 
 echo "== Corolla-shaped car (1920x720, protocol 1.0, no frame rate asked) =="
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/corolla_logcat.txt" 2>&1 &
-COROLLALOG=$!
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ei pictureSize 1 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
+start_logcat "$OUT/corolla_logcat.txt"
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ei pictureSize 1 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
 sleep 3
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1920 --height 720 --fps 0 --seconds 3 --stream own \
   --touches "640,360@1;pause@3;start@7;points:320,180@10;click:960,540@11;pause@12;start@12.5;pause@17;start@17.5" --tail-seconds 4 --first-frame-wait 5 --out "$OUT/corolla" > "$OUT/corolla_sim.log" 2>&1
 COR=$?
 sleep 1
-kill $COROLLALOG 2>/dev/null
+stop_logcat
 python3 -c "import json;d=json.load(open('$OUT/corolla/result.json'));print('   first picture after start:',d.get('first_frame_after_start'),'s')" 2>/dev/null
 corolla(){ python3 - "$OUT/corolla/result.json" "$1" <<'PY7'
 import json, sys
@@ -375,22 +425,20 @@ check "coming back sends no second header and no oversized picture" "sim_check c
 
 echo "== FT button in another corner, over a mirrored app =="
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/corner_logcat.txt" 2>&1 &
-CORNERLOG=$!
+start_logcat "$OUT/corner_logcat.txt"
 grant_mirror
-$ADB shell am start -n $PKG/.MainActivity --ei aaCorner 3 --ez aaAuto false >/dev/null 2>&1
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei aaCorner 3 --ez aaAuto false >/dev/null 2>&1
 sleep 3
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 \
   --touches "670,528@1;1208,666@6" --tail-seconds 3 --out "$OUT/corner" > "$OUT/corner_sim.log" 2>&1
 sleep 1
-kill $CORNERLOG 2>/dev/null
+stop_logcat
 check "a bottom-right FT button is pressable over a mirrored app" "grep -q 'launched com.android.settings' '$OUT/corner_logcat.txt' && grep -q 'mirror stopped' '$OUT/corner_logcat.txt'"
-$ADB shell am start -n $PKG/.MainActivity --ei aaCorner 0 >/dev/null 2>&1
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei aaCorner 0 >/dev/null 2>&1
 
 echo "== a car that crashes when it is told the song =="
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/crash_logcat.txt" 2>&1 &
-CRASHLOG=$!
+start_logcat "$OUT/crash_logcat.txt"
 sleep 2
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --crash-on-song \
   --touches "670,192@1;450,171@3" --tail-seconds 3 --out "$OUT/crash1" > "$OUT/crash1.log" 2>&1
@@ -398,7 +446,7 @@ sleep 5
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 6 --tail-seconds 1 --out "$OUT/crash2" > "$OUT/crash2.log" 2>&1
 CR2=$?
 sleep 1
-kill $CRASHLOG 2>/dev/null
+stop_logcat
 check "after the car drops right after a song message, FT stops sending song info" "grep -q 'stops sending song info' '$OUT/crash_logcat.txt'"
 check "the next connection stays up and gets no song message" "[ $CR2 = 0 ] && python3 -c \"import json;d=json.load(open('$OUT/crash2/result.json'));assert not d.get('songs'), d.get('songs')\""
 
@@ -455,12 +503,11 @@ done
 check "launcher frame decoded to PNG" "[ -s '$OUT/frames/launcher.png' ]"
 
 echo "== sound: music with a voice prompt on top =="
-$ADB forward tcp:5288 tcp:5288 >/dev/null
+forward_test 5288
 $ADB shell am force-stop $PKG
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/sound_logcat.txt" 2>&1 &
-SNDLOG=$!
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
+start_logcat "$OUT/sound_logcat.txt"
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
 listening "$OUT/sound_logcat.txt"
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 16 --out "$OUT/sound_car" > "$OUT/sound_car.log" 2>&1 &
 SNDCAR=$!
@@ -469,7 +516,7 @@ logged "$OUT/sound_logcat.txt" 'projection started' 30
 logged "$OUT/sound_logcat.txt" 'head unit waiting for Android Auto on tcp:5288' 15
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 8 --speech-at 2 --speech-seconds 2.5 --out "$OUT/sound_phone" > "$OUT/sound_phone.log" 2>&1
 wait $SNDCAR
-kill $SNDLOG 2>/dev/null
+stop_logcat
 sound(){ python3 - "$OUT/${2:-sound_car}/result.json" "$1" <<'PY2'
 import json, sys
 a = json.load(open(sys.argv[1]))["audio"]
@@ -570,29 +617,28 @@ check "FT logs how far Android Auto lowered its own music under the prompt" "mea
 check "the car's sound does not fall behind after a prompt" "sound delay"
 
 echo "== sound: directions mixed in step (chosen in settings) =="
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false --ei guidance 0 >/dev/null 2>&1
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false --ei guidance 0 >/dev/null 2>&1
 sleep 3
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 16 --out "$OUT/untouched_car" > "$OUT/untouched_car.log" 2>&1 &
 UNTCAR=$!
 sleep 6
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 8 --speech-at 2 --speech-seconds 2.5 --out "$OUT/untouched_phone" > "$OUT/untouched_phone.log" 2>&1
 wait $UNTCAR
-$ADB shell am start -n $PKG/.MainActivity --ei guidance 2 >/dev/null 2>&1
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei guidance 2 >/dev/null 2>&1
 check "in step: the car gets exactly the music's own length" "sound music untouched_car"
 check "in step: directions over music are mixed in and the music dips only while they play" "sound mixed untouched_car"
 
 echo "== sound: a voice prompt with no music =="
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto false >/dev/null 2>&1
 sleep 3
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/voice_logcat.txt" 2>&1 &
-VOICELOG=$!
+start_logcat "$OUT/voice_logcat.txt"
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 12 --out "$OUT/voice_car" > "$OUT/voice_car.log" 2>&1 &
 VOICECAR=$!
 sleep 6
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 1 --wait-touch 0 --audio-seconds 6 --music 0 --speech-at 2 --speech-seconds 2.5 --out "$OUT/voice_phone" > "$OUT/voice_phone.log" 2>&1
 wait $VOICECAR
-kill $VOICELOG 2>/dev/null
+stop_logcat
 voice_alone(){ python3 - "$OUT/voice_car/result.json" <<'PY5'
 import json, sys
 a = json.load(open(sys.argv[1]))["audio"]
@@ -609,23 +655,21 @@ echo "== sharing without asking (screen sharing allowed ahead with appops) =="
 $ADB shell am force-stop $PKG
 $ADB shell appops set $PKG PROJECT_MEDIA allow >/dev/null 2>&1
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/quiet_logcat.txt" 2>&1 &
-QUIETLOG=$!
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false --es pkgMaps com.android.settings >/dev/null 2>&1
+start_logcat "$OUT/quiet_logcat.txt"
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false --es pkgMaps com.android.settings >/dev/null 2>&1
 listening "$OUT/quiet_logcat.txt"
 $ADB shell input keyevent KEYCODE_HOME >/dev/null 2>&1
 sleep 1
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --touches "670,528@1" --tail-seconds 6 --out "$OUT/quiet" > "$OUT/quiet_sim.log" 2>&1
 sleep 1
-kill $QUIETLOG 2>/dev/null
+stop_logcat
 $ADB shell appops set $PKG PROJECT_MEDIA default >/dev/null 2>&1
 check "with sharing allowed ahead, a car tile mirrors an app and nothing is asked on the phone" "grep -q 'screen sharing allowed without asking' '$OUT/quiet_logcat.txt' && grep -q 'launched com.android.settings' '$OUT/quiet_logcat.txt' && ! grep -q 'asking on the phone for screen sharing' '$OUT/quiet_logcat.txt'"
 
 echo "== the quick settings button =="
 $ADB shell am force-stop $PKG
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/tile_logcat.txt" 2>&1 &
-TILELOG=$!
+start_logcat "$OUT/tile_logcat.txt"
 $ADB shell cmd statusbar add-tile $PKG/$PKG.FtTile >/dev/null 2>&1
 sleep 2
 listening "$OUT/tile_logcat.txt"
@@ -637,20 +681,19 @@ sleep 3
 logged "$OUT/tile_logcat.txt" 'switched on from the quick settings' 15
 $ADB shell cmd statusbar remove-tile $PKG/$PKG.FtTile >/dev/null 2>&1
 sleep 1
-kill $TILELOG 2>/dev/null
+stop_logcat
 check "the quick settings button switches FT off and on without opening it" "grep -q 'switched off from the quick settings' '$OUT/tile_logcat.txt' && grep -q 'switched on from the quick settings' '$OUT/tile_logcat.txt' && grep -q 'session start via WiFi' '$OUT/tile_logcat.txt'"
 
 echo "== phone screen off and on during a drive =="
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/screen_logcat.txt" 2>&1 &
-SCREENLOG=$!
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
+start_logcat "$OUT/screen_logcat.txt"
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
 sleep 3
 ( sleep 5; $ADB shell input keyevent KEYCODE_SLEEP; sleep 2; $ADB shell input keyevent KEYCODE_WAKEUP ) &
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 10 --tail-seconds 1 --out "$OUT/screen" > "$OUT/screen_sim.log" 2>&1
 SCR=$?
 sleep 1
-kill $SCREENLOG 2>/dev/null
+stop_logcat
 $ADB shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
 check "the phone screen going off and on mid-drive keeps the car connected" "[ $SCR = 0 ] && [ \$(grep -c 'TX SCREEN_ON' '$OUT/screen_logcat.txt') -ge 2 ] && ! grep -q 'NetworkOnMainThreadException' '$OUT/screen_logcat.txt'"
 
@@ -659,9 +702,8 @@ PHONE_BT="${PHONE_BT:-$($ADB shell settings get secure bluetooth_address 2>/dev/
 if [ -n "$BUMBLE_PY" ] && [ -x "$BUMBLE_PY" ] && [ -n "$PHONE_BT" ] && [ "$PHONE_BT" != "null" ]; then
   echo "== bluetooth car (WiFi + BL) =="
   $ADB logcat -c
-  $ADB logcat -v time > "$OUT/bt_logcat.txt" 2>&1 &
-  BTLOG=$!
-  $ADB shell am start -n $PKG/.MainActivity --ei linkMode 1 --ez auto true >/dev/null 2>&1
+  start_logcat "$OUT/bt_logcat.txt"
+  $ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 1 --ez auto true >/dev/null 2>&1
   sleep 4
   "$BUMBLE_PY" "$SIMDIR/carlife_bt_car.py" --phone-address "$PHONE_BT" --seconds 6 --out "$OUT/bt1" > "$OUT/bt1.log" 2>&1
   "$BUMBLE_PY" "$SIMDIR/carlife_bt_car.py" --phone-address "$PHONE_BT" --seconds 4 --out "$OUT/bt2" > "$OUT/bt2.log" 2>&1
@@ -677,38 +719,34 @@ if [ -n "$BUMBLE_PY" ] && [ -x "$BUMBLE_PY" ] && [ -n "$PHONE_BT" ] && [ "$PHONE
   cp "$OUT/bt_logcat.txt" "$OUT/bt_direct_only.txt"
   check "WiFi + BL sends no beacon until WiFi Direct is up" "! grep -q 'discovery beacon' '$OUT/bt_direct_only.txt'"
   echo "== bluetooth car (Hotspot) =="
-  $ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true >/dev/null 2>&1
+  $ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true >/dev/null 2>&1
   sleep 3
   "$BUMBLE_PY" "$SIMDIR/carlife_bt_car.py" --phone-address "$PHONE_BT" --seconds 3 --out "$OUT/bt3" > "$OUT/bt3.log" 2>&1
-  kill $BTLOG 2>/dev/null
+  stop_logcat
   check "Hotspot offers no CarLife bluetooth record" "python3 -c \"import json;d=json.load(open('$OUT/bt3/car_bt.json'));assert d.get('reason')=='no channel'\" 2>/dev/null"
   check "switching to Hotspot closes the bluetooth side" "grep -q 'switching to Hotspot, the other way is closed' '$OUT/bt_logcat.txt'"
 fi
 
 echo "== USB cable =="
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/usb_logcat.txt" 2>&1 &
-USBLOG=$!
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
+start_logcat "$OUT/usb_logcat.txt"
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true --ez wifi true --ez aaAuto false >/dev/null 2>&1
 sleep 4
-$ADB forward tcp:7300 tcp:7300 >/dev/null 2>&1
+forward_test 7300
 python3 "$SIMDIR/carlife_hu_sim.py" --aoa-tcp 127.0.0.1:7300 --encrypt 1 --hold-init 2 --width 1280 --height 720 --fps 30 --seconds 4 --touches "640,360@1" --tail-seconds 2 --out "$OUT/usb" > "$OUT/usb_sim.log" 2>&1
 USB=$?
 sleep 4
-kill $USBLOG 2>/dev/null
-$ADB forward --remove tcp:7300 >/dev/null 2>&1
+stop_logcat
 check "a car on the USB cable gets the whole CarLife session (handshake, encryption, picture, touch)" "[ $USB = 0 ]"
 check "the cable takes over from the hotspot and the session runs over USB" "grep -q 'USB: a car came in on the test cable' '$OUT/usb_logcat.txt' && grep -q 'session start via USB' '$OUT/usb_logcat.txt' && grep -q 'head unit connected over USB' '$OUT/usb_logcat.txt'"
 check "the picture flows over the cable after a tap" "python3 -c \"import json;d=json.load(open('$OUT/usb/result.json'));assert d['checks']['video_flowing'] and d['checks']['video_after_tap1']\" 2>/dev/null"
 check "when the cable link ends FT goes back to the hotspot" "awk '/USB: the cable link ended/{e=1} e && /Waiting for the car to join the hotspot/{f=1} END{exit !f}' '$OUT/usb_logcat.txt'"
 
 echo "== Android Auto started while FT is not on screen =="
-for p in 5288 7240 8240 9240 9241 9242 9340; do $ADB forward tcp:$p tcp:$p >/dev/null; done
 $ADB shell am force-stop $PKG
 $ADB logcat -c
-$ADB logcat -v time > "$OUT/aabg_logcat.txt" 2>&1 &
-AABGLOG=$!
-$ADB shell am start -n $PKG/.MainActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto true >/dev/null 2>&1
+start_logcat "$OUT/aabg_logcat.txt"
+$ADB shell am start -n $PKG/.DevelopmentActivity --ei linkMode 0 --ez auto true --ez aa true --ez aaAuto true >/dev/null 2>&1
 listening "$OUT/aabg_logcat.txt"
 python3 "$SIMDIR/carlife_hu_sim.py" --encrypt 0 --hold-init 1 --width 1280 --height 720 --fps 15 --seconds 2 --listen-seconds 24 --out "$OUT/aabg_car" > "$OUT/aabg_car.log" 2>&1 &
 AABGCAR=$!
@@ -719,7 +757,7 @@ logged "$OUT/aabg_logcat.txt" 'projection started' 30
 logged "$OUT/aabg_logcat.txt" 'head unit waiting for Android Auto on tcp:5288' 15
 python3 "$SIMDIR/aa_phone_sim.py" --port 5288 --hu-cert "$ROOT/app/src/main/assets/aa_hu_cert.pem" --srv-cert "$CERTDIR/sim_srv.pem" --srv-key "$CERTDIR/sim_srv.key" --seconds 6 --wait-touch 0 --audio-seconds 6 --out "$OUT/aabg_phone" > "$OUT/aabg_phone.log" 2>&1
 wait $AABGCAR
-kill $AABGLOG 2>/dev/null
+stop_logcat
 check "Android Auto still reaches the car screen when FT was not on screen" "grep -q 'android auto overlay on' '$OUT/aabg_logcat.txt' && grep -q \"Android Auto's picture is drawn on the car screen\" '$OUT/aabg_logcat.txt' && grep -q 'decoder started' '$OUT/aabg_logcat.txt'"
 check "FT asks Android Auto for a fresh picture when the car screen was not ready in time" "! grep -q 'the car screen was not ready for' '$OUT/aabg_logcat.txt' || grep -q 'asking it for a fresh one' '$OUT/aabg_logcat.txt'"
 

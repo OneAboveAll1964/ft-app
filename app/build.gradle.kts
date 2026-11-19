@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 188
-        versionName = "3.9.73-p2p-recovery"
+        versionCode = 189
+        versionName = "3.9.74-review-fixes"
     }
 
     signingConfigs {

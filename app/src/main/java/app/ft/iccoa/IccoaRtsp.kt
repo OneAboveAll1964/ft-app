@@ -4,10 +4,12 @@ import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 internal data class IccoaVideoConfig(
     val host: String, val width: Int = 2764, val height: Int = 1426,
@@ -27,15 +29,26 @@ internal class IccoaRtsp(
     private var asked = false
     private var setup = false
     private var config = IccoaVideoConfig(socket.inetAddress.hostAddress ?: error("No peer"))
-    private val timer = Executors.newSingleThreadScheduledExecutor { Thread(it, "ICCOA-RTSP-watch") }
-    @Volatile private var stopped = false
-    @Volatile private var keepaliveSent = 0L
-    @Volatile private var keepaliveDue = Long.MAX_VALUE
-    private val notified = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val timer = ScheduledThreadPoolExecutor(2) { Thread(it, "ICCOA-RTSP-watch") }.apply {
+        removeOnCancelPolicy = true
+        executeExistingDelayedTasksAfterShutdownPolicy = false
+    }
+    private val stopped = AtomicBoolean(false)
+    private val heartbeatLock = Any()
+    private var keepaliveSent: Long? = null
+    private var keepaliveDue = Long.MAX_VALUE
 
     private fun failed(reason: String, cause: IccoaCloseReason) {
-        if (!stopped && notified.compareAndSet(false, true)) onClosed(reason, cause)
-        close()
+        if (closeTransport()) onClosed(reason, cause)
+    }
+
+    private fun timedOut(step: String) {
+        failed(step, IccoaFailurePolicy.channel(SocketTimeoutException(step)))
+    }
+
+    private fun scheduleHeartbeat() = synchronized(heartbeatLock) {
+        keepaliveDue = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+        keepaliveSent = null
     }
 
     fun run() {
@@ -45,16 +58,25 @@ internal class IccoaRtsp(
             val input = DataInputStream(BufferedInputStream(socket.getInputStream()))
             timer.scheduleAtFixedRate({
                 runCatching {
-                    val now = System.nanoTime() / 1_000_000
-                    if (keepaliveSent > 0 && now - keepaliveSent > 10000)
-                        throw java.net.SocketTimeoutException("RTSP heartbeat timed out")
-                    if (now >= keepaliveDue && keepaliveSent == 0L) {
-                        keepaliveSent = now
+                    val now = System.nanoTime()
+                    val sent = synchronized(heartbeatLock) { keepaliveSent }
+                    if (sent != null && now - sent >= TimeUnit.SECONDS.toNanos(10)) {
+                        timedOut("RTSP heartbeat timed out")
+                    }
+                }.onFailure { failed("RTSP: ${it.javaClass.simpleName}", IccoaFailurePolicy.channel(it)) }
+            }, 1, 1, TimeUnit.SECONDS)
+            timer.scheduleAtFixedRate({
+                runCatching {
+                    val due = synchronized(heartbeatLock) {
+                        val now = System.nanoTime()
+                        (keepaliveSent == null && now >= keepaliveDue).also { if (it) keepaliveSent = now }
+                    }
+                    if (due) {
                         request("GET_PARAMETER rtsp://localhost/wfd1.0 RTSP/1.0", "M16", extra = "Session: 1\r\n")
                     }
                 }.onFailure { failed("RTSP: ${it.javaClass.simpleName}", IccoaFailurePolicy.channel(it)) }
             }, 1, 1, TimeUnit.SECONDS)
-            while (!stopped) {
+            while (!stopped.get()) {
                 val message = read(input)
                 val cseq = message.headers["cseq"]?.toIntOrNull() ?: error("Missing RTSP CSeq")
                 if (message.first.startsWith("RTSP/")) {
@@ -66,7 +88,7 @@ internal class IccoaRtsp(
                             request("SET_PARAMETER rtsp://localhost/wfd1.0 RTSP/1.0", "M4", parameters())
                         }
                         "M4" -> request("SET_PARAMETER rtsp://localhost/wfd1.0 RTSP/1.0", "M5", "wfd_trigger_method: SETUP\r\n")
-                        "M16" -> { keepaliveSent = 0; keepaliveDue = System.nanoTime() / 1_000_000 + 20000 }
+                        "M16" -> scheduleHeartbeat()
                     }
                     continue
                 }
@@ -94,7 +116,9 @@ internal class IccoaRtsp(
                         check(setup) { "PLAY before SETUP" }
                         response(cseq, extra = "Session: 1\r\n")
                         socket.soTimeout = 0
-                        keepaliveDue = System.nanoTime() / 1_000_000 + 20000
+                        synchronized(heartbeatLock) {
+                            if (keepaliveSent == null) keepaliveDue = System.nanoTime() + TimeUnit.SECONDS.toNanos(20)
+                        }
                         onPlay(config)
                     }
                     "PAUSE" -> { response(cseq, extra = "Session: 1\r\n"); onPause() }
@@ -138,13 +162,31 @@ internal class IccoaRtsp(
         val bytes = body?.toByteArray(Charsets.ISO_8859_1)
         val header = "$first\r\nCSeq: $cseq\r\n$extra" +
             (if (bytes != null) "Content-Type: text/parameters\r\nContent-Length: ${bytes.size}\r\n" else "") + "\r\n"
-        socket.getOutputStream().apply { write(header.toByteArray(Charsets.ISO_8859_1)); if (bytes != null) write(bytes); flush() }
+        val finished = AtomicBoolean(false)
+        val deadline = timer.schedule({
+            if (finished.compareAndSet(false, true)) timedOut("RTSP write timed out")
+        }, 10, TimeUnit.SECONDS)
+        try {
+            socket.getOutputStream().apply {
+                write(header.toByteArray(Charsets.ISO_8859_1))
+                if (bytes != null) write(bytes)
+                flush()
+            }
+        } finally {
+            finished.set(true)
+            deadline.cancel(false)
+        }
     }
 
     override fun close() {
-        stopped = true
-        timer.shutdownNow()
+        closeTransport()
+    }
+
+    private fun closeTransport(): Boolean {
+        if (!stopped.compareAndSet(false, true)) return false
         runCatching { socket.close() }
+        timer.shutdown()
+        return true
     }
 
     internal data class Message(val first: String, val headers: Map<String, String>, val body: String)

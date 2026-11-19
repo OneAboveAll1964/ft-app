@@ -15,7 +15,7 @@ import android.view.Display
 import android.view.Surface
 import app.ft.FTApp
 import app.ft.FTTouchService
-import app.ft.MainActivity
+import app.ft.ShareActivity
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.aa.AaTouchViewport
@@ -331,8 +331,7 @@ class IccoaProjection(
     private fun askShare(forSound: Boolean) {
         mutableState.update { it.copy(waitingForShare = true, shareForSound = forSound) }
         runCatching {
-            context.startActivity(Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("mirror", true))
+            ShareActivity.request(context)
         }.onFailure { DiagLog.w("ICCOA", "open FT on the phone to allow screen sharing: ${it.message}") }
     }
 

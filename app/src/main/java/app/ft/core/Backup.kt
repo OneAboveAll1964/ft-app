@@ -8,9 +8,27 @@ object Backup {
     const val SCHEME = "ft"
     const val LOOK_HOST = "look"
 
-    private val SKIP = setOf(
-        "carBtAddress", "carLifeVehicleAddress", "carLifeVehicleName", "carLifeWifiAddress", "carLifeVehicleRevision",
-        "weatherAt", "weatherCelsius", "weatherCode", "lastLatitude", "lastLongitude"
+    private val integerKeys = setOf(
+        "cmdPort", "videoPort", "mediaPort", "ttsPort", "vrPort", "touchPort", "aaPort", "aaSelfPort",
+        "aaWidth", "aaHeight", "aaFps", "aaDensity", "pictureSize", "videoWidth", "videoHeight",
+        "videoFps", "videoMinFps", "pictureBitrate", "videoQpFloor", "carDensity", "aaCorner",
+        "carAccent", "themeMode", "iccoaMicGain", "directions", "linkMode", "carJoinTimeoutSeconds",
+        "carColumns", "carNightAccent", "voiceAssistant", "wheelLongNext", "wheelLongPrev", "gearReverse",
+        "gearPark", "gearReverseSound", "gearParkSound", "gearReverseLevel", "gearParkLevel", "supercastWay"
+    )
+    private val booleanKeys = setOf(
+        "aaDensityBoost167", "aaPhoneScreenOff", "aaControlsLeft", "aaClusterNavigation", "aaMatchCar",
+        "encoderSavePower", "carSizedApps", "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio",
+        "aaBluetooth", "aaAutoStart", "aaPrepareBeforeConnect", "aaShowReturnButton", "carClock24",
+        "carShowLink", "carSongInfo", "modernPhoneUi", "autoConnect", "carBtReconnect",
+        "showOtherDevicesInLogs", "vehicleCoordinateLogging", "swapTrackKeys", "carP2pAutoRole",
+        "carInfoRight", "carShowClock", "carShowMusic", "carShowAa", "carShowCarHome",
+        "weatherFahrenheit", "speedMph", "carDayNight", "supercastOn", "supercastScreenOff", "supercastDockHidden"
+    )
+    private val stringKeys = setOf(
+        "aaPackage", "aaServerPackage", "carBackground", "carTiles", "language", "carName", "carProtocol",
+        "carP2pName", "carBtName", "pkgMaps", "pkgMusic", "pkgVideo", "pkgPhone", "carWidgets",
+        "carNightBackground", "openOnConnect", "openOnConnectSecond", "supercastApps"
     )
 
     val LOOK_KEYS = listOf(
@@ -20,9 +38,9 @@ object Backup {
         "aaCorner"
     )
 
-    fun everything(prefs: Prefs): String = write(prefs.all.filterKeys { it !in SKIP })
+    fun everything(prefs: Prefs): String = write(portableValues(prefs.all))
 
-    fun look(prefs: Prefs): String = write(prefs.all.filterKeys { it in LOOK_KEYS })
+    fun look(prefs: Prefs): String = write(portableValues(prefs.all, LOOK_KEYS))
 
     internal fun write(values: Map<String, Any?>): String {
         val body = JSONObject()
@@ -43,39 +61,29 @@ object Backup {
         if (root.optInt("ft", 0) !in 1..VERSION) return null
         val body = root.optJSONObject("values") ?: return null
         val out = linkedMapOf<String, Any>()
-        body.keys().forEach { key -> body.get(key)?.let { out[key] = it } }
+        body.keys().forEach { key -> out[key] = body.get(key) }
         return out
     }
 
     fun restore(prefs: Prefs, text: String, only: Collection<String>? = null): Int {
         val parsed = parse(text) ?: return 0
-        val before = prefs.all
-        var written = 0
-        parsed.forEach { (key, value) ->
-            if (key in SKIP) return@forEach
+        val values = portableValues(parsed, only)
+        prefs.restoreBackup(values)
+        return values.size
+    }
+
+    internal fun portableValues(values: Map<String, *>, only: Collection<String>? = null): Map<String, Any> = buildMap {
+        values.forEach { (key, value) ->
             if (only != null && key !in only) return@forEach
-            val current = before[key]
-            val typed: Any? = when (current) {
-                is Boolean -> (value as? Boolean) ?: (value as? String)?.toBooleanStrictOrNull()
-                is Int -> (value as? Number)?.toInt()
-                is Long -> (value as? Number)?.toLong()
-                is Float -> (value as? Number)?.toFloat()
-                is String -> value as? String
-                null -> when (value) {
-                    is Boolean, is String -> value
-                    is Int -> value
-                    is Long -> value
-                    is Double -> value.toFloat()
-                    else -> null
-                }
+            val typed = when {
+                key in booleanKeys -> (value as? Boolean) ?: (value as? String)?.toBooleanStrictOrNull()
+                key in integerKeys && value is Number -> runCatching { value.toString().toBigDecimal().intValueExact() }.getOrNull()
+                key in stringKeys -> value as? String
+                key == "supercastSplit" -> (value as? Number)?.toFloat()?.takeIf(Float::isFinite)
                 else -> null
             }
-            if (typed != null) {
-                prefs.put(key, typed)
-                written++
-            }
+            if (typed != null) put(key, typed)
         }
-        return written
     }
 
     internal fun encode(text: String): String =

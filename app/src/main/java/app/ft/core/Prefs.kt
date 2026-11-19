@@ -38,15 +38,32 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     }
     fun put(key: String, value: Any?) {
         val e = storeFor(key).edit()
-        when (value) {
-            is Boolean -> e.putBoolean(key, value)
-            is Int -> e.putInt(key, value)
-            is Long -> e.putLong(key, value)
-            is Float -> e.putFloat(key, value)
-            is String -> e.putString(key, value)
-            null -> e.remove(key)
-        }
+        e.putValue(key, value)
         e.apply()
+    }
+
+    internal fun restoreBackup(values: Map<String, Any>) = synchronized(videoProfileLock) {
+        values.entries.groupBy { storeFor(it.key) }.forEach { (store, entries) ->
+            val previous = store.all
+            val editor = store.edit()
+            val changed = entries.filter { (key, value) -> previous[key] != value }
+            changed.forEach { (key, value) -> editor.putValue(key, value) }
+            if (changed.any { (key) -> key in VIDEO_PROFILE_INPUTS }) {
+                editor.remove("savedVideoProfile").putInt("videoProfileGeneration", videoProfileGeneration + 1)
+            }
+            editor.apply()
+        }
+    }
+
+    private fun SharedPreferences.Editor.putValue(key: String, value: Any?) {
+        when (value) {
+            is Boolean -> putBoolean(key, value)
+            is Int -> putInt(key, value)
+            is Long -> putLong(key, value)
+            is Float -> putFloat(key, value)
+            is String -> putString(key, value)
+            null -> remove(key)
+        }
     }
 
     var cmdPort: Int get() = int("cmdPort", 7240); set(v) = set("cmdPort", v)
@@ -238,6 +255,10 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     companion object {
         const val LEGACY_ID = "legacy"
         internal fun profileStoreName(id: String) = "ft-car-$id"
+        private val VIDEO_PROFILE_INPUTS = setOf(
+            "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps",
+            "pictureBitrate", "videoQpFloor", "encoderSavePower"
+        )
 
         // Opt in explicitly: new installation/runtime settings remain shared by all vehicles.
         internal val PROFILE_KEYS = setOf(

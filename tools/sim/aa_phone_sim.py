@@ -110,7 +110,7 @@ class Phone:
         payload = struct.pack(">H", mid) + body
         base = (8 if enc else 0) | (4 if control else 0)
         frames = []
-        if len(payload) < MAX:
+        if len(payload) <= MAX:
             data = self.encrypt(payload) if enc else payload
             frames.append(bytes([ch, base | 3]) + struct.pack(">H", len(data)) + data)
         else:

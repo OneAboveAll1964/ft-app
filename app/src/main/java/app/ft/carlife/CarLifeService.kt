@@ -511,7 +511,8 @@ class CarLifeService : Service() {
     @Volatile private var quietShareAt = 0L
     @Volatile private var resumedMedia = false
     private var aaReturn: Job? = null
-    @Volatile private var pendingLaunch: Pair<Intent, String>? = null
+    private data class PendingLaunch(val intent: Intent, val pkg: String, val phone: Boolean, val ticket: Int)
+    @Volatile private var pendingLaunch: PendingLaunch? = null
     @Volatile private var soundDeclined = false
     @Volatile private var blockedSoundNoticed = false
     @Volatile private var songInfoAt = 0L
@@ -671,12 +672,11 @@ class CarLifeService : Service() {
                 val pending = pendingLaunch
                 pendingLaunch = null
                 if (pending == null) _state.update { it.copy(waitingForShare = false, shareForSound = false) }
-                val ticket = launchTicket.get()
                 soundLater {
                     audio.stop()
                     startAudioToCar()
                     if (pending != null) {
-                        launchIntent(pending.first, pending.second, ticket = ticket)
+                        launchIntent(pending.intent, pending.pkg, pending.phone, pending.ticket)
                         if (pendingLaunch == null) _state.update { it.copy(waitingForShare = false, shareForSound = false) }
                     }
                 }
@@ -686,8 +686,8 @@ class CarLifeService : Service() {
                     quietShareFailed = true
                     DiagLog.i(tag, "this phone still asks before sharing, FT will ask on the phone from now on")
                     val pending = pendingLaunch
-                    if (pending != null) {
-                        val pkg = pending.second
+                    if (pending != null && pending.ticket == launchTicket.get()) {
+                        val pkg = pending.pkg
                         _state.update { it.copy(mirroring = false, mirrorPackage = pkg, waitingForShare = true, shareForSound = false) }
                         askForScreenShare()
                     } else {
@@ -2375,8 +2375,12 @@ class CarLifeService : Service() {
             return
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        if (phone && mirror.ready && mirror.ownDisplay) {
+            if (Build.VERSION.SDK_INT >= 34) releaseProjection()
+            else mirror.close()
+        }
         if (!mirror.ready && projection == null && (app.mirrorResultCode == 0 || app.mirrorData == null)) {
-            pendingLaunch = intent to pkg
+            pendingLaunch = PendingLaunch(intent, pkg, phone, ticket)
             if (canShareQuietly()) {
                 _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
                 shareQuietly()
@@ -2386,7 +2390,6 @@ class CarLifeService : Service() {
             askForScreenShare()
             return
         }
-        if (phone && mirror.ready && mirror.ownDisplay) mirror.close()
         if (!mirror.ready && !mirrorOpen(pkg, ownDisplay = !phone)) {
             _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
             return
@@ -2559,21 +2562,14 @@ class CarLifeService : Service() {
         if (now - quietShareAt < 10_000) return
         quietShareAt = now
         runCatching {
-            startActivity(
-                Intent(this, ShareActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-            )
+            ShareActivity.request(this, quiet = true)
         }.onFailure { DiagLog.w(tag, "could not start screen sharing quietly: ${it.message}") }
     }
 
     private fun askForScreenShare() {
         DiagLog.i(tag, "asking on the phone for screen sharing, the car is waiting")
         runCatching {
-            startActivity(
-                Intent(this, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("mirror", true)
-            )
+            ShareActivity.request(this)
         }.onFailure { DiagLog.w(tag, "could not open FT to ask for screen sharing: ${it.message}") }
     }
 
@@ -2609,9 +2605,11 @@ class CarLifeService : Service() {
             val d = if (useCar) prefs.carDensity else resources.displayMetrics.densityDpi
             val ok = mirror.open(mp, w, h, d, useCar, carDisplay.width, carDisplay.height)
             if (ok && !audio.active) soundToCar()
+            if (!ok && Build.VERSION.SDK_INT >= 34) releaseProjection()
             ok
         } catch (t: Throwable) {
             DiagLog.e(tag, "mirror start failed", t)
+            if (Build.VERSION.SDK_INT >= 34) releaseProjection()
             false
         }
     }
@@ -2631,16 +2629,23 @@ class CarLifeService : Service() {
         stopWatchingTurning()
         restoreRotation()
         soundLater {
-            audio.stop()
-            restorePhone()
-            mirror.close()
-            val released = synchronized(projectionLock) { projection.also { projection = null } }
-            if (released != null) {
-                runCatching { released.stop() }
-                app.mirrorGranted.value = false
+            if (releaseProjection()) {
                 DiagLog.i(tag, "screen sharing released, allow it again on the phone for the next drive")
             }
         }
+    }
+
+    private fun releaseProjection(): Boolean {
+        val released = synchronized(projectionLock) { projection.also { projection = null } }
+        mirrorJob?.cancel()
+        mirrorJob = null
+        audio.stop()
+        restorePhone()
+        mirror.close()
+        if (released == null) return false
+        app.mirrorGranted.value = app.mirrorData != null
+        runCatching { released.stop() }
+        return true
     }
 
     private fun home() {

@@ -12,6 +12,7 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Looper
+import android.os.SystemClock
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +29,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class CarFinder(private val context: Context, private val prefs: Prefs, private val scope: CoroutineScope) {
     data class Peer(val name: String, val address: String, val status: Int, val groupOwner: Boolean)
     data class Link(val groupOwnerIp: String, val iface: String?, val weAreOwner: Boolean, val name: String)
-    private data class ServiceMatch(val address: String, val name: String)
+    private data class ServiceMatch(val address: String, val name: String, val expiresAt: Long)
 
     private val tag = "P2P"
     private val manager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
@@ -44,6 +45,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var recovery: Job? = null
     private var preparation: Job? = null
     private var ownerDiscovery: Job? = null
+    private var freshPeersTimeout: Job? = null
     private var awaitingFreshPeers = false
     private var pendingServiceMatch: ServiceMatch? = null
     private val waitingForOwnerPeers get() = ownerDiscovery != null || awaitingFreshPeers
@@ -272,8 +274,14 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private fun cancelOwnerDiscovery() {
         ownerDiscovery?.cancel()
         ownerDiscovery = null
-        awaitingFreshPeers = false
+        finishOwnerPeerWait()
         pendingServiceMatch = null
+    }
+
+    private fun finishOwnerPeerWait() {
+        freshPeersTimeout?.cancel()
+        freshPeersTimeout = null
+        awaitingFreshPeers = false
     }
 
     fun search() {
@@ -528,8 +536,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         m.requestPeers(ch) { list ->
             if (!current(ch, life) || version != peersVersion) return@requestPeers
             // The request at expiry supersedes every request sent during the window.
-            val completedOwnerDiscovery = awaitingFreshPeers
-            awaitingFreshPeers = false
+            finishOwnerPeerWait()
             val ps = list.deviceList.map { Peer(it.deviceName ?: "", it.deviceAddress ?: "", it.status, it.isGroupOwner) }
             _peers.value = ps
             list.deviceList.forEach { describe(it) }
@@ -539,7 +546,6 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 DiagLog.d(tag, "car peers: $snapshot")
             }
             autoMatch(ps)
-            if (completedOwnerDiscovery) pendingServiceMatch = null
         }
     }
 
@@ -690,8 +696,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (!enabled || recovery != null || groupProbe != null || _link.value != null || connecting != null) return
         val want = targetName.trim()
         val target = theCar(ps, want)
-        val service = pendingServiceMatch
-        if (service != null && matchesService(service.name)) {
+        val service = pendingServiceMatch?.takeIf { SystemClock.elapsedRealtime() < it.expiresAt && matchesService(it.name) }
+        pendingServiceMatch = service
+        if (service != null) {
             val peer = ps.singleOrNull { it.address.equals(service.address, true) && it.status == WifiP2pDevice.AVAILABLE }
             if (peer != null && (peer.groupOwner || (!waitingForOwnerPeers && target?.groupOwner != true))) {
                 connect(peer, service.name)
@@ -779,7 +786,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val ch = channel ?: return
         if (!enabled || recovery != null || groupProbe != null || _link.value != null || connecting != null) return
         if (waitingForOwnerPeers && !p.groupOwner && p.status == WifiP2pDevice.AVAILABLE) {
-            if (serviceName != null) pendingServiceMatch = ServiceMatch(p.address, serviceName)
+            if (serviceName != null) pendingServiceMatch = ServiceMatch(p.address, serviceName, SystemClock.elapsedRealtime() + 15_000)
             return
         }
         cancelOwnerDiscovery()
@@ -921,6 +928,15 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                     delay(3_000)
                     ownerDiscovery = null
                     awaitingFreshPeers = true
+                    freshPeersTimeout = scope.launch(Dispatchers.Main) peerWait@{
+                        delay(3_000)
+                        freshPeersTimeout = null
+                        awaitingFreshPeers = false
+                        if (lifecycle != life || receiver == null || !enabled || attempt != id) return@peerWait
+                        DiagLog.w(tag, "WiFi Direct peer query timed out after the car group window; restarting discovery")
+                        discover()
+                        refreshPeers()
+                    }
                     refreshPeers()
                 }
             }

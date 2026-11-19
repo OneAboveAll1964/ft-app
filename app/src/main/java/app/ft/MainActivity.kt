@@ -66,12 +66,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaInstaller
-import app.ft.carlife.CarLifeService
 import app.ft.projection.CarControls
-import app.ft.projection.VideoPlans
-import app.ft.core.CarAudioBus
 import app.ft.core.CarConnection
 import app.ft.core.DiagLog
 import app.ft.ui.diag.DiagnosticsScreen
@@ -92,10 +88,8 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import app.ft.core.Looks
-import app.ft.supercast.SuperCast
 import android.widget.Toast
 import app.ft.core.Backup
-import app.ft.core.Language
 import app.ft.core.Lang
 import app.ft.core.Sizing
 import app.ft.ui.theme.Localized
@@ -108,7 +102,7 @@ enum class Screen(@StringRes val label: Int, val icon: ImageVector) {
     SETTINGS(R.string.nav_settings, Icons.Filled.Settings)
 }
 
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
     private val app get() = application as FTApp
 
     private val mirrorConsent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -193,41 +187,6 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
-        if (intent.hasExtra("aaCorner")) {
-            app.prefs.aaCorner = intent.getIntExtra("aaCorner", 0)
-            CarStyles.reload()
-        }
-        if (intent.hasExtra("linkMode")) app.prefs.linkMode = intent.getIntExtra("linkMode", 0)
-        if (intent.hasExtra("pictureSize")) app.prefs.videoSize = intent.getIntExtra("pictureSize", VideoPlans.SIZE_CAR)
-        if (intent.getBooleanExtra("off", false)) CarConnection.switchOff(this)
-        if (intent.getBooleanExtra("wifi", false) || intent.getBooleanExtra("auto", false)) CarConnection.switchOn(this)
-        if (intent.getBooleanExtra("aa", false)) AaHeadUnitService.start(this, false)
-        if (intent.getBooleanExtra("mirror", false)) requestMirror()
-        intent.getStringExtra("aaPkg")?.let { app.prefs.aaPackage = it }
-        if (intent.hasExtra("aaAuto")) app.prefs.aaAutoStart = intent.getBooleanExtra("aaAuto", false)
-        if (intent.hasExtra("fakeCall")) {
-            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-            am.mode = if (intent.getBooleanExtra("fakeCall", false)) android.media.AudioManager.MODE_IN_COMMUNICATION else android.media.AudioManager.MODE_NORMAL
-        }
-        if (intent.getBooleanExtra("aaSetup", false)) pickAndroidAuto()
-        if (intent.getBooleanExtra("startAa", false)) CarControls.startAa()
-        if (intent.getBooleanExtra("aaWireless", false)) CarControls.startAaWireless()
-        intent.getStringExtra("btSend")?.let { CarLifeService.btSend(it) }
-        if (intent.hasExtra("btEcho")) CarLifeService.btEcho(intent.getBooleanExtra("btEcho", false))
-        intent.getStringExtra("pkgMaps")?.let { app.prefs.mapsPackage = it }
-        intent.getStringExtra("pkgVideo")?.let { app.prefs.videoPackage = it }
-        intent.getStringExtra("carTiles")?.let { app.prefs.carTiles = it; CarStyles.reload() }
-        intent.getStringExtra("carBackground")?.let { app.prefs.carBackground = it; CarStyles.reload() }
-        if (intent.hasExtra("carAccent")) {
-            app.prefs.carAccent = intent.getIntExtra("carAccent", app.prefs.carAccent)
-            CarStyles.reload()
-        }
-        if (intent.hasExtra("carSongInfo")) app.prefs.carSongInfo = intent.getBooleanExtra("carSongInfo", true)
-        if (intent.hasExtra("guidance")) {
-            app.prefs.guidanceMode = intent.getIntExtra("guidance", CarAudioBus.GUIDANCE_UNTOUCHED)
-            CarAudioBus.guidance = app.prefs.guidanceMode
-        }
-        intent.getStringExtra("language")?.let { Lang.set(Language.of(it)) }
         intent.data?.takeIf { it.scheme == Backup.SCHEME && it.host == Backup.LOOK_HOST }?.let { link ->
             val count = Backup.readLookCode(app.prefs, link.toString())
             if (count > 0) {
@@ -236,32 +195,12 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(this, getString(R.string.backup_look_applied), Toast.LENGTH_LONG).show()
             }
         }
-        if (intent.getBooleanExtra("supercast", false)) {
-            SuperCast.startAsync(applicationContext)
-        }
-        if (intent.getBooleanExtra("supercastBridge", false)) {
-            SuperCast.startAsync(applicationContext, bridge = true)
-        }
-        intent.getStringExtra("openOnConnect")?.let { app.prefs.openOnConnect = if (it == "none") "" else it }
-        if (intent.hasExtra("wheelNext")) app.prefs.wheelLongNext = intent.getIntExtra("wheelNext", 0)
-        if (intent.hasExtra("wheelPrev")) app.prefs.wheelLongPrev = intent.getIntExtra("wheelPrev", 0)
-        if (intent.hasExtra("carInfoRight")) { app.prefs.carInfoRight = intent.getBooleanExtra("carInfoRight", false); CarStyles.reload() }
-        if (intent.hasExtra("carColumns")) { app.prefs.carColumns = intent.getIntExtra("carColumns", 0); CarStyles.reload() }
-        if (intent.hasExtra("carShowClock")) { app.prefs.carShowClock = intent.getBooleanExtra("carShowClock", true); CarStyles.reload() }
-        if (intent.hasExtra("carShowMusic")) { app.prefs.carShowMusic = intent.getBooleanExtra("carShowMusic", true); CarStyles.reload() }
-        if (intent.hasExtra("carShowAa")) { app.prefs.carShowAa = intent.getBooleanExtra("carShowAa", true); CarStyles.reload() }
-        if (intent.hasExtra("carShowCarHome")) { app.prefs.carShowCarHome = intent.getBooleanExtra("carShowCarHome", true); CarStyles.reload() }
-        intent.getStringExtra("carWidgets")?.let { app.prefs.carWidgets = it; CarStyles.reload() }
-        if (intent.hasExtra("carDayNight")) { app.prefs.carDayNight = intent.getBooleanExtra("carDayNight", false); CarStyles.reload() }
-        intent.getStringExtra("carNightBackground")?.let { app.prefs.carNightBackground = it; CarStyles.reload() }
-        if (intent.hasExtra("carClock24")) {
-            app.prefs.carClock24 = intent.getBooleanExtra("carClock24", true)
-            CarStyles.reload()
-        }
-        intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }
+        handleDevelopmentIntent(intent)
     }
 
-    private fun pickAndroidAuto() {
+    protected open fun handleDevelopmentIntent(intent: Intent) = Unit
+
+    protected fun pickAndroidAuto() {
         if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
             DiagLog.i("AaSetup", "let FT install apps on the screen that just opened, then tap Pick file again")
             runCatching { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))) }
@@ -277,7 +216,7 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun requestMirror() {
+    protected fun requestMirror() {
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val request = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
         mirrorConsent.launch(request)
