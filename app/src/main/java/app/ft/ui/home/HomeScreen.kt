@@ -1,5 +1,7 @@
 package app.ft.ui.home
 
+import app.ft.ui.play.AccessibilityUse
+import app.ft.ui.play.rememberAccessibilityConsent
 import app.ft.core.LocalModernPhoneUi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
@@ -143,6 +145,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     LaunchedEffect(Unit) { RootPrep.revision.collect { resumed++ } }
     val radios = rememberRadios(context, resumed)
     val touchOn = remember(resumed) { FTTouchService.enabled }
+    val openTouchSettings = rememberAccessibilityConsent(AccessibilityUse.TOUCH, onOpenAccessibility)
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
     val backgroundOn = remember(resumed) { (context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) != false }
     val aaOwnCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
@@ -343,7 +346,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 Section(stringResource(R.string.home_finish_setup)) {
                     Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
                     Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
                     Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
@@ -392,7 +395,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 Section(stringResource(R.string.home_finish_setup)) {
                     Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
                     Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
                     Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }

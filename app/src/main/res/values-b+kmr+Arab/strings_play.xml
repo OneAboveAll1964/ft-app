@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown only in the Google Play build. -->
+    <string name="play_perm_title">بەری FT داخوازا دەستویران بکەت</string>
+    <string name="play_perm_intro">FT مۆبایلێ تە ل سەر شاشەیا ترومبێلا تە نیشان ددەت. نوکە Android دێ داخوازا ڤان دەستویرێن ل ژێرێ ژ تە کەت. د FT دا نە ئەکاونت هەیە، نە ریکلام و نە شیکاری، و هەر تشتێ FT ب کار دئینیت ل سەر مۆبایلێ تە دمینیت.</string>
+    <string name="play_perm_more">تو دشێی هەر دەمەکێ ڤان ل رێکخستنێن Android بگوهۆڕی. ل «رێکخستن ← دەربارەی FT» هەمی دەستویر دهێنە روونکرن.</string>
+    <string name="play_perm_continue">بەردەوام بە</string>
+    <string name="play_perm_later">نوکە نە</string>
+
+    <string name="play_touch_title">بهێلە شاشەیا دەست لێدانێ یا ترومبێلێ مۆبایلێ تە کونترۆل بکەت</string>
+    <string name="play_touch_body">FT خزمەتگوزاریەکا Accessibility ب ناڤێ «FT – دەست لێدانا ترومبێلێ» ب کار دئینیت دا کو دەمێ شاشەیا مۆبایلێ تە یان ئەپەکێ مۆبایلی ل سەر ترومبێلێ دهێتە نیشاندان، کلیک و راکێشانێن تە ل سەر شاشەیا دەست لێدانێ یا ترومبێلێ بگەهنە مۆبایلی، و دوگمێن ترومبێلێ بشێن «زڤرین»، «سەرەکی» و «دوماهیک ئەپ» بپەستینن و ئاگەهداریان ڤەکەن.\n\nبۆ ڤێ چەندێ، خزمەتگوزاری دشێت لڤینان ئەنجام بدەت و ببینیت کیژ پەنجەرە ل سەر شاشێ یە. FT تنێ دەمێ مۆبایلێ تە ل سەر ترومبێلێ دهێتە نیشاندان وێ ب کار دئینیت. ئەو چ تشتەکی ژ یێ ل سەر شاشەیا تە کۆم ناکەت، پاشەکەفت ناکەت و پارڤە ناکەت، و چ تشت ژ مۆبایلێ تە دەرناکەڤیت.\n\nتو دشێی هەر دەمەکێ وێ ل رێکخستنێن Accessibility یێن Android بکوژینی.</string>
+    <string name="play_starter_title">بهێلە FT سێرڤەرێ head unit یێ Android Auto ڤەکەت</string>
+    <string name="play_starter_body">Android Auto تنێ دەمێ «سێرڤەرێ head unit» یێ وی کار دکەت ب FT ڤە گرێ ددەت، و Android پشتی ریستارتا مۆبایلی یان نویبوونا Android Auto وی دگریت. خزمەتگوزاریەکا Accessibility یا جودا ب ناڤێ «FT — سێرڤەرێ Android Auto» دشێت بۆ تە جارەکا دی ڤەکەت.\n\nدەمێ تو Android Auto ژ FT دەست پێ دکەی، خزمەتگوزاری رێکخستنێن Android Auto ڤەدکەت، وێ شاشێ دخوینیت دا «Start head unit server» ببینیت، هەلدبژێریت و دزڤریت بۆ FT. ئەو تنێ د ناڤ ئەپێ Android Auto دا کار دکەت، تنێ دەمێ تو داخواز دکەی، و نە پتر ژ هەشت چرکەیان. نەشێت لڤینان ئەنجام بدەت. چ تشتەکی ژ یێ دخوینیت کۆم ناکەت، پاشەکەفت ناکەت و پارڤە ناکەت، و چ تشت ژ مۆبایلێ تە دەرناکەڤیت.\n\nتو دشێی هەر دەمەکێ وێ ل رێکخستنێن Accessibility یێن Android بکوژینی.</string>
+    <string name="play_disclosure_agree">رازیبوون و ڤەکرنا رێکخستنان</string>
+    <string name="play_disclosure_decline">نە، سوپاس</string>
+
+    <string name="settings_about_title">دەربارەی FT</string>
+    <string name="settings_about_about">وەشان، سیاسەتا تایبەتمەندیێ و بۆچی FT داخوازا هەر دەستویرەکێ دکەت</string>
+    <string name="about_version">وەشانا %1$s (%2$d)</string>
+    <string name="about_edition">وەشانا Google Play</string>
+    <string name="about_privacy">سیاسەتا تایبەتمەندیێ</string>
+    <string name="about_source">کۆدێ ژێدەری</string>
+    <string name="about_license">مۆلەتنامە: Apache 2.0</string>
+    <string name="about_data">د FT دا نە ئەکاونت هەیە، نە ریکلام و نە شیکاری. رێکخستن، تۆمار و پرۆفایلێن ترومبێلێن تە ل سەر مۆبایلێ تە دمینن. ویجێتا کەشوهەوایێ جهەکێ نێزیکەیی دهنێریتە Open-Meteo دا پێشبینیا کەشوهەوایێ وەربگریت. راپۆرتا دۆزینا کێشەیان تنێ دەمێ تو ب خۆ پارڤە دکەی ژ مۆبایلێ تە دەردکەڤیت.</string>
+    <string name="about_permissions_title">دەستویر و بۆچی FT داخوازا وان دکەت</string>
+    <string name="about_review_permissions">پێداچوونا دەستویران</string>
+    <string name="about_trademarks">FT ئەپەکێ سەربخۆیە و چ پەیوەندی ب Google، Baidu، Huawei یان Toyota ڤە نینە و ژ لایێ وان ڤە نەهاتیە پەسەندکرن. Android Auto نیشانەکا بازرگانی یا Google LLC یە. CarLife نیشانەکا بازرگانی یا Baidu یە.</string>
+
+    <string name="perm_nearby">ئامیرێن نێزیک و بلوتوس</string>
+    <string name="perm_nearby_why">ترومبێلا تە دبینیت و ب رێکا بلوتوسێ و WiFi Direct پێڤە گرێ ددەت، و دەمێ بلوتوسێ ترومبێلێ گرێ ددەت FT ڤەدکەت.</string>
+    <string name="perm_location">جه</string>
+    <string name="perm_location_why">Android بۆ WiFi Direct ل سەر Android 12 و وەشانێن کەڤنتر پێدڤی پێ هەیە. ویجێتێن لەز و کەشوهەوایێ ل سەر شاشەیا ترومبێلێ ژی ب کار دئینن.</string>
+    <string name="perm_mic">مایکرۆفۆن</string>
+    <string name="perm_mic_why">دەنگێ تە دگەهینیتە هاریکارێ Android Auto و دەنگێ مۆبایلێ تە دگەل ترومبێلێ پارڤە دکەت. چ تشت ناهێتە تۆمارکرن یان پاشەکەفتکرن.</string>
+    <string name="perm_media">مۆزیک و ڤیدیۆ</string>
+    <string name="perm_media_why">مۆزیک و ڤیدیۆیێن ل سەر مۆبایلێ تە پاشەکەفتکری ژ شاشەیا ترومبێلێ لێ ددەت.</string>
+    <string name="perm_calendar">رۆژژمێر</string>
+    <string name="perm_calendar_why">بویەرا تە یا بهێت ل سەر شاشەیا ترومبێلێ نیشان ددەت، تنێ ئەگەر تو ویجێتا رۆژژمێرێ زێدە بکەی.</string>
+    <string name="perm_notifications">ئاگەهداری</string>
+    <string name="perm_notifications_why">نیشان ددەت کو FT ب ترومبێلا تە ڤە گرێدایە، دا Android گرێدانێ بەردەوام بهێلیت.</string>
+    <string name="perm_screen">پارڤەکرنا شاشێ</string>
+    <string name="perm_screen_why">دەمێ تو داخواز دکەی، شاشەیا مۆبایلێ تە ل سەر ترومبێلێ نیشان ددەت یان دەنگێ مۆبایلێ تە ل ترومبێلێ لێ ددەت. Android هەر جار پسیارێ ژ تە دکەت.</string>
+    <string name="perm_overlay">نیشاندان ل سەر ئەپێن دی</string>
+    <string name="perm_overlay_why">دوگما بچویک یا FT ل سەر Android Auto و ئەپێن دی نیشان ددەت دا تو بشێی بزڤڕی بۆ FT.</string>
+    <string name="perm_settings">گوهۆڕینا رێکخستنێن سیستەمی</string>
+    <string name="perm_settings_why">دەمێ شاشەیا مۆبایلی ل سەر ترومبێلێ دهێتە نیشاندان، چەرخاندنا شاشێ جێگیر دهێلیت، پاشان وەکی بەرێ لێ دکەتەڤە.</string>
+    <string name="perm_battery">بێی باشترکرنا باتریێ</string>
+    <string name="perm_battery_why">رێ ل Android دگریت کو FT د ناڤەراستا گەشتێ دا راوەستینیت، چونکی ئەڤە دێ گرێدانا ب ترومبێلێ ڤە قەتینیت.</string>
+    <string name="perm_accessibility">خزمەتگوزاریێن Accessibility</string>
+    <string name="perm_accessibility_why">دوو خزمەتگوزاریێن ئیختیاری: ئێک رێ ددەتە شاشەیا دەست لێدانێ یا ترومبێلێ کو شاشەیا مۆبایلێ تە کونترۆل بکەت دەمێ ل سەر ترومبێلێ دهێتە نیشاندان، یا دی سێرڤەرێ head unit یێ Android Auto ڤەدکەت. هەر ئێک بەری تو ڤەکەی روون دکەت کا چ دکەت.</string>
+    <string name="perm_startup">دەستپێکرن دگەل ڤەبوونا مۆبایلی و دگەل ترومبێلێ</string>
+    <string name="perm_startup_why">رێ ددەتە FT کو پشتی ریستارتا مۆبایلی چاڤەرێیا ترومبێلا تە بکەت و دەمێ بلوتوسێ ترومبێلێ گرێ ددەت دەست ب کار ببیت.</string>
+    <string name="perm_network">وایفای و ئینتەرنێت</string>
+    <string name="perm_network_why">ب رێکا هۆتسپۆتێ مۆبایلی یان WiFi Direct ب ترومبێلا تە ڤە گرێ ددەت، و پێشبینیا کەشوهەوایێ بۆ ویجێتا کەشوهەوایێ وەردگریت.</string>
+    <string name="perm_helper">ئەپ ل سەر ترومبێلێ (ئیختیاری)</string>
+    <string name="perm_helper_why">دەمێ دیباگا USB ڤەکری بیت، تو دشێی هاریکارێ FT ژ کۆمپیوتەرەکێ یان ژ پرا دیباگێ یا مۆبایلی ب خۆ دەست پێ بکەی. ئەپێن تە ل سەر شاشێن ڤەشارتی بۆ ترومبێلێ دخەبتینیت و دەمێ مۆبایل ریستارت دبیت رادوەستیت.</string>
+</resources>

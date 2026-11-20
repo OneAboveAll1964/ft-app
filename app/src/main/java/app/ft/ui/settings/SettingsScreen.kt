@@ -32,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -108,7 +109,8 @@ enum class SettingsPage(@StringRes val title: Int, @StringRes val about: Int) {
     ANDROID_AUTO(R.string.settings_aa_title, R.string.settings_aa_about),
     SUPERCAST(R.string.settings_supercast_title, R.string.settings_supercast_about),
     ADVANCED(R.string.settings_advanced_title, R.string.settings_advanced_about),
-    BACKUP(R.string.settings_backup_title, R.string.settings_backup_about)
+    BACKUP(R.string.settings_backup_title, R.string.settings_backup_about),
+    ABOUT(R.string.settings_about_title, R.string.settings_about_about)
 }
 
 private fun SettingsPage.icon(): ImageVector = when (this) {
@@ -121,6 +123,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.SUPERCAST -> CarIcons.Apps
     SettingsPage.ADVANCED -> Icons.Filled.Build
     SettingsPage.BACKUP -> Icons.Filled.Share
+    SettingsPage.ABOUT -> Icons.Filled.Info
 }
 
 @Composable
@@ -147,7 +150,7 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
                 items(listOf(
                     listOf(SettingsPage.LOOK, SettingsPage.CAR_SCREEN, SettingsPage.PICTURE, SettingsPage.SOUND),
                     listOf(SettingsPage.CAR, SettingsPage.ANDROID_AUTO, SettingsPage.SUPERCAST),
-                    listOf(SettingsPage.ADVANCED, SettingsPage.BACKUP)
+                    listOf(SettingsPage.ADVANCED, SettingsPage.BACKUP) + if (app.ft.BuildConfig.PLAY) listOf(SettingsPage.ABOUT) else emptyList()
                 )) { pages ->
                     Card(
                         shape = RoundedCornerShape(24.dp),
@@ -215,7 +218,10 @@ private fun MadeBy() {
         }) {
             Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
         }
-        if (version.isNotBlank()) {
+        if (version.isNotBlank() && app.ft.BuildConfig.PLAY) {
+            // Google Play builds update only through Play, so the version does not link to other downloads.
+            Text("FT $version", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(8.dp))
+        } else if (version.isNotBlank()) {
             TextButton(onClick = { app.ft.core.Links.openOnPhone(context, app.ft.core.Links.RELEASES) }) {
                 Text("FT $version", style = MaterialTheme.typography.labelMedium)
             }
@@ -336,6 +342,7 @@ private fun PageContent(page: SettingsPage) {
         }
         SettingsPage.SUPERCAST -> SuperCastSettings()
         SettingsPage.BACKUP -> BackupSettings()
+        SettingsPage.ABOUT -> app.ft.ui.play.AboutSettings()
     }
 }
 
@@ -510,6 +517,9 @@ private fun AaPreparationSetting() {
     val root = rememberRootGranted()
     val helper by AaStarterAccessibilityService.connected.collectAsStateWithLifecycle()
     val helperEnabled = rememberAaStarterEnabled()
+    val openStarterSettings = app.ft.ui.play.rememberAccessibilityConsent(app.ft.ui.play.AccessibilityUse.AA_STARTER) {
+        AaSwitch.openAccessibilitySettings(context)
+    }
     BoolSetting(stringResource(R.string.aa_prepare_before_connect), enabled,
         stringResource(R.string.aa_prepare_before_connect_body)) {
         enabled = it
@@ -518,7 +528,7 @@ private fun AaPreparationSetting() {
     if (enabled && !root && !helper) {
         Text(stringResource(if (helperEnabled) R.string.aa_helper_disconnected else R.string.aa_prepare_helper_body), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { AaSwitch.openAccessibilitySettings(context) }) {
+        TextButton(onClick = openStarterSettings) {
             Text(stringResource(if (helperEnabled) R.string.aa_helper_settings else R.string.aa_let_ft))
         }
     }

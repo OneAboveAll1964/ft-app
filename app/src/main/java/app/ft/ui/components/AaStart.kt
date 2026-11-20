@@ -145,6 +145,9 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
     var switching by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<AaSwitch.Result?>(null) }
     val helper by AaStarterAccessibilityService.connected.collectAsState()
+    val openStarterSettings = app.ft.ui.play.rememberAccessibilityConsent(app.ft.ui.play.AccessibilityUse.AA_STARTER) {
+        AaSwitch.openAccessibilitySettings(context)
+    }
     val helperEnabled = rememberAaStarterEnabled()
     OptionCard(stringResource(R.string.aa_server_option), active = on, status = stringResource(when (serverOn) { true -> R.string.state_on; false -> R.string.state_off; null -> R.string.state_checking }), framed = framed) {
         Note(stringResource(R.string.aa_server_option_body))
@@ -157,7 +160,7 @@ fun AaStart(serverOn: Boolean?, ownCopy: Boolean, framed: Boolean = true) {
         }
         if (!on && !helper && (!root || failure != null)) {
             FilledTonalButton(
-                onClick = { AaSwitch.openAccessibilitySettings(context) },
+                onClick = openStarterSettings,
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
             ) {
                 Text(stringResource(if (helperEnabled) R.string.aa_helper_settings else R.string.aa_let_ft), maxLines = 1)

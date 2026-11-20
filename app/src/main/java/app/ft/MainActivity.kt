@@ -1,5 +1,6 @@
 package app.ft
 
+import app.ft.ui.play.PermissionsDisclosure
 import app.ft.core.LocalModernPhoneUi
 import androidx.compose.ui.unit.sp
 import app.ft.ui.components.FitText
@@ -169,6 +170,14 @@ class MainActivity : ComponentActivity() {
                 val background = MaterialTheme.colorScheme.background
                 LaunchedEffect(background) { window.setBackgroundDrawable(ColorDrawable(background.toArgb())) }
                 Localized {
+                    if (explainPermissions.value) PermissionsDisclosure(
+                        onContinue = {
+                            app.prefs.playPermissionsExplained = true
+                            explainPermissions.value = false
+                            requestRuntimePermissions()
+                        },
+                        onLater = { explainPermissions.value = false }
+                    )
                     FTRoot(
                         onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                         onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
@@ -284,26 +293,39 @@ class MainActivity : ComponentActivity() {
         mirrorConsent.launch(request)
     }
 
+    private val explainPermissions = androidx.compose.runtime.mutableStateOf(false)
+
     private fun requestRuntimePermissions() {
-        val wanted = ArrayList<String>()
-        if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
-        if (Build.VERSION.SDK_INT >= 31) {
-            wanted += Manifest.permission.BLUETOOTH_CONNECT
-            wanted += Manifest.permission.BLUETOOTH_SCAN
-            wanted += Manifest.permission.BLUETOOTH_ADVERTISE
+        val missing = runtimePermissions(this)
+        if (missing.isEmpty()) return
+        // Google Play: explain what each permission is for before Android asks.
+        if (BuildConfig.PLAY && !app.prefs.playPermissionsExplained) {
+            explainPermissions.value = true
+            return
         }
-        if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.NEARBY_WIFI_DEVICES
-        else wanted += Manifest.permission.ACCESS_FINE_LOCATION
-        wanted += Manifest.permission.RECORD_AUDIO
-        if (Build.VERSION.SDK_INT >= 33) {
-            wanted += Manifest.permission.READ_MEDIA_VIDEO
-            wanted += Manifest.permission.READ_MEDIA_AUDIO
-        } else {
-            wanted += Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        val missing = wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
+        permissions.launch(missing)
     }
+}
+
+/** The runtime permissions FT asks for at start, minus those already granted. */
+fun runtimePermissions(context: Context): Array<String> {
+    val wanted = ArrayList<String>()
+    if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
+    if (Build.VERSION.SDK_INT >= 31) {
+        wanted += Manifest.permission.BLUETOOTH_CONNECT
+        wanted += Manifest.permission.BLUETOOTH_SCAN
+        wanted += Manifest.permission.BLUETOOTH_ADVERTISE
+    }
+    if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.NEARBY_WIFI_DEVICES
+    else wanted += Manifest.permission.ACCESS_FINE_LOCATION
+    wanted += Manifest.permission.RECORD_AUDIO
+    if (Build.VERSION.SDK_INT >= 33) {
+        wanted += Manifest.permission.READ_MEDIA_VIDEO
+        wanted += Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        wanted += Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    return wanted.filter { context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.toTypedArray()
 }
 
 @Composable
