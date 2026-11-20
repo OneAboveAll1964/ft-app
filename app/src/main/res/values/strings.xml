@@ -30,7 +30,6 @@
     <string name="made_by">Made by %1$s</string>
     <string name="aa_missing_title">Android Auto is not on this phone</string>
     <string name="aa_missing_body">Install it from the Play Store, or pick an Android Auto file and FT installs it so it starts by itself.</string>
-    <string name="aa_action_pick_file">Pick file</string>
     <string name="aa_own_copy">FT\'s own copy of Android Auto</string>
     <string name="aa_own_copy_body">FT installed Android Auto, so it starts by itself when the car connects. Keep it updated from the Play Store, as Google stops older versions from working.</string>
     <string name="aa_server_option">Android Auto\'s head unit server</string>

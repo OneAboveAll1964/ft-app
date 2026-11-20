@@ -127,7 +127,7 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
 }
 
 @Composable
-fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> Unit, onOpen: (SettingsPage) -> Unit) {
+fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onOpen: (SettingsPage) -> Unit) {
     val modern = LocalModernPhoneUi.current
     val root = rememberRootGranted()
     val carPage = page == SettingsPage.CAR_SCREEN
@@ -179,7 +179,7 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
                 item(key = "connect") { Group { CarConnectSettings() } }
             }
             else -> {
-                if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup(onPickAaFile) } }
+                if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup() } }
                 item { Group { PageContent(page) } }
             }
         }
@@ -231,7 +231,7 @@ private fun MadeBy() {
 
 
 @Composable
-private fun AaSetup(onPickAaFile: () -> Unit) {
+private fun AaSetup() {
     val context = LocalContext.current
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
@@ -241,7 +241,7 @@ private fun AaSetup(onPickAaFile: () -> Unit) {
     val installed = remember(resumed) { AaInstaller.installed(context) }
     val ownCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
     val serverOn = rememberAaServerOn()
-    if (installed) AaStart(serverOn, ownCopy, framed = false) else AaMissing(onPickAaFile, framed = false)
+    if (installed) AaStart(serverOn, ownCopy, framed = false) else AaMissing(framed = false)
 }
 
 @Composable

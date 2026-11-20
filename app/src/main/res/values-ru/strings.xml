@@ -29,7 +29,6 @@
     <string name="made_by">Автор: %1$s</string>
     <string name="aa_missing_title">На этом телефоне нет Android Auto</string>
     <string name="aa_missing_body">Установите его из Play Store или выберите файл Android Auto — FT установит его, и он будет запускаться сам.</string>
-    <string name="aa_action_pick_file">Выбрать файл</string>
     <string name="aa_own_copy">Android Auto, установленный через FT</string>
     <string name="aa_own_copy_body">Android Auto установлен через FT и поэтому запускается сам при подключении автомобиля. Обновляйте его через Play Store: старые версии Google отключает.</string>
     <string name="aa_server_option">Сервер головного устройства Android Auto</string>

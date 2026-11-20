@@ -7,11 +7,8 @@ import app.ft.ui.components.FitText
 import app.ft.ui.car.CarStyles
 import android.Manifest
 import android.app.Activity
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
@@ -128,29 +125,6 @@ class MainActivity : ComponentActivity() {
 
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
-    private val pickAaApk = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) DiagLog.w("AaSetup", "no file chosen") else AaInstaller.install(this, uri)
-    }
-
-    private val installResult = object : BroadcastReceiver() {
-        override fun onReceive(c: Context?, i: Intent?) {
-            when (i?.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
-                PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                    val next = if (Build.VERSION.SDK_INT >= 33)
-                        i.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                    else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_INTENT) as Intent?
-                    next?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    runCatching { startActivity(next) }
-                }
-                PackageInstaller.STATUS_SUCCESS -> {
-                    DiagLog.i("AaSetup", "Android Auto installed by FT, so FT is now its installer")
-                    AaInstaller.enableWirelessComponents(this@MainActivity)
-                }
-                else -> DiagLog.w("AaSetup", "the Android Auto install did not finish: ${i?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "cancelled"}")
-            }
-        }
-    }
-
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(newBase)
         applyOverrideConfiguration(Sizing.phone(newBase))
@@ -159,7 +133,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyBars(Looks.dark(Looks.mode.value, (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES))
-        registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
         if (app.prefs.autoConnect) CarConnection.startAuto(this)
@@ -180,8 +153,7 @@ class MainActivity : ComponentActivity() {
                     )
                     FTRoot(
                         onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                        onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
-                        onPickAaFile = { pickAndroidAuto() }
+                        onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
                     )
                 }
             }
@@ -219,7 +191,6 @@ class MainActivity : ComponentActivity() {
             val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
             am.mode = if (intent.getBooleanExtra("fakeCall", false)) android.media.AudioManager.MODE_IN_COMMUNICATION else android.media.AudioManager.MODE_NORMAL
         }
-        if (intent.getBooleanExtra("aaSetup", false)) pickAndroidAuto()
         if (intent.getBooleanExtra("startAa", false)) CarControls.startAa()
         if (intent.getBooleanExtra("aaWireless", false)) CarControls.startAaWireless()
         intent.getStringExtra("btSend")?.let { CarLifeService.btSend(it) }
@@ -271,22 +242,6 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra("pkgMusic")?.let { app.prefs.musicPackage = it }
     }
 
-    private fun pickAndroidAuto() {
-        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
-            DiagLog.i("AaSetup", "let FT install apps on the screen that just opened, then tap Pick file again")
-            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))) }
-            return
-        }
-        DiagLog.i("AaSetup", "pick a saved copy of Android Auto, an apk or an apks, and FT will install it")
-        runCatching { pickAaApk.launch(arrayOf("*/*")) }
-            .onFailure { DiagLog.e("AaSetup", "no file picker available", it) }
-    }
-
-    override fun onDestroy() {
-        runCatching { unregisterReceiver(installResult) }
-        super.onDestroy()
-    }
-
     private fun requestMirror() {
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val request = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
@@ -329,16 +284,16 @@ fun runtimePermissions(context: Context): Array<String> {
 }
 
 @Composable
-fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
+fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
     val modern by app.ft.core.PhoneStyle.modern.collectAsState()
     androidx.compose.runtime.CompositionLocalProvider(LocalModernPhoneUi provides modern) {
-        FTRootContent(onOpenAccessibility, onOpenOverlay, onPickAaFile)
+        FTRootContent(onOpenAccessibility, onOpenOverlay)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
+private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var settingsFromCars by rememberSaveable { mutableStateOf(false) }
@@ -466,7 +421,7 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
                         screen = Screen.HOME
                     })
                 Screen.LOG -> DiagnosticsScreen(pad)
-                Screen.SETTINGS -> SettingsScreen(pad, page, onPickAaFile) { settingsPage = it }
+                Screen.SETTINGS -> SettingsScreen(pad, page) { settingsPage = it }
             }
             }
             }

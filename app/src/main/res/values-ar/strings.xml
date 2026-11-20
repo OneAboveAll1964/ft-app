@@ -29,7 +29,6 @@
     <string name="made_by">تطوير %1$s</string>
     <string name="aa_missing_title">Android Auto غير مثبّت على هذا الهاتف</string>
     <string name="aa_missing_body">ثبّته من متجر Play، أو اختر ملف Android Auto ليثبّته FT بنفسه فيعمل تلقائيًا.</string>
-    <string name="aa_action_pick_file">اختيار الملف</string>
     <string name="aa_own_copy">نسخة Android Auto الخاصة بـ FT</string>
     <string name="aa_own_copy_body">ثبّت FT تطبيق Android Auto بنفسه، لذلك يعمل تلقائيًا عند اتصال السيارة. احرص على تحديثه من متجر Play، لأن Google يوقف عمل النسخ القديمة.</string>
     <string name="aa_server_option">خادم head unit في Android Auto</string>

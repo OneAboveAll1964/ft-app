@@ -29,7 +29,6 @@
     <string name="made_by">ژ لایێ %1$s ڤە هاتیە چێکرن</string>
     <string name="aa_missing_title">Android Auto ل سەر ڤی مۆبایلی نینە</string>
     <string name="aa_missing_body">ژ Play Store دابمەزرینە، یان فایلەکێ Android Auto هەلبژێرە و FT دێ بۆ تە دامەزرینیت، پاشان ب خۆ دەست ب کار دبیت.</string>
-    <string name="aa_action_pick_file">هەلبژارتنا فایلی</string>
     <string name="aa_own_copy">کۆپیا FT ب خۆ ژ Android Auto</string>
     <string name="aa_own_copy_body">FT ب خۆ Android Auto دامەزراندیە، لەورا دەمێ ترومبێل گرێ ددەت ب خۆ دەست ب کار دبیت. ژ Play Store نوی بکە، چونکی Google وەشانێن کەڤن ژ کار دئێخیت.</string>
     <string name="aa_server_option">سێرڤەرێ head unit د Android Auto دا</string>
