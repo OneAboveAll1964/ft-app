@@ -200,7 +200,14 @@ fun AaMissing(onPickFile: () -> Unit, framed: Boolean = true) {
     val context = LocalContext.current
     OptionCard(stringResource(R.string.aa_missing_title), active = false, status = null, framed = framed) {
         Note(stringResource(R.string.aa_missing_body))
-        ButtonPair(stringResource(R.string.aa_open_store), { AaInstaller.openStore(context) }, stringResource(R.string.aa_action_pick_file), onPickFile)
+        // Installing an APK needs REQUEST_INSTALL_PACKAGES, which Google Play keeps for app stores and file managers.
+        if (app.ft.BuildConfig.PLAY) {
+            FilledTonalButton(onClick = { AaInstaller.openStore(context) }, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                Text(stringResource(R.string.aa_open_store), maxLines = 1)
+            }
+        } else {
+            ButtonPair(stringResource(R.string.aa_open_store), { AaInstaller.openStore(context) }, stringResource(R.string.aa_action_pick_file), onPickFile)
+        }
     }
 }
 

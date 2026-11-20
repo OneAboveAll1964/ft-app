@@ -135,7 +135,7 @@ fun SuperCastSettings() {
     }
 
     Text(stringResource(R.string.supercast_ways), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-    Way(
+    if (!app.ft.BuildConfig.PLAY) Way(
         index = 0,
         open = open,
         onOpen = { open = if (open == 0) -1 else 0 },
