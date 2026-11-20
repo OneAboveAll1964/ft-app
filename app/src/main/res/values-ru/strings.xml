@@ -390,7 +390,7 @@
     <string name="supercast_way_root">С root, автоматически</string>
     <string name="supercast_way_root_body">На телефоне есть root, поэтому FT сам всё настраивает перед каждой поездкой, от вас ничего не требуется.</string>
     <string name="supercast_way_wireless">Через беспроводную отладку</string>
-    <string name="supercast_way_wireless_body">Если отладка уже включена и вы однажды дали FT к ней доступ, FT настроится сам, без компьютера. Android не позволяет FT запросить это разрешение самостоятельно, поэтому в первый раз всё равно понадобится шаг с компьютером, описанный ниже.</string>
+    <string name="supercast_way_wireless_body">Подключите телефон к компьютеру с включённой отладкой по USB и один раз выполните строку ниже. Затем нажмите «Настроить сейчас» и разрешите FT в запросе на телефоне. После этого FT настраивается сам, без компьютера, до перезагрузки телефона.</string>
     <string name="supercast_way_computer">С компьютера, один раз</string>
     <string name="supercast_way_computer_body">Подключите телефон с включённой отладкой по USB к компьютеру и выполните одну команду ниже. Файлы не нужны, она всё настроит сама. После перезагрузки телефона выполните её снова.</string>
     <string name="supercast_copy_command">Скопировать команду</string>
@@ -524,4 +524,12 @@
     <string name="aa_phone_screen_active">Режим выключения экрана активен. Включить экран временно можно кнопкой питания.</string>
     <string name="aa_phone_screen_waiting">Помощник готов. Экран будет выключен при подключении Android Auto.</string>
     <string name="aa_phone_screen_failed">Не удалось управлять экраном телефона. Проверьте разрешения помощника и совместимость прошивки; можно повторить попытку.</string>
+    <string name="touch_cal_title">Калибровка экрана Toyota</string>
+    <string name="touch_cal_step">На экране автомобиля нажмите точно в центр зелёного круга. Точка %1$d из 4.</string>
+    <string name="touch_cal_about">Запуск с телефона: четыре точки откалибруют горизонтальные и вертикальные касания.</string>
+    <string name="touch_cal_start">Калибровать X/Y на ГУ</string>
+    <string name="touch_cal_restart">Начать заново</string>
+    <string name="touch_cal_reset">Сбросить калибровку</string>
+    <string name="touch_cal_car_step">Касание %1$d/4: нажмите точно в центр зелёного круга</string>
+    <string name="touch_cal_car_cancel">Для отмены нажмите в верхнем левом углу экрана</string>
 </resources>

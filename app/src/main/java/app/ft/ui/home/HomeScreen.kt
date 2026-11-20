@@ -226,15 +226,15 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         if (iccoa && projecting && !screenState.aaOverlay && !screenState.mirroring) item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Калибровка экрана Toyota", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.touch_cal_title), style = MaterialTheme.typography.titleMedium)
                     Text(if (touchCalibration.step > 0)
-                        "На экране автомобиля нажмите точно в центр зелёного круга. Точка ${touchCalibration.step} из 4."
-                        else "Запуск с телефона: четыре точки откалибруют горизонтальные и вертикальные касания.")
+                        stringResource(R.string.touch_cal_step, touchCalibration.step)
+                        else stringResource(R.string.touch_cal_about))
                     FilledTonalButton(onClick = { IccoaService.calibrateTouch() }) {
-                        Text(if (touchCalibration.step > 0) "Начать заново" else "Калибровать X/Y на ГУ")
+                        Text(stringResource(if (touchCalibration.step > 0) R.string.touch_cal_restart else R.string.touch_cal_start))
                     }
                     TextButton(onClick = { IccoaService.resetTouchCalibration() }) {
-                        Text("Сбросить калибровку")
+                        Text(stringResource(R.string.touch_cal_reset))
                     }
                 }
             }
@@ -332,7 +332,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         if (iccoa) {
             item {
                 androidx.compose.material3.TextButton(onClick = { iccoaShowAll = !iccoaShowAll }) {
-                    Text(if (iccoaShowAll) "Только CarLink / ICCOA" else "Показать все Bluetooth-устройства")
+                    Text(stringResource(if (iccoaShowAll) R.string.iccoa_msg_carlink_only else R.string.iccoa_msg_show_all))
                 }
             }
             iccoaDevices(iccoaState, showAll = iccoaShowAll)
@@ -565,7 +565,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
     }
     Column(Modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp))
-        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = app.ft.ui.theme.sectionCardColor())) {
             Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
         }
     }

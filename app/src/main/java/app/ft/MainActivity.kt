@@ -78,6 +78,7 @@ import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
 import app.ft.ui.home.rememberIccoaConnectionActions
 import app.ft.ui.cars.CarsScreen
+import app.ft.ui.cars.displayName
 import app.ft.ui.car.CarIcons
 import app.ft.core.CarProtocol
 import app.ft.ui.settings.SettingsPage
@@ -319,14 +320,18 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var settingsFromCars by rememberSaveable { mutableStateOf(false) }
+    var carPage by rememberSaveable { mutableStateOf<String?>(null) }
     val profiles by FTApp.instance.cars.state.collectAsState()
     val screenStates = rememberSaveableStateHolder()
     val context = androidx.compose.ui.platform.LocalContext.current
     val iccoaActions = rememberIccoaConnectionActions()
     val inPage = screen == Screen.SETTINGS && settingsPage != null
+    val inCar = screen == Screen.CARS && carPage != null
+    val inSub = inPage || inCar
     fun back() {
         if (inPage && settingsFromCars) { screen = Screen.CARS; settingsPage = null }
         else if (inPage) settingsPage = null
+        else if (inCar) carPage = null
         else screen = Screen.HOME
     }
     BackHandler(enabled = screen != Screen.HOME) { back() }
@@ -338,7 +343,12 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
         topBar = {
             TopAppBar(
                 title = {
-                    val heading = stringResource(if (inPage) settingsPage?.title ?: screen.label else screen.label)
+                    val carHeading = when {
+                        !inCar -> null
+                        carPage == app.ft.ui.cars.NEW_CAR -> stringResource(R.string.cars_add)
+                        else -> profiles.profiles.firstOrNull { it.id == carPage }?.let { it.displayName() }
+                    }
+                    val heading = carHeading ?: stringResource(if (inPage) settingsPage?.title ?: screen.label else screen.label)
                     AnimatedContent(targetState = screen to heading, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { (s, text) ->
                         if (s == Screen.HOME) Image(
                             painter = painterResource(R.drawable.ft_logo),
@@ -349,7 +359,7 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
                     }
                 },
                 navigationIcon = {
-                    if (inPage) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back)) }
+                    if (inSub) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back)) }
                 },
                 actions = {
                     if (screen == Screen.LOG) {
@@ -362,13 +372,14 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
             )
         },
         bottomBar = {
-            AnimatedVisibility(visible = !inPage, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            AnimatedVisibility(visible = !inSub, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                 NavigationBar {
                     Screen.entries.forEach { s ->
                         NavigationBarItem(
                             selected = screen == s,
                             onClick = {
                                 if (s == Screen.SETTINGS) { settingsPage = null; settingsFromCars = false }
+                                if (s == Screen.CARS) carPage = null
                                 screen = s
                             },
                             icon = { Icon(s.icon, contentDescription = stringResource(s.label)) },
@@ -380,23 +391,27 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
         }
     ) { pad ->
         AnimatedContent(
-            targetState = screen to settingsPage,
+            targetState = Triple(screen, settingsPage, if (screen == Screen.CARS || settingsFromCars) carPage else null),
             modifier = Modifier.fillMaxSize(),
             transitionSpec = {
-                val (from, fromPage) = initialState
-                val (to, toPage) = targetState
-                val inSettings = from == Screen.SETTINGS && to == Screen.SETTINGS
+                fun depth(state: Triple<Screen, SettingsPage?, String?>) = when {
+                    state.first == Screen.SETTINGS && state.second != null -> if (state.third != null) 2 else 1
+                    state.first == Screen.CARS && state.third != null -> 1
+                    else -> 0
+                }
+                val from = depth(initialState)
+                val to = depth(targetState)
                 when {
-                    inSettings && fromPage == null && toPage != null ->
+                    to > from ->
                         (slideInHorizontally { it } + fadeIn()) togetherWith (slideOutHorizontally { -it / 4 } + fadeOut())
-                    inSettings && fromPage != null && toPage == null ->
+                    to < from ->
                         (slideInHorizontally { -it / 4 } + fadeIn()) togetherWith (slideOutHorizontally { it } + fadeOut())
                     else -> fadeIn() togetherWith fadeOut()
                 }
             },
             label = "screen"
-        ) { (s, page) ->
-            val stateKey = "${s.name}:${page?.name.orEmpty()}:" +
+        ) { (s, page, car) ->
+            val stateKey = "${s.name}:${page?.name.orEmpty()}:${if (s == Screen.CARS) car.orEmpty() else ""}:" +
                 if (s == Screen.HOME || s == Screen.SETTINGS) profiles.activeId else ""
             screenStates.SaveableStateProvider(stateKey) {
             key(if (s == Screen.HOME || s == Screen.SETTINGS) profiles.activeId else s.name) {
@@ -415,17 +430,19 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
                         settingsPage = SettingsPage.ANDROID_AUTO
                         screen = Screen.SETTINGS
                     },
-                    onOpenCars = { screen = Screen.CARS },
+                    onOpenCars = { carPage = null; screen = Screen.CARS },
                     iccoaConnectionActions = iccoaActions
                 )
                 Screen.CARS -> CarsScreen(pad,
+                    page = car,
+                    onOpen = { carPage = it },
                     onOpenSettings = { settingsPage = it; settingsFromCars = true; screen = Screen.SETTINGS },
                     onConnect = {
                         if (FTApp.instance.prefs.carProtocol == CarProtocol.ICCOA) iccoaActions.start(false)
                         else CarConnection.switchOn(context)
+                        carPage = null
                         screen = Screen.HOME
-                    },
-                    isActive = screen == Screen.CARS)
+                    })
                 Screen.LOG -> DiagnosticsScreen(pad)
                 Screen.SETTINGS -> SettingsScreen(pad, page, onPickAaFile) { settingsPage = it }
             }

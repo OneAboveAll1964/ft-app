@@ -83,6 +83,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -349,13 +350,13 @@ private fun CarRoot(style: CarStyle) {
                         )
                     }
                     Text(
-                        "Касание ${touchCal.step}/4: нажмите точно в центр зелёного круга",
+                        stringResource(R.string.touch_cal_car_step, touchCal.step),
                         color = Color.White,
                         style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 36.dp)
                     )
                     Text(
-                        "Для отмены нажмите в верхнем левом углу экрана",
+                        stringResource(R.string.touch_cal_car_cancel),
                         color = Color.White,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 30.dp)
                     )
@@ -485,11 +486,16 @@ private fun Launcher(state: ScreenState, style: CarStyle, preview: Boolean = fal
     val context = LocalContext.current
     val hasInfo = style.showClock || style.showLink || style.showCarHome || style.showMusic || style.showAa || style.widgets.isNotEmpty()
     val info: @Composable ColumnScope.() -> Unit = {
-        if (style.showClock) Clock(style.clock24)
-        if (style.showLink) LinkChip(state, preview)
-        if (style.showCarHome) CarHomeButton { if (!preview) CarControls.goToCarHome() }
-        CarWidgets(style, preview = preview)
-        Spacer(Modifier.weight(1f))
+        // The player and the Android Auto button keep their size and gap; extra widgets scroll instead of pushing them.
+        Column(
+            Modifier.weight(1f).fillMaxWidth().clipToBounds().verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (style.showClock) Clock(style.clock24)
+            if (style.showLink) LinkChip(state, preview)
+            if (style.showCarHome) CarHomeButton { if (!preview) CarControls.goToCarHome() }
+            CarWidgets(style, preview = preview)
+        }
         if (style.showMusic) {
             NowPlayingCard(player, onOpen = { if (!preview) onOpen(CarView.MUSIC, player.track != null && !player.track!!.video) }, interactive = !preview)
         }

@@ -17,7 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -50,14 +49,14 @@ fun DiagnosticsScreen(pad: PaddingValues) {
     val listState = rememberLazyListState()
     LaunchedEffect(shown.size) { if (shown.isNotEmpty()) listState.animateScrollToItem(shown.size - 1) }
     Column(Modifier.fillMaxSize().padding(top = pad.calculateTopPadding())) {
-        TextButton(onClick = {
+        androidx.compose.material3.FilledTonalButton(onClick = {
             AaHeadUnitService.dismissDisconnectHelp()
             systemHelp = true
-        }, modifier = Modifier.padding(horizontal = 8.dp)) {
+        }, modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
             Text(stringResource(R.string.report_system_help))
         }
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text(stringResource(R.string.log_filter_all)) })

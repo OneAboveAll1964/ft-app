@@ -10,6 +10,7 @@ object Helper {
     private const val TAG = "SuperCast"
     const val MAIN = "app.ft.server.Main"
     const val LOG = "/data/local/tmp/ft-helper.log"
+    const val OPEN_BRIDGE = "adb tcpip 5555"
     private const val SHELL_UID = 2000
 
     enum class Adb { STARTED, NOT_ALLOWED, NO_BRIDGE, FAILED }
@@ -24,8 +25,10 @@ object Helper {
     private fun viaEnv(apk: String, token: String): String =
         "env CLASSPATH=$apk app_process / $MAIN token=$token"
 
-    fun computerCommand(token: String): String =
-        "adb shell \"CLASSPATH=\$(pm path app.ft | cut -d: -f2) app_process / $MAIN token=$token &\""
+    fun computerCommand(context: Context, token: String): String {
+        val apk = apkPath(context) ?: "\$(pm path app.ft | cut -d: -f2)"
+        return "adb shell \"rm -f $LOG; CLASSPATH=$apk nohup app_process / $MAIN token=$token >$LOG 2>&1 &\""
+    }
 
     fun running(): Boolean =
         Root.run("pgrep -f $MAIN")?.stdout?.trim()?.isNotEmpty() == true
@@ -38,6 +41,7 @@ object Helper {
         val apk = apkPath(context) ?: return false
         Root.run("pkill -f $MAIN")
         val direct = "nohup ${viaEnv(apk, token)} >$LOG 2>&1 &"
+        Root.run("rm -f $LOG")
         for (command in listOf("su $SHELL_UID -c '$direct'", direct)) {
             Root.run(command)
             if (waitFor(connected)) {
@@ -79,7 +83,12 @@ object Helper {
                 else -> return Adb.NO_BRIDGE
             }
             client.shell("pkill -f $MAIN")
-            client.shell("${run(apk, token)} >$LOG 2>&1 &", waitMs = 2000)
+            client.shell("rm -f $LOG; setsid nohup ${viaEnv(apk, token)} >$LOG 2>&1 </dev/null &", waitMs = 2000)
+            // Closing the bridge at once can kill the child before it has left the shell's session.
+            repeat(24) {
+                if (SuperCast.ready.value) return@repeat
+                Thread.sleep(250)
+            }
             DiagLog.i(TAG, "helper started through the phone's own debug bridge")
             return Adb.STARTED
         } finally {

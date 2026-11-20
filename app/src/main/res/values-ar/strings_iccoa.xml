@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iccoa_msg_connecting_bluetooth">جارٍ الاتصال بـ ICCOA عبر البلوتوث…</string>
+    <string name="iccoa_msg_bluetooth_timeout">انتهت مهلة الاتصال بـ ICCOA عبر البلوتوث</string>
+    <string name="iccoa_msg_bluetooth_connect_failed">تعذّر الاتصال عبر البلوتوث (%1$s)</string>
+    <string name="iccoa_msg_quick_checking">ICCOA Quick: جارٍ التحقق من الهاتف الموثوق…</string>
+    <string name="iccoa_msg_quick_queue_error">QUICK: خطأ في قائمة انتظار البلوتوث</string>
+    <string name="iccoa_msg_quick_not_confirmed">لم يُؤكَّد Quick. أدخل رمز PIN الحالي للسيارة</string>
+    <string name="iccoa_msg_quick_bluetooth_error">QUICK: خطأ في البلوتوث (%1$s)</string>
+    <string name="iccoa_msg_enter_code">أدخل الرمز المكوّن من ست خانات الظاهر على شاشة السيارة</string>
+    <string name="iccoa_msg_checking_code">جارٍ التحقق من رمز ICCOA…</string>
+    <string name="iccoa_msg_code_send_failed">تعذّر إرسال الرمز. أدخل رمز PIN الحالي</string>
+    <string name="iccoa_msg_car_no_answer">لم تستجب السيارة. أدخل الرمز الحالي الظاهر على شاشتها</string>
+    <string name="iccoa_msg_code_send_error">خطأ في إرسال رمز ICCOA (%1$s)</string>
+    <string name="iccoa_msg_channel_closed">أُغلقت قناة ICCOA %1$d (%2$s)</string>
+    <string name="iccoa_msg_control_queue_full">قائمة انتظار التحكم في ICCOA ممتلئة</string>
+    <string name="iccoa_msg_bluetooth_closed">أُغلق اتصال البلوتوث لـ ICCOA (status=%1$d)</string>
+    <string name="iccoa_msg_no_channel">لم يوفّر الجهاز قناة ICCOA (%1$s)</string>
+    <string name="iccoa_msg_code_rejected">رفضت السيارة الرمز (status=%1$d)</string>
+    <string name="iccoa_msg_services_request_failed">تعذّر طلب خدمات ICCOA</string>
+    <string name="iccoa_msg_services_error">خطأ في خدمات البلوتوث (%1$s)</string>
+    <string name="iccoa_msg_wifi_direct_unsupported">طلبت السيارة Wi-Fi Direct. هذا الإصدار من ICCOA يدعم وضع نقطة الوصول (AP) فقط</string>
+    <string name="iccoa_msg_wifi_params_invalid">إعدادات Wi-Fi غير صالحة لـ ICCOA (%1$s)</string>
+    <string name="iccoa_msg_wifi_unavailable">أُلغي الاتصال بشبكة Wi-Fi للسيارة أو انتهت مهلته</string>
+    <string name="iccoa_msg_wifi_lost">انقطع الاتصال بشبكة Wi-Fi للسيارة</string>
+    <string name="iccoa_msg_wifi_connecting">جارٍ الاتصال بشبكة Wi-Fi للسيارة. وافق على طلب Android</string>
+    <string name="iccoa_msg_wifi_denied">منع Android الاتصال بشبكة Wi-Fi للسيارة (%1$s)</string>
+    <string name="iccoa_msg_wifi_request_failed">تعذّر طلب شبكة Wi-Fi للسيارة (%1$s)</string>
+    <string name="iccoa_msg_wifi_no_gateway">اتصلت شبكة Wi-Fi للسيارة، لكن لم يُستلم عنوان بوابة موثّق</string>
+    <string name="iccoa_msg_wifi_no_ipv4">لم يُستلم عنوان IPv4 من شبكة Wi-Fi للسيارة</string>
+    <string name="iccoa_msg_wifi_waiting_gateway">اتصلت شبكة Wi-Fi. بانتظار عنوان بوابة السيارة…</string>
+    <string name="iccoa_msg_no_auth_method">لا توجد طريقة مؤكَّدة لتسجيل الدخول إلى ICCOA</string>
+    <string name="iccoa_msg_authenticating">جارٍ التحقق من ICCOA…</string>
+    <string name="iccoa_msg_auth_done">ICCOA: اكتمل التحقق، بانتظار قنوات السيارة…</string>
+    <string name="iccoa_msg_no_control_channel">لم تفتح السيارة قناة التحكم في ICCOA</string>
+    <string name="iccoa_msg_hint_pin_mac">لم يتطابق الرمز مع رد السيارة. ابدأ اتصالًا جديدًا بالرمز الحالي</string>
+    <string name="iccoa_msg_hint_new_pin">طلبت السيارة اتصالًا جديدًا برمز</string>
+    <string name="iccoa_msg_hint_confirm_on_car">طلبت السيارة التأكيد على شاشتها</string>
+    <string name="iccoa_msg_hint_car_error">أبلغت السيارة عن خطأ داخلي</string>
+    <string name="iccoa_msg_hint_mode_rejected">رفضت السيارة وضع الاتصال</string>
+    <string name="iccoa_msg_hint_rejected">رفضت السيارة الاتصال</string>
+    <string name="iccoa_msg_hint_send_report">أرسل تقريرًا من FT</string>
+    <string name="iccoa_msg_auth_failed">فشل ICCOA في المرحلة %1$s (%2$s). %3$s</string>
+    <string name="iccoa_msg_wifi_changed">تغيّرت شبكة Wi-Fi للسيارة. جارٍ إعادة الاتصال بـ ICCOA…</string>
+    <string name="iccoa_msg_car_ended">أنهت السيارة اتصال ICCOA</string>
+    <string name="iccoa_msg_send_timeout">انتهت مهلة إرسال بيانات ICCOA</string>
+    <string name="iccoa_msg_connection_error">خطأ في اتصال ICCOA (%1$s)</string>
+    <string name="iccoa_msg_reconnecting">%1$s. إعادة الاتصال %2$d/%3$d</string>
+    <string name="iccoa_msg_retries_stopped">%1$s. توقفت المحاولات التلقائية</string>
+    <string name="iccoa_msg_notification_title">FT · ICCOA Carlink</string>
+    <string name="iccoa_msg_notification_text">عرض لاسلكي تجريبي</string>
+    <string name="iccoa_msg_forget_body">هل تريد حذف مفتاح السيارة المحفوظ ورمز PIN القديم والجهاز المحدد؟ سيتطلب الاتصال التالي رمزًا جديدًا من شاشة السيارة.</string>
+    <string name="iccoa_msg_forget_confirm">إزالة الاقتران</string>
+    <string name="iccoa_msg_cancel">إلغاء</string>
+    <string name="iccoa_msg_forget">نسيان السيارة الموثوقة</string>
+    <string name="iccoa_msg_normal_new_pin">Normal · رمز PIN جديد</string>
+    <string name="iccoa_msg_carlink_only">CarLink / ICCOA فقط</string>
+    <string name="iccoa_msg_show_all">عرض كل أجهزة البلوتوث</string>
+    <string name="iccoa_msg_timeout">انتهت مهلة الاتصال. افتح ICCOA على السيارة وحاول مرة أخرى.</string>
+    <string name="iccoa_msg_linked">تم ربط ICCOA · بانتظار الفيديو · %1$d×%2$d · %3$d fps</string>
+</resources>

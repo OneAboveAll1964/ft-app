@@ -143,10 +143,6 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         when {
-            page == null && !modern -> {
-                items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
-                item { MadeBy() }
-            }
             page == null -> {
                 items(listOf(
                     listOf(SettingsPage.LOOK, SettingsPage.CAR_SCREEN, SettingsPage.PICTURE, SettingsPage.SOUND),
@@ -155,12 +151,14 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
                 )) { pages ->
                     Card(
                         shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (modern) app.ft.ui.theme.sectionCardColor() else MaterialTheme.colorScheme.surfaceContainer
+                        )
                     ) {
                         pages.forEachIndexed { index, p ->
                             PageButton(p) { onOpen(p) }
                             if (index < pages.lastIndex) HorizontalDivider(
-                                modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                                modifier = Modifier.padding(start = if (modern) 68.dp else 76.dp, end = 16.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
                         }
@@ -756,20 +754,14 @@ private fun wheelIcon(action: Int): ImageVector = when (action) {
 
 @Composable
 private fun ClassicPageButton(page: SettingsPage, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-                Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
-            }
-            Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+            Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
         }
+        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

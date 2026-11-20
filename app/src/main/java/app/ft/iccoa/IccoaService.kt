@@ -188,7 +188,7 @@ class IccoaService : Service() {
         }
     }
     private val connectionTimeout = Runnable {
-        if (_state.value.connecting) connectionFailed("Connection timed out. Open ICCOA on the car and try again.")
+        if (_state.value.connecting) connectionFailed(getString(app.ft.R.string.iccoa_msg_timeout))
     }
 
     private var bluetoothCalls: app.ft.core.BluetoothCalls? = null
@@ -517,7 +517,7 @@ class IccoaService : Service() {
         cancelRecoveryScan()
         dropRecovery.onConnected()
         _state.update { it.copy(connecting = false, connected = true, pinRequired = false,
-            status = "ICCOA linked · awaiting H.264 video · ${plan.streamWidth}×${plan.streamHeight} · ${plan.fps} fps") }
+            status = getString(app.ft.R.string.iccoa_msg_linked, plan.streamWidth, plan.streamHeight, plan.fps)) }
     }
 
     /** Reference 7.62 phone state: no experimental call-state field is advertised. */
@@ -578,11 +578,11 @@ class IccoaService : Service() {
         if (number != null) {
             // A new scan is mandatory: Toyota can rotate its BLE address.
             autoConnectAttempted = false
-            _state.update { it.copy(status = "$reason. Переподключение $number/${IccoaDropRecovery.MAX_ATTEMPTS}") }
+            _state.update { it.copy(status = getString(R.string.iccoa_msg_reconnecting, reason, number, IccoaDropRecovery.MAX_ATTEMPTS)) }
             scheduleRecoveryScan(number)
         } else {
             autoConnectAttempted = true
-            _state.update { it.copy(status = "$reason. Автоматические попытки остановлены") }
+            _state.update { it.copy(status = getString(R.string.iccoa_msg_retries_stopped, reason)) }
             // A manual receiver selection is still possible after any failure.
             if (_state.value.running) discovery?.start()
         }
@@ -628,7 +628,7 @@ class IccoaService : Service() {
         val launch = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val note = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_tile_ft)
-            .setContentTitle("FT · ICCOA Carlink").setContentText("Experimental wireless projection")
+            .setContentTitle(getString(R.string.iccoa_msg_notification_title)).setContentText(getString(R.string.iccoa_msg_notification_text))
             .setContentIntent(launch).setOngoing(true).build()
         val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
             (if (withProjection) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)

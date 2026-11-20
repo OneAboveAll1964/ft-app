@@ -56,16 +56,16 @@ internal fun CarIllustration(@DrawableRes drawable: Int, modifier: Modifier = Mo
 
 @Composable
 internal fun CarsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth()) {
         Text(
             title,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp)
         )
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            colors = CardDefaults.cardColors(containerColor = app.ft.ui.theme.sectionCardColor())
         ) {
             Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
         }

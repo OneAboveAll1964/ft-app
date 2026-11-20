@@ -398,7 +398,7 @@
     <string name="supercast_way_root">With root, by itself</string>
     <string name="supercast_way_root_body">Your phone is rooted, so FT sets this up every drive with nothing for you to do.</string>
     <string name="supercast_way_wireless">With the phone\'s own debug bridge</string>
-    <string name="supercast_way_wireless_body">If debugging is already switched on and you have allowed FT on it once, FT sets itself up with no computer. Android will not let FT ask for that permission on its own, so the first time still needs the computer step below.</string>
+    <string name="supercast_way_wireless_body">Plug the phone into a computer with USB debugging on and run the line below once. Then tap Set it up now and allow FT on the phone\'s prompt. After that FT sets itself up with no computer until the phone restarts.</string>
     <string name="supercast_way_computer">From a computer, once</string>
     <string name="supercast_way_computer_body">Plug the phone into a computer with USB debugging on and run the one line below. It needs no files and sets everything up. Run it again after a phone restart.</string>
     <string name="supercast_copy_command">Copy the command</string>
@@ -525,4 +525,12 @@
     <string name="aa_phone_screen_active">Screen control is active. Press the power button to turn the screen on temporarily.</string>
     <string name="aa_phone_screen_waiting">The helper is ready. The screen will turn off when Android Auto connects.</string>
     <string name="aa_phone_screen_failed">Could not control the phone screen. Check helper permissions and firmware compatibility, then try again.</string>
+    <string name="touch_cal_title">Toyota screen calibration</string>
+    <string name="touch_cal_step">On the car screen, tap the exact centre of the green circle. Point %1$d of 4.</string>
+    <string name="touch_cal_about">Start from the phone: four points calibrate horizontal and vertical touches.</string>
+    <string name="touch_cal_start">Calibrate touches on the car</string>
+    <string name="touch_cal_restart">Start again</string>
+    <string name="touch_cal_reset">Reset calibration</string>
+    <string name="touch_cal_car_step">Touch %1$d/4: tap the exact centre of the green circle</string>
+    <string name="touch_cal_car_cancel">To cancel, tap the top left corner of the screen</string>
 </resources>

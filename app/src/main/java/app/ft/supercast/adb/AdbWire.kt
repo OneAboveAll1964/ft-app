@@ -15,11 +15,11 @@ data class AdbMessage(val command: Int, val arg0: Int, val arg1: Int, val payloa
 
 object AdbWire {
     const val CNXN = 0x4E584E43
-    const val AUTH = 0x41555448
-    const val OPEN = 0x4F50454E
-    const val OKAY = 0x4F4B4159
-    const val CLSE = 0x434C5345
-    const val WRTE = 0x57525445
+    const val AUTH = 0x48545541
+    const val OPEN = 0x4E45504F
+    const val OKAY = 0x59414B4F
+    const val CLSE = 0x45534C43
+    const val WRTE = 0x45545257
 
     const val AUTH_TOKEN = 1
     const val AUTH_SIGNATURE = 2
@@ -108,6 +108,21 @@ object AdbWire {
         out[2 + padding] = 0x00
         System.arraycopy(digest, 0, out, 3 + padding, digest.size)
         return out
+    }
+
+    /** Joins the stdout and stderr packets of a shell v2 stream. */
+    fun shellOutput(stream: ByteArray): String {
+        val buffer = ByteBuffer.wrap(stream).order(ByteOrder.LITTLE_ENDIAN)
+        val out = java.io.ByteArrayOutputStream()
+        while (buffer.remaining() >= 5) {
+            val kind = buffer.get().toInt()
+            val length = buffer.int
+            if (length < 0 || length > buffer.remaining()) break
+            val data = ByteArray(length)
+            buffer.get(data)
+            if (kind == 1 || kind == 2) out.write(data)
+        }
+        return String(out.toByteArray())
     }
 
     internal fun littleEndian(value: BigInteger): ByteArray {

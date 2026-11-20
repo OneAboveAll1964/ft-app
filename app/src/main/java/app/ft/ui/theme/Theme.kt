@@ -15,6 +15,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import app.ft.core.Looks
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
@@ -167,3 +169,10 @@ private fun TextStyle.digitsCentered(resolver: FontFamily.Resolver, density: Den
 private fun Int.belowRatio(spare: Int) = (1f - (this - 0.5f) / spare).coerceIn(0f, 1f)
 
 private const val DIGITS = "0123456789"
+
+/** Grouped cards need a visible step from the background, which surfaceContainerLow lacks in light themes. */
+@Composable
+fun sectionCardColor(): Color {
+    val scheme = MaterialTheme.colorScheme
+    return if (scheme.background.luminance() > 0.5f) scheme.surfaceContainer else scheme.surfaceContainerLow
+}

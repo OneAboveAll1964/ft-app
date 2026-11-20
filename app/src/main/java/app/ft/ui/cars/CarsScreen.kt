@@ -1,6 +1,5 @@
 package app.ft.ui.cars
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -53,16 +52,17 @@ import app.ft.ui.settings.SettingsPage
 @Composable
 fun CarsScreen(
     pad: PaddingValues,
+    page: String?,
+    onOpen: (String?) -> Unit,
     onOpenSettings: (SettingsPage) -> Unit,
-    onConnect: () -> Unit,
-    isActive: Boolean = true
+    onConnect: () -> Unit
 ) {
     val context = LocalContext.current
     val cars = FTApp.instance.cars
     val state by cars.state.collectAsStateWithLifecycle()
     val busy by CarConnection.busy.collectAsStateWithLifecycle()
-    var detailId by rememberSaveable { mutableStateOf<String?>(null) }
-    var adding by rememberSaveable { mutableStateOf(false) }
+    val adding = page == NEW_CAR
+    val detailId = page.takeUnless { adding }
     var editName by rememberSaveable { mutableStateOf(false) }
     var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
     var failed by rememberSaveable { mutableStateOf(false) }
@@ -76,12 +76,6 @@ fun CarsScreen(
         return success
     }
 
-    BackHandler(isActive && (adding || profile != null)) {
-        if (adding) adding = false else detailId = null
-        editName = false
-        failed = false
-    }
-
     val contentPadding = PaddingValues(
         start = 16.dp,
         end = 16.dp,
@@ -93,15 +87,11 @@ fun CarsScreen(
             contentPadding = contentPadding,
             busy = busy,
             failed = failed,
-            onBack = { adding = false; failed = false },
             onDisconnect = { CarConnection.switchOff(context) },
             onCreate = { name, model, protocol, mode ->
                 val id = if (CarConnection.isBusy) null else cars.create(name, model, protocol, mode)
                 failed = id == null
-                if (id != null) {
-                    adding = false
-                    detailId = id
-                }
+                if (id != null) onOpen(id)
             }
         )
     } else {
@@ -115,27 +105,24 @@ fun CarsScreen(
                 item {
                     Text(stringResource(R.string.cars_about), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                item {
+                    FilledTonalButton(onClick = { failed = false; onOpen(NEW_CAR) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(20.dp))
+                        Text(stringResource(R.string.cars_add))
+                    }
+                }
                 if (busy) item { ConnectionLock { CarConnection.switchOff(context) } }
                 if (failed) item { OperationError() }
                 items(state.profiles, key = { it.id }) { car ->
                     CarProfileCard(car, car.id == state.activeId) {
-                        detailId = car.id
                         failed = false
-                    }
-                }
-                item {
-                    FilledTonalButton(onClick = { adding = true; failed = false }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(20.dp))
-                        Text(stringResource(R.string.cars_add))
+                        onOpen(car.id)
                     }
                 }
             } else {
                 val selected = profile.id == state.activeId
                 item {
-                    BackToCars(onClick = { detailId = null; failed = false })
-                }
-                item {
-                    Card(shape = RoundedCornerShape(24.dp)) {
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = app.ft.ui.theme.sectionCardColor())) {
                         CarIllustration(profile.model.illustration)
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(profile.displayName(), style = MaterialTheme.typography.headlineSmall)
@@ -268,7 +255,7 @@ fun CarsScreen(
                 TextButton(onClick = {
                     val success = !CarConnection.isBusy && cars.delete(deleting.id)
                     failed = !success
-                    if (success) detailId = null
+                    if (success) onOpen(null)
                     deleteId = null
                 }, enabled = !busy && deleting.id != state.activeId) { Text(stringResource(R.string.cars_delete)) }
             },
@@ -282,7 +269,7 @@ private fun CarProfileCard(profile: CarProfile, selected: Boolean, onClick: () -
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        colors = CardDefaults.cardColors(containerColor = app.ft.ui.theme.sectionCardColor())
     ) {
         CarIllustration(profile.model.illustration)
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -301,7 +288,6 @@ private fun CreateCarScreen(
     contentPadding: PaddingValues,
     busy: Boolean,
     failed: Boolean,
-    onBack: () -> Unit,
     onDisconnect: () -> Unit,
     onCreate: (String, CarModel, CarProtocol, Int) -> Unit
 ) {
@@ -314,12 +300,10 @@ private fun CreateCarScreen(
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item { BackToCars(onBack) }
-        item { Text(stringResource(R.string.cars_add), style = MaterialTheme.typography.headlineSmall) }
         if (busy) item { ConnectionLock(onDisconnect) }
         if (failed) item { OperationError() }
         item {
-            Card(shape = RoundedCornerShape(24.dp)) { CarIllustration(model.illustration) }
+            Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = app.ft.ui.theme.sectionCardColor())) { CarIllustration(model.illustration) }
         }
         item {
             CarsSection(stringResource(R.string.cars_profile)) {
@@ -383,14 +367,6 @@ private fun CarNameDialog(profile: CarProfile, onDismiss: () -> Unit, onSave: (S
 }
 
 @Composable
-private fun BackToCars(onClick: () -> Unit) {
-    TextButton(onClick = onClick) {
-        Icon(CarIcons.Back, contentDescription = null, modifier = Modifier.padding(end = 8.dp).size(20.dp))
-        Text(stringResource(R.string.action_back))
-    }
-}
-
-@Composable
 private fun ConnectionLock(onDisconnect: () -> Unit) {
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -412,7 +388,9 @@ private fun OperationError() {
 @Composable
 private fun transportOptions() = (0..2).map { Option(stringResource(transportTitle(it))) }
 
+const val NEW_CAR = "+new"
+
 @Composable
-private fun CarProfile.displayName(): String = if (id == CarProfiles.LEGACY_ID && name == CarProfiles.DEFAULT_NAME) stringResource(R.string.cars_my_car) else name
+internal fun CarProfile.displayName(): String = if (id == CarProfiles.LEGACY_ID && name == CarProfiles.DEFAULT_NAME) stringResource(R.string.cars_my_car) else name
 
 private val carSettingsPages = listOf(SettingsPage.CAR, SettingsPage.PICTURE, SettingsPage.SOUND, SettingsPage.CAR_SCREEN, SettingsPage.ANDROID_AUTO)

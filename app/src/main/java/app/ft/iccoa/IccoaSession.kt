@@ -20,6 +20,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import app.ft.R
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
 import org.json.JSONObject
@@ -117,7 +118,7 @@ class IccoaSession(
         current = attempt
         post(attempt) {
             try {
-                status(attempt, "Подключение ICCOA по Bluetooth…")
+                status(attempt, context.getString(R.string.iccoa_msg_connecting_bluetooth))
                 val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
                 require(adapter?.isEnabled == true) { "Bluetooth disabled" }
                 synchronized(attempt) {
@@ -129,9 +130,9 @@ class IccoaSession(
                 later(attempt, 20_000) {
                     // pinReady becomes false again while a submitted PIN is in flight.
                     // The initial Bluetooth watchdog must stop once bootstrap is ready.
-                    if (!attempt.servicesHandled && !attempt.wifiRequested) fail(attempt, "Тайм-аут подключения ICCOA по Bluetooth", closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
+                    if (!attempt.servicesHandled && !attempt.wifiRequested) fail(attempt, context.getString(R.string.iccoa_msg_bluetooth_timeout), closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
                 }
-            } catch (e: Exception) { fail(attempt, "Не удалось подключиться по Bluetooth (${e.javaClass.simpleName})", closeReason = IccoaCloseReason.TRANSPORT_FAILURE) }
+            } catch (e: Exception) { fail(attempt, context.getString(R.string.iccoa_msg_bluetooth_connect_failed, e.javaClass.simpleName), closeReason = IccoaCloseReason.TRANSPORT_FAILURE) }
         }
     }
 
@@ -149,7 +150,7 @@ class IccoaSession(
             attempt.pinnedCarIdentity = pinned.copyOf()
             val revision = ++attempt.pinAttempt
             attempt.serverInfo.reset()
-            status(attempt, "ICCOA Quick: проверка доверенного телефона…")
+            status(attempt, context.getString(R.string.iccoa_msg_quick_checking))
             val queued = if (Build.VERSION.SDK_INT >= 33) {
                 gatt.writeCharacteristic(characteristic, payload, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
             } else {
@@ -161,17 +162,17 @@ class IccoaSession(
             }
             payload.fill(0)
             if (!queued) {
-                fail(attempt, "QUICK: ошибка очереди Bluetooth")
+                fail(attempt, context.getString(R.string.iccoa_msg_quick_queue_error))
                 return@post
             }
             later(attempt, 12_000) {
                 if (!attempt.wifiRequested && revision == attempt.pinAttempt) {
                     // An absent BLE response is ambiguous, not a revocation of trust.
-                    requestPin(attempt, "Quick не подтверждён. Введите текущий PIN автомобиля")
+                    requestPin(attempt, context.getString(R.string.iccoa_msg_quick_not_confirmed))
                 }
             }
         } catch (e: Exception) {
-            fail(attempt, "QUICK: ошибка Bluetooth (" + e.javaClass.simpleName + ")")
+            fail(attempt, context.getString(R.string.iccoa_msg_quick_bluetooth_error, e.javaClass.simpleName))
         }
     }
 
@@ -179,7 +180,7 @@ class IccoaSession(
         val attempt = current ?: return
         post(attempt) {
             if (!pin.matches(Regex("[0-9]{6}"))) {
-                status(attempt, "Введите шестизначный код с экрана автомобиля")
+                status(attempt, context.getString(R.string.iccoa_msg_enter_code))
                 onPinRequired()
                 return@post
             }
@@ -196,7 +197,7 @@ class IccoaSession(
                 attempt.pinnedCarIdentity = null
                 val revision = ++attempt.pinAttempt
                 attempt.serverInfo.reset()
-                status(attempt, "Проверка кода ICCOA…")
+                status(attempt, context.getString(R.string.iccoa_msg_checking_code))
                 val accepted = if (Build.VERSION.SDK_INT >= 33) {
                     gatt.writeCharacteristic(characteristic, payload, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
                 } else {
@@ -208,16 +209,16 @@ class IccoaSession(
                 }
                 payload.fill(0)
                 if (!accepted) {
-                    requestPin(attempt, "Не удалось отправить код. Введите текущий PIN")
+                    requestPin(attempt, context.getString(R.string.iccoa_msg_code_send_failed))
                     return@post
                 }
                 later(attempt, 12_000) {
                     if (!attempt.wifiRequested && revision == attempt.pinAttempt) {
                         // A silent BLE response is ambiguous: no automatic replay or key removal.
-                        requestPin(attempt, "Автомобиль не ответил. Введите текущий код с его экрана")
+                        requestPin(attempt, context.getString(R.string.iccoa_msg_car_no_answer))
                     }
                 }
-            } catch (e: Exception) { fail(attempt, "Ошибка отправки кода ICCOA (${e.javaClass.simpleName})",
+            } catch (e: Exception) { fail(attempt, context.getString(R.string.iccoa_msg_code_send_error, e.javaClass.simpleName),
                 closeReason = IccoaFailurePolicy.channel(e)) }
         }
     }
@@ -256,7 +257,7 @@ class IccoaSession(
                     }
                 } catch (e: Exception) {
                     if (active(attempt)) DiagLog.w("ICCOA", "SEND category=$category method=$method ${IccoaTransportError.describe(e)}")
-                    fail(attempt, "Канал ICCOA $category закрыт (${e.javaClass.simpleName})", closeReason = IccoaFailurePolicy.channel(e))
+                    fail(attempt, context.getString(R.string.iccoa_msg_channel_closed, category, e.javaClass.simpleName), closeReason = IccoaFailurePolicy.channel(e))
                 } finally {
                     copy.fill(0)
                     if (category == 4) attempt.audioWritingAt = 0 else attempt.controlWritingAt = 0
@@ -266,7 +267,7 @@ class IccoaSession(
         } catch (_: RejectedExecutionException) {
             copy.fill(0)
             // Audio backpressure drops one packet; control messages must not disappear silently.
-            if (category != 4 && active(attempt)) fail(attempt, "Переполнена очередь управления ICCOA")
+            if (category != 4 && active(attempt)) fail(attempt, context.getString(R.string.iccoa_msg_control_queue_full))
             return false
         }
     }
@@ -279,7 +280,7 @@ class IccoaSession(
                 if (!gatt.requestMtu(512)) discover(attempt, gatt)
                 later(attempt, 2_000) { discover(attempt, gatt) }
             } else if (!attempt.wifiRequested && (status != BluetoothGatt.GATT_SUCCESS || newState == BluetoothProfile.STATE_DISCONNECTED)) {
-                fail(attempt, "Соединение Bluetooth ICCOA закрыто (status=$status)", closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
+                fail(attempt, context.getString(R.string.iccoa_msg_bluetooth_closed, status), closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
             }
         }
 
@@ -310,7 +311,7 @@ class IccoaSession(
                     DiagLog.i("ICCOA", "Quick Auth: pinned OEM car identity; no saved PIN replay")
                     submitQuick(attempt, pinned)
                 } else requestPin(attempt)
-            } catch (e: Exception) { fail(attempt, "Устройство не предоставило канал ICCOA (${e.javaClass.simpleName})") }
+            } catch (e: Exception) { fail(attempt, context.getString(R.string.iccoa_msg_no_channel, e.javaClass.simpleName)) }
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) = post(attempt) {
@@ -318,9 +319,9 @@ class IccoaSession(
             DiagLog.i("ICCOA", "GATT characteristic write uuid=${characteristic.uuid} status=$status")
             if (gatt === attempt.gatt && characteristic.uuid == CLIENT_INFO && status != BluetoothGatt.GATT_SUCCESS && !attempt.wifiRequested) {
                 if (attempt.quickMode) {
-                    requestPin(attempt, "Quick не подтверждён. Введите текущий PIN автомобиля")
+                    requestPin(attempt, context.getString(R.string.iccoa_msg_quick_not_confirmed))
                 } else {
-                    requestPin(attempt, "Автомобиль отклонил запись кода (status=$status)")
+                    requestPin(attempt, context.getString(R.string.iccoa_msg_code_rejected, status))
                 }
             }
         }
@@ -341,11 +342,11 @@ class IccoaSession(
         if (gatt !== attempt.gatt || attempt.servicesRequested) return
         attempt.servicesRequested = true
         try {
-            if (!gatt.discoverServices()) fail(attempt, "Не удалось запросить службы ICCOA")
-        } catch (e: Exception) { fail(attempt, "Ошибка служб Bluetooth (${e.javaClass.simpleName})") }
+            if (!gatt.discoverServices()) fail(attempt, context.getString(R.string.iccoa_msg_services_request_failed))
+        } catch (e: Exception) { fail(attempt, context.getString(R.string.iccoa_msg_services_error, e.javaClass.simpleName)) }
     }
 
-    private fun requestPin(attempt: Attempt, message: String = "Введите шестизначный код с экрана автомобиля") {
+    private fun requestPin(attempt: Attempt, message: String = context.getString(R.string.iccoa_msg_enter_code)) {
         attempt.pin = null
         attempt.quickMode = false
         attempt.pinnedCarIdentity = null
@@ -371,8 +372,8 @@ class IccoaSession(
             joinWifi(attempt, info)
         } catch (e: Exception) {
             fail(attempt, if (e.message == "P2P_UNSUPPORTED")
-                "Автомобиль запросил Wi-Fi Direct. Эта версия ICCOA поддерживает только режим точки доступа (AP)"
-            else "Некорректные параметры Wi-Fi ICCOA (${e.javaClass.simpleName})")
+                context.getString(R.string.iccoa_msg_wifi_direct_unsupported)
+            else context.getString(R.string.iccoa_msg_wifi_params_invalid, e.javaClass.simpleName))
         } finally { fragment.fill(0) }
     }
 
@@ -392,30 +393,30 @@ class IccoaSession(
             override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) = post(attempt) {
                 if (attempt.networkGate.isCurrent(network)) networkReady(attempt, network, properties)
             }
-            override fun onUnavailable() { fail(attempt, "Подключение к Wi-Fi автомобиля отменено или истёк тайм-аут") }
+            override fun onUnavailable() { fail(attempt, context.getString(R.string.iccoa_msg_wifi_unavailable)) }
             override fun onLost(network: Network) = post(attempt) {
                 if (attempt.networkGate.onLost(network))
-                    fail(attempt, "Соединение с Wi-Fi автомобиля потеряно",
+                    fail(attempt, context.getString(R.string.iccoa_msg_wifi_lost),
                         closeReason = IccoaCloseReason.TRANSPORT_FAILURE,
                         shouldFail = { attempt.networkGate.isUnreplacedLoss(network) })
             }
         }
         attempt.wifiRequested = true
         attempt.networkCallback = callback
-        status(attempt, "Подключение к Wi-Fi автомобиля. Подтвердите запрос Android")
+        status(attempt, context.getString(R.string.iccoa_msg_wifi_connecting))
         try {
             connectivity.requestNetwork(request, callback, 60_000)
         } catch (e: SecurityException) {
-            fail(attempt, "Android запретил подключение к Wi-Fi автомобиля (SecurityException)")
+            fail(attempt, context.getString(R.string.iccoa_msg_wifi_denied, "SecurityException"))
             return
         } catch (e: Exception) {
-            fail(attempt, "Не удалось запросить Wi-Fi автомобиля (${e.javaClass.simpleName})", closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
+            fail(attempt, context.getString(R.string.iccoa_msg_wifi_request_failed, e.javaClass.simpleName), closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
             return
         }
         later(attempt, 65_000) {
             if (!attempt.authStarted) fail(attempt, if (attempt.hasWifiAddress)
-                "Wi-Fi автомобиля подключён, но не получен проверенный адрес шлюза"
-            else "Не получен IPv4-адрес Wi-Fi автомобиля", closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
+                context.getString(R.string.iccoa_msg_wifi_no_gateway)
+            else context.getString(R.string.iccoa_msg_wifi_no_ipv4), closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
         }
     }
 
@@ -438,7 +439,7 @@ class IccoaSession(
         if (peer == null) {
             if (!attempt.gatewayRetryScheduled) {
                 attempt.gatewayRetryScheduled = true
-                status(attempt, "Wi-Fi подключён. Ожидание адреса шлюза автомобиля…")
+                status(attempt, context.getString(R.string.iccoa_msg_wifi_waiting_gateway))
                 later(attempt, 1_000) {
                     attempt.gatewayRetryScheduled = false
                     post(attempt) {
@@ -452,12 +453,12 @@ class IccoaSession(
         val pin = attempt.pin
         val pinned = attempt.pinnedCarIdentity?.copyOf()
         if (pin == null && pinned == null)
-            return fail(attempt, "Нет подтверждённого способа авторизации ICCOA")
+            return fail(attempt, context.getString(R.string.iccoa_msg_no_auth_method))
         attempt.authStarted = true
         attempt.network = network
         // Retain the fresh PIN only within this attempt until signed auth succeeds;
         // a replacement Network may need to repeat the same in-flight handshake.
-        status(attempt, "Проверка подлинности ICCOA…")
+        status(attempt, context.getString(R.string.iccoa_msg_authenticating))
         worker(attempt) { authenticate(attempt, network, local, peer, pin, pinned) }
     }
 
@@ -519,9 +520,9 @@ class IccoaSession(
                 attempt.pendingTrustedCarIdentity = verifiedCarIdentity.copyOf()
             }
             if (attempt.trustedCommitGate.onConfirmSent()) confirmTrustedCarAfterControl(attempt)
-            status(attempt, "ICCOA: аутентификация завершена, ожидание каналов автомобиля…")
+            status(attempt, context.getString(R.string.iccoa_msg_auth_done))
             later(attempt, 25_000) {
-                if (attempt.control == null) fail(attempt, "Автомобиль не открыл канал управления ICCOA", closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
+                if (attempt.control == null) fail(attempt, context.getString(R.string.iccoa_msg_no_control_channel), closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
             }
             watchWrites(attempt)
             // Auth is a bootstrap lane: receivers may close it after confirmation.
@@ -538,17 +539,17 @@ class IccoaSession(
                 ?.let { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }.orEmpty()
             DiagLog.w("ICCOA", "AUTH failed stage=$stage reason=$reason at=$location")
             val hint = when ((e as? IccoaHandshakeException)?.reason) {
-                IccoaHandshakeException.Reason.PIN_MAC -> "Код и ответ автомобиля не совпали. Начните новое подключение с текущим кодом"
+                IccoaHandshakeException.Reason.PIN_MAC -> context.getString(R.string.iccoa_msg_hint_pin_mac)
                 IccoaHandshakeException.Reason.RESPONSE_RESULT -> when (e.result) {
-                    1L -> "Автомобиль запросил новое подключение с кодом"
-                    2L -> "Автомобиль запросил подтверждение на своём экране"
-                    3L -> "Автомобиль сообщил о внутренней ошибке"
-                    4L -> "Автомобиль отклонил режим подключения"
-                    else -> "Автомобиль отклонил подключение"
+                    1L -> context.getString(R.string.iccoa_msg_hint_new_pin)
+                    2L -> context.getString(R.string.iccoa_msg_hint_confirm_on_car)
+                    3L -> context.getString(R.string.iccoa_msg_hint_car_error)
+                    4L -> context.getString(R.string.iccoa_msg_hint_mode_rejected)
+                    else -> context.getString(R.string.iccoa_msg_hint_rejected)
                 }
-                else -> "Отправьте отчёт из FT"
+                else -> context.getString(R.string.iccoa_msg_hint_send_report)
             }
-            fail(attempt, "Сбой ICCOA на этапе $stage ($reason). $hint",
+            fail(attempt, context.getString(R.string.iccoa_msg_auth_failed, stage, reason, hint),
                 closeReason = IccoaFailurePolicy.authentication(stage, pinned != null, e),
                 shouldFail = { attempt.networkGate.isCurrent(network) })
         } finally {
@@ -566,7 +567,7 @@ class IccoaSession(
         if (changed && attempt.authenticatedNetwork != null) {
             // Committed channels/cipher belong to one Network. Rebuild the whole session instead
             // of reusing listeners, or replaying a Normal PIN that has already been discarded.
-            terminate(attempt, "Сеть Wi-Fi автомобиля изменилась. Переподключение ICCOA…",
+            terminate(attempt, context.getString(R.string.iccoa_msg_wifi_changed),
                 IccoaCloseReason.TRANSPORT_FAILURE)
             return false
         }
@@ -650,7 +651,7 @@ class IccoaSession(
         worker(attempt) {
             try {
                 lane.run()
-            } catch (e: Exception) { fail(attempt, "Канал ICCOA $port закрыт (${e.javaClass.simpleName})", closeReason = IccoaFailurePolicy.channel(e)) }
+            } catch (e: Exception) { fail(attempt, context.getString(R.string.iccoa_msg_channel_closed, port, e.javaClass.simpleName), closeReason = IccoaFailurePolicy.channel(e)) }
         }
     }
 
@@ -662,7 +663,7 @@ class IccoaSession(
         val body = decoded.body
         if (!active(attempt)) return
         if (frame.category == 1 && frame.method == 23) {
-            fail(attempt, "Автомобиль завершил соединение ICCOA", closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
+            fail(attempt, context.getString(R.string.iccoa_msg_car_ended), closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
             return
         }
         if (decoded.authenticatedControl && attempt.trustedCommitGate.onAuthenticatedControl())
@@ -673,7 +674,7 @@ class IccoaSession(
     private fun watchWrites(attempt: Attempt): Unit = post(attempt) {
         val now = System.nanoTime()
         if (listOf(attempt.controlWritingAt, attempt.audioWritingAt).any { it > 0 && now - it > TimeUnit.SECONDS.toNanos(5) }) {
-            fail(attempt, "Тайм-аут отправки данных ICCOA", closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
+            fail(attempt, context.getString(R.string.iccoa_msg_send_timeout), closeReason = IccoaCloseReason.TRANSPORT_FAILURE)
         } else {
             later(attempt, 2_000) { watchWrites(attempt) }
         }
@@ -683,7 +684,7 @@ class IccoaSession(
     private fun post(attempt: Attempt, action: () -> Unit) {
         main.post {
             if (active(attempt)) try { action() } catch (e: Exception) {
-                fail(attempt, "Ошибка подключения ICCOA (${e.javaClass.simpleName})")
+                fail(attempt, context.getString(R.string.iccoa_msg_connection_error, e.javaClass.simpleName))
             }
         }
     }
