@@ -1533,7 +1533,10 @@ class CarLifeService : Service() {
         s.onVoiceAudio = { pcm -> AaHeadUnitService.current?.feedCarMicrophone(pcm) }
         AaHeadUnitService.onCarMicWanted = { on -> runCatching { s.carMicrophone(on) } }
         AaHeadUnitService.onNavigation = { info -> s.sendNavigation(info) }
-        s.onPauseMedia = { carMusic(false) }
+        s.onPauseMedia = {
+            carMusic(false)
+            AaHeadUnitService.current?.pauseMediaForCar()
+        }
         s.onMusicControl = { play -> carMusic(play) }
         s.onSongInfo = { songInfoAt = android.os.SystemClock.elapsedRealtime() }
         s.onClosed = { reason ->

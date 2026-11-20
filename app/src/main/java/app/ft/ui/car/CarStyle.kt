@@ -29,8 +29,6 @@ import app.ft.core.SunTimes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.Calendar
-import java.util.TimeZone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -166,13 +164,10 @@ object CarStyles {
 
     fun nightNow(p: Prefs, millis: Long = System.currentTimeMillis()): Boolean {
         if (!p.carDayNight) return false
-        val zone = TimeZone.getDefault()
-        val calendar = Calendar.getInstance(zone).apply { timeInMillis = millis }
-        val minute = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
         val latitude = p.lastLatitude.toDouble()
         val longitude = p.lastLongitude.toDouble()
-        val day = if (latitude != 0.0 || longitude != 0.0) SunTimes.of(latitude, longitude, millis, zone) else null
-        return SunTimes.night(minute, day)
+        val position = if (latitude != 0.0 || longitude != 0.0) latitude to longitude else null
+        return SunTimes.nightAt(position, millis)
     }
 
     fun watchDayNight(scope: CoroutineScope) {

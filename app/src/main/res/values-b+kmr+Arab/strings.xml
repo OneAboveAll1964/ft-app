@@ -50,6 +50,8 @@
     <string name="aa_return_to_ft">زڤڕین بۆ FT</string>
     <string name="aa_cluster_navigation">رێنیشاندان ل سەر پانێلا ئامیران</string>
     <string name="aa_cluster_navigation_body">زڤڕینێن Android Auto ل سەر پانێلا ئامیران یان HUD نیشان بدە، ئەگەر ترومبێل پشتەڤانیێ بکەت. گوهۆڕین دەستبجێ جێبەجێ دبن.</string>
+    <string name="aa_driving_restrictions">سنووردارکرن د دەمێ لێخوڕینێ دا</string>
+    <string name="aa_driving_restrictions_body">د دەمێ لێخوڕینێ دا نڤیسین ب تەختەکلیلێ و گەهشتنا هەندەک ڕێکخستنێن Android Auto سنووردار دکەت. گوهۆڕین دەستبجێ جێبەجێ دبن.</string>
     <string name="aa_port">پۆرتێ TCP</string>
     <string name="aa_width">پانیا ڤیدیۆیێ</string>
     <string name="aa_height">بلندیا ڤیدیۆیێ</string>

@@ -51,6 +51,21 @@ class SunTimesTest {
     }
 
     @Test
+    fun nightAtUsesTheLocalSunsetOrFallbackHour() {
+        val date = noonUtc(2026, 6, 21)
+        val sunsetMinute = SunTimes.of(erbil.first, erbil.second, date, baghdadZone)!!.sunset
+        val midnight = Calendar.getInstance(baghdadZone).apply {
+            timeInMillis = date
+            set(Calendar.HOUR_OF_DAY, 0)
+        }.timeInMillis
+
+        assertFalse(SunTimes.nightAt(erbil, midnight + (sunsetMinute - 1) * 60_000L, baghdadZone))
+        assertTrue(SunTimes.nightAt(erbil, midnight + sunsetMinute * 60_000L, baghdadZone))
+        assertFalse(SunTimes.nightAt(null, midnight + (19 * 60 - 1) * 60_000L, baghdadZone))
+        assertTrue(SunTimes.nightAt(null, midnight + 19 * 60 * 60_000L, baghdadZone))
+    }
+
+    @Test
     fun polarWinterIsAlwaysNightAndPolarSummerIsAlwaysDay() {
         val zone = TimeZone.getTimeZone("UTC")
         val polarNight = SunTimes.of(78.0, 15.0, noonUtc(2026, 12, 21), zone)!!

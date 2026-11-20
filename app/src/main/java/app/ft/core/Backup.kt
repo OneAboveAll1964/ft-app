@@ -17,7 +17,7 @@ object Backup {
         "gearPark", "gearReverseSound", "gearParkSound", "gearReverseLevel", "gearParkLevel", "supercastWay"
     )
     private val booleanKeys = setOf(
-        "aaDensityBoost167", "aaPhoneScreenOff", "aaControlsLeft", "aaClusterNavigation", "aaMatchCar",
+        "aaDensityBoost167", "aaPhoneScreenOff", "aaControlsLeft", "aaClusterNavigation", Prefs.AA_DRIVING_RESTRICTIONS, "aaMatchCar",
         "encoderSavePower", "carSizedApps", "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio",
         "aaBluetooth", "aaAutoStart", "aaOnly", "aaPrepareBeforeConnect", "aaShowReturnButton", "carClock24",
         "carShowLink", "carSongInfo", "modernPhoneUi", "autoConnect", "carBtReconnect",

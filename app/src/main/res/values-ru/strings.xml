@@ -50,6 +50,8 @@
     <string name="aa_return_to_ft">Вернуться в FT</string>
     <string name="aa_cluster_navigation">Подсказки на приборной панели</string>
     <string name="aa_cluster_navigation_body">Показывать манёвры Android Auto на приборной панели или проекционном дисплее HUD, если автомобиль поддерживает эту функцию. Настройка применяется сразу.</string>
+    <string name="aa_driving_restrictions">Ограничения в движении</string>
+    <string name="aa_driving_restrictions_body">Ограничивает ввод с клавиатуры и доступ к некоторым настройкам Android Auto во время движения. Изменение применяется сразу.</string>
     <string name="aa_port">TCP-порт</string>
     <string name="aa_width">Ширина видео</string>
     <string name="aa_height">Высота видео</string>

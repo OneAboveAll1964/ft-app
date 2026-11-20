@@ -43,6 +43,24 @@ class CarProfilesTest {
         assertTrue(i.selected.aaPrepareBeforeConnect)
     }
 
+    @Test fun androidAutoDrivingRestrictionsDefaultToOffAndAreSavedPerVehicle() {
+        val i = Installation()
+        val first = i.selected
+        assertFalse(first.aaDrivingRestrictions)
+        first.aaDrivingRestrictions = true
+        val backup = Backup.everything(first)
+
+        i.create()
+        assertFalse(i.selected.aaDrivingRestrictions)
+        assertTrue(first.aaDrivingRestrictions)
+        Backup.restore(i.selected, backup)
+        assertTrue(i.selected.aaDrivingRestrictions)
+
+        i.selected.aaDrivingRestrictions = false
+        assertFalse(Prefs(i.context).aaDrivingRestrictions)
+        assertTrue(first.aaDrivingRestrictions)
+    }
+
     @Test fun automaticP2pRoleRetryIsOptInAndBoundToVehicle() {
         val i = Installation()
         val first = i.selected

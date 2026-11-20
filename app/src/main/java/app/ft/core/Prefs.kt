@@ -100,6 +100,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var aaPhoneScreenOff: Boolean get() = bool("aaPhoneScreenOff", true); set(v) = set("aaPhoneScreenOff", v)
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
     var aaClusterNavigation: Boolean get() = bool("aaClusterNavigation", true); set(v) = set("aaClusterNavigation", v)
+    var aaDrivingRestrictions: Boolean get() = bool(AA_DRIVING_RESTRICTIONS, false); set(v) = set(AA_DRIVING_RESTRICTIONS, v)
     var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)
 
     var videoSize: Int get() = int("pictureSize", VideoPlans.SIZE_CAR); set(v) = setVideo("pictureSize", v)
@@ -256,6 +257,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
 
     companion object {
         const val LEGACY_ID = "legacy"
+        internal const val AA_DRIVING_RESTRICTIONS = "aaDrivingRestrictions"
         internal fun profileStoreName(id: String) = "ft-car-$id"
         private val VIDEO_PROFILE_INPUTS = setOf(
             "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps",
@@ -266,7 +268,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
         internal val PROFILE_KEYS = setOf(
             "cmdPort", "videoPort", "mediaPort", "ttsPort", "vrPort", "touchPort",
             "aaPort", "aaSelfPort", "aaWidth", "aaHeight", "aaFps", "aaDensity", "aaDensityBoost167",
-            "aaControlsLeft", "aaClusterNavigation", "aaMatchCar", "aaBluetooth", "aaPackage", "aaServerPackage",
+            "aaControlsLeft", "aaClusterNavigation", AA_DRIVING_RESTRICTIONS, "aaMatchCar", "aaBluetooth", "aaPackage", "aaServerPackage",
             "aaPhoneScreenOff", "aaAutoStart", "aaOnly", "aaPrepareBeforeConnect", "aaShowReturnButton", "aaCorner",
             "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps", "pictureBitrate", "videoQpFloor",
             "carDensity", "encoderSavePower", "savedVideoProfile", "videoProfileGeneration", "carSizedApps",

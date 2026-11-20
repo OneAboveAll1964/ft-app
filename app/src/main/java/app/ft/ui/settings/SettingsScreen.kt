@@ -300,6 +300,8 @@ private fun PageContent(page: SettingsPage) {
             AaPhoneScreenSetting(p)
             BoolSetting(stringResource(R.string.aa_cluster_navigation), p.aaClusterNavigation,
                 detail = stringResource(R.string.aa_cluster_navigation_body)) { p.aaClusterNavigation = it }
+            BoolSetting(stringResource(R.string.aa_driving_restrictions), p.aaDrivingRestrictions,
+                detail = stringResource(R.string.aa_driving_restrictions_body)) { p.aaDrivingRestrictions = it }
             BoolSetting(stringResource(R.string.aa_show_return_button), p.aaShowReturnButton) {
                 p.aaShowReturnButton = it
                 CarStyles.reload()

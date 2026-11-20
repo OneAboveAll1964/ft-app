@@ -51,6 +51,8 @@
     <string name="aa_return_to_ft">Return to FT</string>
     <string name="aa_cluster_navigation">Directions on the instrument cluster</string>
     <string name="aa_cluster_navigation_body">Show Android Auto turns on the instrument cluster or HUD, if the car supports it. Changes take effect immediately.</string>
+    <string name="aa_driving_restrictions">Restrictions while driving</string>
+    <string name="aa_driving_restrictions_body">Limits keyboard input and access to some Android Auto settings while the car is moving. Changes take effect immediately.</string>
     <string name="aa_port">TCP port</string>
     <string name="aa_width">Video width</string>
     <string name="aa_height">Video height</string>

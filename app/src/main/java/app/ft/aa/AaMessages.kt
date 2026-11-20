@@ -131,7 +131,8 @@ object AaMessages {
     fun sensorDrivingStatus(status: Int): ByteArray = ProtoWriter().message(13, ProtoWriter().int32(1, status)).toByteArray()
     fun sensorNightMode(night: Boolean): ByteArray = ProtoWriter().message(10, ProtoWriter().bool(1, night)).toByteArray()
     fun pingResponse(timestamp: Long): ByteArray = ProtoWriter().int64(1, timestamp).toByteArray()
-    fun audioFocusNotification(state: Int): ByteArray = ProtoWriter().enum(1, state).bool(2, false).toByteArray()
+    fun audioFocusNotification(state: Int, unrequested: Boolean): ByteArray =
+        ProtoWriter().enum(1, state).bool(2, unrequested).toByteArray()
     fun navFocusNotification(type: Int): ByteArray = ProtoWriter().enum(1, type).toByteArray()
     fun byeByeResponse(): ByteArray = ByteArray(0)
     fun avInputOpenResponse(session: Int): ByteArray = ProtoWriter().int32(1, session).int32(2, 0).toByteArray()

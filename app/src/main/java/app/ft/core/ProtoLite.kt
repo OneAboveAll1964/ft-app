@@ -68,6 +68,40 @@ class ProtoWriter {
     }
 }
 
+/** Reads a message with up to two varints at field numbers 1 and 2. */
+internal fun readVarintPair(data: ByteArray): Pair<Long?, Long?>? = runCatching {
+    var offset = 0
+    var first: Long? = null
+    var second: Long? = null
+
+    fun varint(): Long {
+        var result = 0L
+        for (index in 0..9) {
+            require(offset < data.size) { "Truncated varint" }
+            val octet = data[offset++].toInt() and 255
+            if (index == 9) require(octet <= 1) { "Varint overflow" }
+            result = result or ((octet and 127).toLong() shl (index * 7))
+            if (octet and 128 == 0) return result
+        }
+        error("Invalid varint")
+    }
+
+    while (offset < data.size) {
+        when (varint()) {
+            0x08L -> {
+                require(first == null) { "Duplicate field 1" }
+                first = varint()
+            }
+            0x10L -> {
+                require(second == null) { "Duplicate field 2" }
+                second = varint()
+            }
+            else -> error("Unexpected field or wire type")
+        }
+    }
+    first to second
+}.getOrNull()
+
 class ProtoReader(private val data: ByteArray) {
     val fields: Map<Int, List<Any>>
 

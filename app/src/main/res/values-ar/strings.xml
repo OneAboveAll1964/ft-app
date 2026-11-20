@@ -50,6 +50,8 @@
     <string name="aa_return_to_ft">العودة إلى FT</string>
     <string name="aa_cluster_navigation">إرشادات الطريق على لوحة العدادات</string>
     <string name="aa_cluster_navigation_body">عرض منعطفات Android Auto على لوحة العدادات أو شاشة العرض الأمامية HUD، إذا كانت السيارة تدعم ذلك. تسري التغييرات فورًا.</string>
+    <string name="aa_driving_restrictions">قيود أثناء القيادة</string>
+    <string name="aa_driving_restrictions_body">يحد من استخدام لوحة المفاتيح والوصول إلى بعض إعدادات Android Auto أثناء سير السيارة. تسري التغييرات فورًا.</string>
     <string name="aa_port">منفذ TCP</string>
     <string name="aa_width">عرض الفيديو</string>
     <string name="aa_height">ارتفاع الفيديو</string>
