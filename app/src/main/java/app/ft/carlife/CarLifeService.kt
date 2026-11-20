@@ -71,6 +71,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -177,6 +178,8 @@ class CarLifeService : Service() {
         private const val BESIDE_SLOP = 24f
         private const val GEAR_SETTLE_MS = 1_500L
         private const val GEAR_HOLD_MS = 700L
+        private const val GEAR_RETURN_RETRY_MS = 1_000L
+        private const val GEAR_RETURN_ATTEMPTS = 3
         private const val GEAR_LOOK_MS = 1_500L
         private const val GEAR_VOLUME_HOLD_MS = 4_000L
 
@@ -1511,7 +1514,10 @@ class CarLifeService : Service() {
         session?.stop()
         val s = CarLifeSession(this, l, prefs, scope)
         s.fullRateStart = mode != 1
-        session = s
+        synchronized(gearSound) {
+            if (session != null) gearForget()
+            session = s
+        }
         sessionLink = l
         songInfoAt = 0L
         s.allowSongInfo(!songInfoSuspended)
@@ -1519,7 +1525,8 @@ class CarLifeService : Service() {
         s.onFrameRate = { fps -> carDisplay.setFrameRate(VideoPlans.withinCap(fps, thermalCap)) }
         s.onNeedKeyframe = { carDisplay.requestKeyframe() }
         s.onVideoBack = { carDisplay.wake() }
-        s.onGear = { g -> onGear(g) }
+        s.onProjectionShown = { onGearProjectionShown(s) }
+        s.onGear = { g -> onGear(s, g) }
         s.onStopVideo = { onStopVideo() }
         s.onTouch = { t -> routeTouch(t) }
         s.onHardKey = { k -> onHardKey(k) }
@@ -1543,7 +1550,9 @@ class CarLifeService : Service() {
             }
             songInfoAt = 0
             carPaused = false
-            gearForget()
+            synchronized(gearSound) {
+                if (session === s) gearForget()
+            }
             stopAndroidAuto("the car disconnected")
             mediaReady = false
             routePlayer()
@@ -2071,35 +2080,43 @@ class CarLifeService : Service() {
         }
     }
 
-    @Volatile private var gearHidProjection = false
     private val gearSound = GearSound()
+    private var gearHidProjection = false
+    private var gearReturn: Job? = null
     private var gearSettle: Job? = null
     private var gearHeld: Job? = null
     private var gearLook: Job? = null
     private var gearVolumeHold: Job? = null
-    @Volatile private var gearShown = -1
+    private var gearShown = -1
     private var gearPausedFt = false
     private var gearVolumeBefore = -1
     private var gearVolumeSet = -1
 
-    private fun onGear(gear: Int) {
+    private fun onGear(s: CarLifeSession, gear: Int): Unit = synchronized(gearSound) {
+        if (session !== s) return
         if (gear !in 1..5) DiagLog.w(tag, "the car sent gear $gear, which is not a gear FT knows, so it counts only if it lasts")
         gearHeld?.cancel()
         gearHeld = null
+        if (gear == GearAction.GEAR_REVERSE) cancelGearReturn()
         val stopped = gearShown == GearAction.GEAR_REVERSE || gearShown == GearAction.GEAR_PARK
         val stopping = gear == GearAction.GEAR_REVERSE || gear == GearAction.GEAR_PARK
         if (stopped && !stopping) {
             gearHeld = scope.launch {
                 delay(GEAR_HOLD_MS)
-                applyGear(gear)
+                synchronized(gearSound) {
+                    if (!isActive || session !== s) return@launch
+                    gearHeld = null
+                    applyGear(s, gear)
+                }
             }
             return
         }
-        applyGear(gear)
+        applyGear(s, gear)
     }
 
-    private fun applyGear(gear: Int) {
+    private fun applyGear(s: CarLifeSession, gear: Int) {
         if (gear == gearShown) return
+        val wasReverse = gearShown == GearAction.GEAR_REVERSE
         gearShown = gear
         val p = prefs
         val action = when (gear) {
@@ -2112,17 +2129,51 @@ class CarLifeService : Service() {
             GearAction.GEAR_PARK -> gearSoundFor(gear, p.gearParkSound, p.gearParkLevel)
             else -> gearSoundFor(gear, GearAction.SOUND_KEEP, 100)
         }
-        if (action == GearAction.NONE) {
-            if (gearHidProjection) {
-                gearHidProjection = false
-                DiagLog.i(tag, "car left the gear, bringing FT back to the car")
-                session?.requestForeground()
-            }
-            return
+        if (GearAction.restores(action)) {
+            cancelGearReturn()
+            carHome(gear)
+        } else if (gear != GearAction.GEAR_REVERSE && gearHidProjection && gearReturn == null) {
+            // Park acts immediately for sound, but the camera still needs time to close.
+            val firstDelay = if (wasReverse && gear == GearAction.GEAR_PARK) GEAR_HOLD_MS else 0L
+            requestGearProjectionReturn(s, firstDelay)
         }
-        DiagLog.i(tag, "car shifted to ${gearName(gear)}, running the chosen action")
-        if (GearAction.restores(action)) gearHidProjection = true
-        runGearAction(action)
+        if (action != GearAction.NONE) {
+            DiagLog.i(tag, "car shifted to ${gearName(gear)}, running the chosen action")
+            runGearAction(action)
+        }
+    }
+
+    private fun requestGearProjectionReturn(s: CarLifeSession, firstDelay: Long) {
+        gearReturn = scope.launch(Dispatchers.Main) {
+            delay(firstDelay)
+            repeat(GEAR_RETURN_ATTEMPTS) { attempt ->
+                synchronized(gearSound) {
+                    if (!isActive || session !== s) return@launch
+                    val queued = s.requestForeground()
+                    DiagLog.i(tag, "gear projection return attempt ${attempt + 1}/$GEAR_RETURN_ATTEMPTS queued=$queued")
+                }
+                delay(GEAR_RETURN_RETRY_MS)
+            }
+            synchronized(gearSound) {
+                if (!isActive || session !== s) return@launch
+                gearHidProjection = false
+                gearReturn = null
+                DiagLog.w(tag, "the car did not confirm projection return after leaving the gear")
+            }
+        }
+    }
+
+    private fun onGearProjectionShown(s: CarLifeSession): Unit = synchronized(gearSound) {
+        if (session !== s || !gearHidProjection) return
+        if (gearReturn == null && gearHeld?.isActive != true) return
+        gearHidProjection = false
+        cancelGearReturn()
+        DiagLog.i(tag, "the car confirmed projection return after leaving the gear")
+    }
+
+    private fun cancelGearReturn() {
+        gearReturn?.cancel()
+        gearReturn = null
     }
 
     private fun gearSoundFor(gear: Int, sound: Int, lowerTo: Int) = synchronized(gearSound) {
@@ -2247,6 +2298,7 @@ class CarLifeService : Service() {
         gearSettle = null
         gearHeld?.cancel()
         gearHeld = null
+        cancelGearReturn()
         gearLook?.cancel()
         gearLook = null
         gearVolumeHold?.cancel()
@@ -2267,7 +2319,6 @@ class CarLifeService : Service() {
 
     private fun runGearAction(action: Int) {
         when (action) {
-            GearAction.CAR_SCREEN -> carHome()
             GearAction.FT_HOME -> _screenKeys.tryEmit(3)
             GearAction.MAPS -> launch(prefs.mapsPackage)
             GearAction.ANDROID_AUTO -> startAndroidAuto()
@@ -2357,13 +2408,27 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun carHome() {
+    private fun carHome(gear: Int? = null) {
         val s = session
         if (s == null || !mediaReady) {
             DiagLog.i(tag, "no car connected to send to its own screen")
             return
         }
-        scope.launch { s.goToCarHome() }
+        scope.launch(Dispatchers.Main) {
+            synchronized(gearSound) {
+                if (session !== s || !mediaReady) return@launch
+                if (gear == null) {
+                    gearHidProjection = false
+                    cancelGearReturn()
+                } else if (gear != gearShown) {
+                    return@launch
+                }
+                val sent = s.goToCarHome()
+                if (gear != null && sent) {
+                    gearHidProjection = true
+                }
+            }
+        }
     }
 
     private fun phoneScreen() {

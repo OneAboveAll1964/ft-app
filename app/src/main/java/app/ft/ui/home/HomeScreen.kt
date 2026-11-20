@@ -272,7 +272,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 CarProtocolSetting()
                 if (iccoa) {
                     Spacer(Modifier.height(12.dp))
-                    IccoaConnectionControls(iccoaState, checkNotNull(iccoaActions))
+                    IccoaConnectionControls(iccoaState, checkNotNull(iccoaActions), wifiEnabled = radios.wifi)
                 } else {
                     key(LocalLayoutDirection.current) {
                         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -283,6 +283,11 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                                     shape = SegmentedButtonDefaults.itemShape(i, 3)
                                 ) { FitText(label) }
                             }
+                        }
+                    }
+                    if (direct && !radios.wifi && !connected) {
+                        Notice(stringResource(R.string.connection_wifi_off), stringResource(R.string.connection_wifi_settings)) {
+                            Fixes.open(context, Fixes.wifi())
                         }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -342,7 +347,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                     Text(if (iccoaShowAll) "Только CarLink / ICCOA" else "Показать все Bluetooth-устройства")
                 }
             }
-            iccoaDevices(iccoaState, showAll = iccoaShowAll)
+            iccoaDevices(iccoaState, showAll = iccoaShowAll, wifiEnabled = radios.wifi)
         }
 
         if (!modern && (!touchOn || !overlayOn || !backgroundOn)) {
@@ -466,7 +471,7 @@ private fun directSteps(
         else -> StepItem(stringResource(R.string.step_bluetooth_on), radios.bluetooth, action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.bluetooth(context)) })
     }
     val wifi = when {
-        !radios.wifi -> StepItem(stringResource(R.string.step_wifi_on), false, action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.wifi()) })
+        !radios.wifi -> StepItem(stringResource(R.string.step_wifi_on), false)
         !radios.wifiAllowed -> StepItem(stringResource(R.string.step_wifi_on), false, hint = stringResource(R.string.step_allow_nearby), action = stringResource(R.string.action_allow), onAction = { Fixes.open(context, Fixes.appSettings(context)) })
         !radios.location -> StepItem(stringResource(R.string.step_wifi_on), false, hint = stringResource(R.string.step_wifi_needs_location), action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.location()) })
         else -> StepItem(stringResource(R.string.step_wifi_on), true)

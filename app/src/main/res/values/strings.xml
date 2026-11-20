@@ -193,6 +193,8 @@
     <string name="step_bluetooth_on">Bluetooth on</string>
     <string name="step_allow_nearby">Allow nearby devices</string>
     <string name="step_wifi_on">WiFi on</string>
+    <string name="connection_wifi_off">Wi-Fi is off. Turn on Wi-Fi on your phone, then try connecting again</string>
+    <string name="connection_wifi_settings">Wi-Fi settings</string>
     <string name="step_wifi_needs_location">WiFi Direct needs location on</string>
     <string name="step_car_found">Car found</string>
     <string name="step_waiting_bt">Waiting for CarLife to respond over Bluetooth</string>

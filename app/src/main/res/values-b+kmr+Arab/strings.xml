@@ -183,6 +183,8 @@
     <string name="step_bluetooth_on">بلوتوس ڤەکری یە</string>
     <string name="step_allow_nearby">رێدان ب ئامیرێن نێزیک</string>
     <string name="step_wifi_on">وایفای ڤەکری یە</string>
+    <string name="connection_wifi_off">وایفای گرتی یە. وایفایێ ل سەر مۆبایلا خۆ ڤەکە و دیسا هەول بدە گرێ بدەی</string>
+    <string name="connection_wifi_settings">رێکخستنێن وایفایێ</string>
     <string name="step_wifi_needs_location">WiFi Direct پێدڤی ب ڤەکرنا Location هەیە</string>
     <string name="step_car_found">ترومبێل هاتە دیتن</string>
     <string name="step_waiting_bt">ل هیڤیا ترومبێلێ ب رێکا بلوتوسێ</string>

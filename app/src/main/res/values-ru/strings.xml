@@ -183,6 +183,8 @@
     <string name="step_bluetooth_on">Bluetooth включён</string>
     <string name="step_allow_nearby">Разрешите доступ к устройствам поблизости</string>
     <string name="step_wifi_on">WiFi включён</string>
+    <string name="connection_wifi_off">Wi-Fi выключен. Включите Wi-Fi на телефоне и повторите подключение</string>
+    <string name="connection_wifi_settings">Настройки Wi-Fi</string>
     <string name="step_wifi_needs_location">Для WiFi Direct нужно включить геолокацию</string>
     <string name="step_car_found">Автомобиль найден</string>
     <string name="step_waiting_bt">Ожидание ответа CarLife по Bluetooth</string>

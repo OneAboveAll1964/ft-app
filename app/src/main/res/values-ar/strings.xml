@@ -183,6 +183,8 @@
     <string name="step_bluetooth_on">البلوتوث مفعّل</string>
     <string name="step_allow_nearby">السماح بالأجهزة المجاورة</string>
     <string name="step_wifi_on">Wi-Fi مفعّل</string>
+    <string name="connection_wifi_off">Wi-Fi غير مفعّل. فعّل Wi-Fi على هاتفك ثم حاول الاتصال مرة أخرى</string>
+    <string name="connection_wifi_settings">إعدادات Wi-Fi</string>
     <string name="step_wifi_needs_location">يحتاج WiFi Direct إلى تفعيل الموقع</string>
     <string name="step_car_found">تم العثور على السيارة</string>
     <string name="step_waiting_bt">بانتظار السيارة عبر البلوتوث</string>

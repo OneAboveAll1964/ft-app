@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 191
-        versionName = "3.9.76-aa-only"
+        versionCode = 192
+        versionName = "3.9.77-projection-fixes"
     }
 
     signingConfigs {

@@ -50,6 +50,7 @@ class CarLifeSession(
     var onFrameRate: ((fps: Int) -> Unit)? = null
     var onNeedKeyframe: (() -> Unit)? = null
     var onVideoBack: (() -> Unit)? = null
+    var onProjectionShown: (() -> Unit)? = null
     var onGear: ((gear: Int) -> Unit)? = null
     var onTouch: ((CarTouch) -> Unit)? = null
     var onHardKey: ((keyCode: Int) -> Unit)? = null
@@ -245,9 +246,7 @@ class CarLifeSession(
         }
     }
 
-    fun requestForeground() {
-        if (matched) cmd(CarLifeProtocol.CMD_REQUEST_GO_TO_FOREGROUND)
-    }
+    fun requestForeground(): Boolean = matched && cmd(CarLifeProtocol.CMD_REQUEST_GO_TO_FOREGROUND)
 
     fun goodbye() {
         if (matched) cmd(CarLifeProtocol.CMD_MD_MANUAL_DISCONNECT)
@@ -271,9 +270,10 @@ class CarLifeSession(
         DiagLog.i(tag, "told the car the song: '$title'${if (artist.isNotBlank()) " by $artist" else ""}${if (art != null) ", with cover art (${art.size} bytes)" else ""}")
     }
 
-    fun goToCarHome() {
-        cmd(CarLifeProtocol.CMD_GO_TO_DESKTOP)
+    fun goToCarHome(): Boolean {
+        if (!matched || !cmd(CarLifeProtocol.CMD_GO_TO_DESKTOP)) return false
         DiagLog.i(tag, "asked the car to show its own screen, FT stays connected")
+        return true
     }
 
     fun sendSongPosition(ms: Long) {
@@ -433,6 +433,7 @@ class CarLifeSession(
                     VideoFeed.Mode.RESUMING -> "projection back, the car gets the next full picture"
                     else -> "projection started again while already running"
                 })
+                onProjectionShown?.invoke()
             }
             CarLifeProtocol.CMD_VIDEO_ENCODER_PAUSE -> {
                 feed.pause()
@@ -508,7 +509,10 @@ class CarLifeSession(
                     onGear?.invoke(g)
                 }
             }
-            CarLifeProtocol.CMD_VEHICLE_FOREGROUND -> DiagLog.i(tag, "the car shows CarLife")
+            CarLifeProtocol.CMD_VEHICLE_FOREGROUND -> {
+                DiagLog.i(tag, "the car shows CarLife")
+                onProjectionShown?.invoke()
+            }
             CarLifeProtocol.CMD_VEHICLE_BACKGROUND -> DiagLog.i(tag, "the car moved CarLife to the background")
             CarLifeProtocol.CMD_CAR_VELOCITY -> {
                 val ok = CarLifeCarSensors.onSpeed(c.payload)

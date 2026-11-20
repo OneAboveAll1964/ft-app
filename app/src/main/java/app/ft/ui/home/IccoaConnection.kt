@@ -87,7 +87,7 @@ internal fun rememberIccoaConnectionActions(): IccoaConnectionActions {
 }
 
 @Composable
-internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnectionActions) {
+internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnectionActions, wifiEnabled: Boolean) {
     val context = LocalContext.current
     var pin by remember { mutableStateOf("") }
     var forgetConfirmation by remember { mutableStateOf(false) }
@@ -109,6 +109,13 @@ internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnection
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(stringResource(R.string.iccoa_experimental_body))
         Text(state.status.ifBlank { stringResource(phase) }, style = MaterialTheme.typography.titleMedium)
+        if (!wifiEnabled && !state.connected) {
+            val wifiOff = stringResource(R.string.connection_wifi_off)
+            if (!state.status.startsWith(wifiOff)) Text(wifiOff)
+            TextButton(onClick = { Fixes.open(context, Intent(Settings.ACTION_WIFI_SETTINGS)) }) {
+                Text(stringResource(R.string.connection_wifi_settings))
+            }
+        }
         if (busy && !state.pinRequired) CircularProgressIndicator()
         if (state.pinRequired) {
             Text(stringResource(R.string.iccoa_pin_help))
@@ -123,7 +130,7 @@ internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnection
             FilledTonalButton(onClick = {
                 IccoaService.submitPin(context, pin)
                 pin = ""
-            }, enabled = pin.length == 6) { Text(stringResource(R.string.iccoa_submit_pin)) }
+            }, enabled = wifiEnabled && pin.length == 6) { Text(stringResource(R.string.iccoa_submit_pin)) }
         }
         if (state.connected) Text(stringResource(R.string.iccoa_connected_help))
         if (actions.denied || scan.phase == IccoaPhase.PERMISSION_REQUIRED) {
@@ -164,7 +171,7 @@ internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnection
     }
 }
 
-internal fun LazyListScope.iccoaDevices(state: IccoaState, showAll: Boolean) {
+internal fun LazyListScope.iccoaDevices(state: IccoaState, showAll: Boolean, wifiEnabled: Boolean) {
     val scan = state.discovery
     val busy = scan.phase in listOf(IccoaPhase.SCANNING, IccoaPhase.INSPECTING)
     if (!state.connected && !state.connecting && !state.pinRequired) {
@@ -177,6 +184,7 @@ internal fun LazyListScope.iccoaDevices(state: IccoaState, showAll: Boolean) {
         val peers = if (showAll || carlink.isEmpty()) scan.peers else carlink
         items(peers, key = { it.address }) { peer ->
             val context = LocalContext.current
+            val canConnect = wifiEnabled && state.running && scan.phase != IccoaPhase.INSPECTING && peer.connectable
             Card {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(peer.name.ifBlank { stringResource(R.string.iccoa_unnamed) }, style = MaterialTheme.typography.titleMedium)
@@ -184,7 +192,7 @@ internal fun LazyListScope.iccoaDevices(state: IccoaState, showAll: Boolean) {
                     if (peer.hint) Text(stringResource(R.string.iccoa_hint), style = MaterialTheme.typography.bodySmall)
                     if (scan.inspected == peer.address && scan.phase == IccoaPhase.GATT_COMPLETE) Text(stringResource(R.string.iccoa_inspect_complete))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        FilledTonalButton(onClick = { IccoaService.connect(context, peer.address) }, enabled = state.running && scan.phase != IccoaPhase.INSPECTING && peer.connectable) {
+                        FilledTonalButton(onClick = { IccoaService.connect(context, peer.address) }, enabled = canConnect) {
                             Text(stringResource(R.string.iccoa_connect))
                         }
                         TextButton(onClick = { IccoaService.inspect(context, peer.address) }, enabled = state.running && !busy && peer.connectable) {
@@ -192,7 +200,7 @@ internal fun LazyListScope.iccoaDevices(state: IccoaState, showAll: Boolean) {
                         }
                     }
                     TextButton(onClick = { IccoaService.connectNormal(context, peer.address) },
-                        enabled = state.running && scan.phase != IccoaPhase.INSPECTING && peer.connectable) {
+                        enabled = canConnect) {
                         Text("Normal · новый PIN")
                     }
                 }

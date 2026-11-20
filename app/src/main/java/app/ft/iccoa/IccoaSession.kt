@@ -20,6 +20,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import app.ft.R
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
 import org.json.JSONObject
@@ -116,6 +117,10 @@ class IccoaSession(
         val attempt = Attempt(IccoaClientProfile.load(context))
         current = attempt
         post(attempt) {
+            wifiReadinessIssue()?.let {
+                terminate(attempt, it, IccoaCloseReason.FAILED)
+                return@post
+            }
             try {
                 status(attempt, "Подключение ICCOA по Bluetooth…")
                 val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
@@ -376,7 +381,16 @@ class IccoaSession(
         } finally { fragment.fill(0) }
     }
 
+    private fun wifiReadinessIssue(): String? =
+        when (context.getSystemService(WifiManager::class.java)?.wifiState) {
+            WifiManager.WIFI_STATE_DISABLED, WifiManager.WIFI_STATE_DISABLING ->
+                context.getString(R.string.connection_wifi_off)
+            WifiManager.WIFI_STATE_ENABLING -> context.getString(R.string.iccoa_wifi_enabling)
+            else -> null
+        }
+
     private fun joinWifi(attempt: Attempt, info: JSONObject) {
+        wifiReadinessIssue()?.let { return fail(attempt, it) }
         val specifier = WifiNetworkSpecifier.Builder().setSsid(info.getString("ssid"))
             .setWpa2Passphrase(info.getString("psk")).apply {
                 val mac = info.optString("mac")
@@ -392,7 +406,10 @@ class IccoaSession(
             override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) = post(attempt) {
                 if (attempt.networkGate.isCurrent(network)) networkReady(attempt, network, properties)
             }
-            override fun onUnavailable() { fail(attempt, "Подключение к Wi-Fi автомобиля отменено или истёк тайм-аут") }
+            override fun onUnavailable() = post(attempt) {
+                val reason = wifiReadinessIssue() ?: "Подключение к Wi-Fi автомобиля отменено или истёк тайм-аут"
+                terminate(attempt, reason, IccoaCloseReason.FAILED)
+            }
             override fun onLost(network: Network) = post(attempt) {
                 if (attempt.networkGate.onLost(network))
                     fail(attempt, "Соединение с Wi-Fi автомобиля потеряно",
