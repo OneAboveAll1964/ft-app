@@ -437,7 +437,7 @@ class IccoaService : Service() {
                         onPlay = { config -> current { play(config) } },
                         onPause = { current { pauseProjection() } },
                         onKeyframe = { current { projection?.requestKeyFrame() } },
-                        onTouch = { touch -> current { projection?.touch(touch) } },
+                        onTouch = { touch, config -> current { projection?.touch(touch, config) } },
                         onKey = { code -> current { projection?.key(code) } },
                         onClosed = { reason, cause -> current {
                             connectionFailed(reason, retryableTransportFailure = cause == IccoaCloseReason.TRANSPORT_FAILURE)
@@ -493,8 +493,9 @@ class IccoaService : Service() {
         lastVideoConfig = config
         val plan = IccoaVideoPlan.from(config)
         val output = media ?: return
+        val projection = projection ?: return
         DiagLog.i("ICCOA", "video profile ${plan.streamWidth}x${plan.streamHeight}@${plan.fps} ${plan.bitrate / 1000} kbps; CBR preferred, VBR fallback allowed; receiver asked ${config.fps} fps")
-        projection?.start(plan, output::configure, output::frame)
+        projection.start(plan, output::configure, output::frame)
         if (media !== output) return // A synchronous projection failure has already ended this connection.
         if (!ftProjectionSensorAssist) {
             ftProjectionSensorAssist = true
@@ -516,8 +517,9 @@ class IccoaService : Service() {
         }
         cancelRecoveryScan()
         dropRecovery.onConnected()
+        val screen = projection.state.value
         _state.update { it.copy(connecting = false, connected = true, pinRequired = false,
-            status = "ICCOA linked · awaiting H.264 video · ${plan.streamWidth}×${plan.streamHeight} · ${plan.fps} fps") }
+            status = "ICCOA linked · awaiting H.264 video · ${screen.width}×${screen.height} · ${screen.fps} fps") }
     }
 
     /** Reference 7.62 phone state: no experimental call-state field is advertised. */

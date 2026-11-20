@@ -137,11 +137,12 @@ class IccoaProjection(
             // Reconfigure only our encoded display. Keep the single-use projection grant,
             // its audio/mirror capture and the Android Auto session across PLAY/resume.
             display.start(plan, onConfig, { _, _ -> }, onTimedFrame,
-                onFailure = { projectionFailed(it) }) { CarScreen() }
+                onFailure = { projectionFailed(it) },
+                alignedStreamLimit = IccoaVideoPlan.streamLimit) { CarScreen() }
             displayPlan = plan
             mutableState.update { it.copy(
                 phase = CarControls.Phase.PROJECTING, via = "ICCOA",
-                width = plan.streamWidth, height = plan.streamHeight, fps = plan.fps
+                width = display.streamWidth, height = display.streamHeight, fps = plan.fps
             ) }
             startCapturedAudio()
             if (firstStart && prefs.shouldAutoStartAa) startAa()
@@ -171,9 +172,9 @@ class IccoaProjection(
         if (!active) return@onMain
         CarTouchCalibration.reset(context, display.width, display.height, prefs.profileId)
     }
-    fun touch(action: Int, x: Int, y: Int) = touch(CarTouch(action, x, y))
-    fun touch(raw: CarTouch) = onMain {
+    internal fun touch(nativeTouch: CarTouch, video: IccoaVideoConfig) = onMain {
         if (!active) return@onMain
+        val raw = IccoaInputEvent.toStream(nativeTouch, video, display.streamWidth, display.streamHeight)
         val (initialX, y) = display.toContent(raw.x, raw.y)
         val second = if (raw.x2 >= 0 && raw.y2 >= 0) display.toContent(raw.x2, raw.y2) else -1 to -1
         // FT owns its UI hit testing. AA and phone mirror have independent touch mapping.

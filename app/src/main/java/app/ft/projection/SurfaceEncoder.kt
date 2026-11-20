@@ -9,15 +9,17 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import android.util.Range
 import android.view.Surface
 import app.ft.core.DiagLog
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
 
 class SurfaceEncoder(
-    private val width: Int,
-    private val height: Int,
+    width: Int,
+    height: Int,
     fps: Int,
     bitrate: Int,
     private val qpFloor: Int,
@@ -30,9 +32,15 @@ class SurfaceEncoder(
     private val onFailure: ((Throwable) -> Unit)? = null,
     private val startCandidateIndex: Int = 0,
     private val allowFormatCapabilityProbe: Boolean = false,
-    private val allowVbrFallback: Boolean = false
+    private val allowVbrFallback: Boolean = false,
+    private val alignedStreamLimit: Pair<Int, Int>? = null
 ) {
     private val tag = "Encoder"
+    private val requestedSize = width to height
+    var width = width
+        private set
+    var height = height
+        private set
     private val fps = fps.coerceIn(1, 60)
     private val bitrate = bitrate.coerceIn(300_000, 40_000_000)
     private val running = AtomicBoolean(false)
@@ -66,19 +74,32 @@ class SurfaceEncoder(
         thread = t
         val h = Handler(t.looper)
         handler = h
-        var bitrateMode = if (constantBitrate) BITRATE_MODE_CBR else null
-        var choices = encoders(bitrateMode)
-        if (choices.isEmpty() && constantBitrate && allowVbrFallback) {
-            bitrateMode = BITRATE_MODE_VBR
-            choices = encoders(bitrateMode)
-            if (choices.isNotEmpty()) {
-                DiagLog.i(tag, "codec VBR_FALLBACK format=${width}x${height}@$fps bitrate=$bitrate")
+        width = requestedSize.first
+        height = requestedSize.second
+        val sizeCapabilities = alignedStreamLimit?.let { mutableMapOf<String, MediaCodecInfo.VideoCapabilities>() }
+        var (bitrateMode, choices) = encoderChoices(sizeCapabilities)
+        if (choices.isEmpty() && alignedStreamLimit != null) {
+            val sizes = sizeCapabilities.orEmpty().values.flatMap { nearbySizes(it, alignedStreamLimit) }
+                .distinct().filterNot { it == requestedSize }
+                .sortedBy { (w, h) -> abs(w - requestedSize.first) + abs(h - requestedSize.second) }
+            for ((fallbackWidth, fallbackHeight) in sizes) {
+                width = fallbackWidth
+                height = fallbackHeight
+                val (mode, options) = encoderChoices()
+                if (options.isEmpty()) continue
+                bitrateMode = mode
+                choices = options
+                DiagLog.i(tag, "codec SIZE_FALLBACK requested=${requestedSize.first}x${requestedSize.second} selected=${width}x${height}@$fps")
+                break
             }
+        }
+        if (bitrateMode == BITRATE_MODE_VBR && choices.isNotEmpty()) {
+            DiagLog.i(tag, "codec VBR_FALLBACK format=${width}x${height}@$fps bitrate=$bitrate")
         }
         val modeLabel = bitrateModeLabel(bitrateMode)
         // Optional resource-planning hint; retry the same portable AVC candidate
         // without it if the vendor rejects it. Never force a guessed AVC level.
-        // Bounded attempts. Each fallback keeps the exact RTSP-agreed stream geometry.
+        // Keep the selected stream geometry across bounded codec startup attempts.
         val candidates = choices.flatMap { choice ->
             (if (choice.probe) listOf("minimal") else listOf("minimal", "baseline")).map { label ->
                 Candidate(choice.name, label, probe = choice.probe)
@@ -125,7 +146,8 @@ class SurfaceEncoder(
         thread = null
         handler = null
         val reason = if (candidates.isEmpty()) "no eligible advertised capabilities" else "startup candidates exhausted"
-        throw IllegalStateException("no H.264 encoder on this phone accepted ${width}x$height: $reason")
+        val size = if (candidates.isEmpty()) requestedSize else width to height
+        throw IllegalStateException("no H.264 encoder on this phone accepted ${size.first}x${size.second}: $reason")
     }
 
     private data class EncoderChoice(val name: String, val probe: Boolean = false)
@@ -137,7 +159,19 @@ class SurfaceEncoder(
         else -> "default"
     }
 
-    private fun encoders(bitrateMode: Int?): List<EncoderChoice> {
+    private fun encoderChoices(
+        sizeCapabilities: MutableMap<String, MediaCodecInfo.VideoCapabilities>? = null
+    ): Pair<Int?, List<EncoderChoice>> {
+        val mode = if (constantBitrate) BITRATE_MODE_CBR else null
+        val choices = encoders(mode, sizeCapabilities)
+        return if (choices.isEmpty() && constantBitrate && allowVbrFallback) {
+            BITRATE_MODE_VBR to encoders(BITRATE_MODE_VBR, sizeCapabilities)
+        } else mode to choices
+    }
+
+    private fun encoders(
+        bitrateMode: Int?, sizeCapabilities: MutableMap<String, MediaCodecInfo.VideoCapabilities>?
+    ): List<EncoderChoice> {
         val all = runCatching {
             android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
                 .filter { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
@@ -158,28 +192,65 @@ class SurfaceEncoder(
             }.getOrNull()
             // Evaluate independently: a size rejection must not hide CBR/format results.
             val surface = read("surface") { caps.colorFormats.contains(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) }
-            val size = read("size") { caps.videoCapabilities?.isSizeSupported(width, height) }
-            val rate = read("sizeRate") { caps.videoCapabilities?.areSizeAndRateSupported(width, height, fps.toDouble()) }
-            val bitrateOk = read("bitrate") { caps.videoCapabilities?.bitrateRange?.contains(bitrate) }
+            val video = read("video") { caps.videoCapabilities }
+            val size = read("size") { video?.isSizeSupported(width, height) }
+            val rate = read("sizeRate") { video?.areSizeAndRateSupported(width, height, fps.toDouble()) }
+            val bitrateOk = read("bitrate") { video?.bitrateRange?.contains(bitrate) }
             val cbr = read("CBR") { caps.encoderCapabilities?.isBitrateModeSupported(BITRATE_MODE_CBR) }
             val vbr = read("VBR") { caps.encoderCapabilities?.isBitrateModeSupported(BITRATE_MODE_VBR) }
             val format = read("format") { caps.isFormatSupported(minimal(bitrateMode)) }
-            val widthAlignment = read("widthAlignment") { caps.videoCapabilities?.widthAlignment }
-            val heightAlignment = read("heightAlignment") { caps.videoCapabilities?.heightAlignment }
+            val widthAlignment = read("widthAlignment") { video?.widthAlignment }
+            val heightAlignment = read("heightAlignment") { video?.heightAlignment }
             val modeSupported = when (bitrateMode) {
                 BITRATE_MODE_CBR -> cbr == true
-                BITRATE_MODE_VBR -> info.isHardwareAccelerated && size == true && vbr == true
+                BITRATE_MODE_VBR -> info.isHardwareAccelerated && vbr == true
                 else -> true
             }
-            val eligible = surface == true && rate == true && bitrateOk == true && modeSupported
+            val suitable = surface == true && bitrateOk == true && modeSupported
+            val eligible = suitable && rate == true && (!vbrFallback || size == true)
             val probe = allowFormatCapabilityProbe && info.isHardwareAccelerated && eligible && size == true && format == false
             DiagLog.i(tag, "codec CAPABILITIES name=${info.name} hw=${info.isHardwareAccelerated} target=${width}x${height}@$fps bitrate=$bitrate bitrateMode=$modeLabel alignment=${widthAlignment}x$heightAlignment surface=$surface size=$size sizeRate=$rate bitrateSupported=$bitrateOk CBR=$cbr VBR=$vbr format=$format probeEligible=$probe errors=${errors.joinToString(",").ifEmpty { "none" }}")
             if (eligible && format == true) fits += EncoderChoice(info.name)
             else if (probe) probes += EncoderChoice(info.name, probe = true)
+            if (sizeCapabilities != null && suitable && info.isHardwareAccelerated && video != null) {
+                sizeCapabilities.putIfAbsent(info.canonicalName, video)
+            }
         }
         if (fits.isEmpty()) DiagLog.w(tag, "no advertised AVC Surface encoder for ${width}x${height}@$fps ${bitrate / 1000} kbps bitrateMode=$modeLabel")
         // A probe relaxes only the composite format check for one hardware codec.
         return fits.ifEmpty { probes.take(1) }
+    }
+
+    private fun nearbySizes(video: MediaCodecInfo.VideoCapabilities, limit: Pair<Int, Int>): List<Pair<Int, Int>> {
+        fun nearby(size: Int, step: Int, range: Range<Int>, limit: Int): List<Int> {
+            val min = maxOf(1, range.lower)
+            val max = minOf(limit, range.upper)
+            if (min > max || step !in 1..max) return emptyList()
+            val target = size.coerceIn(min, max)
+            val down = target / step * step
+            if (down == target) return listOf(target)
+            return listOf(down + step, down).filter { it in min..max }
+        }
+        return runCatching {
+            val (requestedWidth, requestedHeight) = requestedSize
+            val (maxWidth, maxHeight) = limit
+            val stepX = video.widthAlignment
+            val stepY = video.heightAlignment
+            val widths = nearby(requestedWidth, stepX, video.supportedWidths, maxWidth)
+            val heights = nearby(requestedHeight, stepY, video.supportedHeights, maxHeight)
+            // The legal height can depend on the width and vice versa.
+            val widthFirst = widths.flatMap { w ->
+                val range = runCatching { video.getSupportedHeightsFor(w) }.getOrNull() ?: return@flatMap emptyList()
+                nearby(requestedHeight, stepY, range, maxHeight).map { h -> w to h }
+            }
+            val heightFirst = heights.flatMap { h ->
+                val range = runCatching { video.getSupportedWidthsFor(h) }.getOrNull() ?: return@flatMap emptyList()
+                nearby(requestedWidth, stepX, range, maxWidth).map { w -> w to h }
+            }
+            widthFirst + heightFirst
+        }.onFailure {
+            DiagLog.w(tag, "codec SIZE_RANGES error=${it.javaClass.simpleName}")
+        }.getOrDefault(emptyList())
     }
 
     private fun minimal(bitrateMode: Int?, baseline: Boolean = false): MediaFormat =

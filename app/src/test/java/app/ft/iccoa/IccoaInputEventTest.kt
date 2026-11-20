@@ -23,6 +23,17 @@ class IccoaInputEventTest {
         assertEquals(1079, event.y)
     }
 
+    @Test fun jettaTouchUsesTheSelectedStreamHeight() {
+        val jetta = video.copy(height = 904)
+        val event = IccoaInputEvent.touch(
+            JSONObject("""{"action":261,"count":2,"x0":960,"y0":452,"x1":960,"y1":903}"""), jetta
+        )!!
+        val scaled = IccoaInputEvent.toStream(event, jetta, 1920, 912)
+        assertEquals(event.copy(y = 456, y2 = 910), scaled)
+        val single = event.copy(x2 = -1, y2 = -1)
+        assertEquals(single.copy(y = 448), IccoaInputEvent.toStream(single, jetta, 1920, 896))
+    }
+
     @Test fun invalidTouchDoesNotThrowOrBecomeAnOriginTap() {
         for (fields in listOf("", "\"x0\":1,\"y0\":2,\"width\":-1",
             "\"x0\":1,\"y0\":2,\"count\":0", "\"x0\":1,\"y0\":2,\"count\":3",

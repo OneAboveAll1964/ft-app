@@ -8,6 +8,7 @@ import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Range
 import android.view.Surface
 import org.junit.Assert.*
 import org.junit.Test
@@ -83,12 +84,40 @@ class SurfaceEncoderCapabilityTest {
         val software = Capabilities(hardware = false, size = false, rate = false, bitrate = false, vbr = true)
         startup(
             listOf(hardware, hardware.copy(canonicalIndex = 0), software, software.copy(canonicalIndex = 2)),
-            allowVbr = true, expectedBitrateMode = BITRATE_MODE_VBR
+            allowVbr = true, expectedBitrateMode = BITRATE_MODE_VBR, alignedStreamLimit = 1920 to 1080
         ) {
             assertEquals(listOf("test.avc.0"), it.names)
+            assertEquals(904, it.encoder.height)
             assertEquals(4, it.encoder.candidateCount)
             verify(it.codecs.single()).start()
         }
+    }
+
+    @Test fun xiaomiUsesAlignedJettaFormatWithHardwareVbr() = startup(
+        listOf(Capabilities(cbr = false, vbr = true, vbrFormat = true, supportedHeight = 912, heightAlignment = 16)),
+        allowVbr = true,
+        expectedBitrateMode = BITRATE_MODE_VBR,
+        alignedStreamLimit = 1920 to 1080,
+        expectedHeight = 912
+    ) {
+        assertEquals(listOf("test.avc.0"), it.names)
+        assertEquals(1920, it.encoder.width)
+        assertEquals(912, it.encoder.height)
+        verify(it.codecs.single()).start()
+    }
+
+    @Test fun fallbackUsesTheCodecsReportedRangesAndAlignmentOnBothAxes() = startup(
+        listOf(Capabilities(
+            format = true, supportedWidth = 1760, supportedHeight = 896,
+            widthAlignment = 32, heightAlignment = 32, maxWidthAtHeight = 1776
+        )),
+        alignedStreamLimit = 1920 to 1080,
+        expectedWidth = 1760,
+        expectedHeight = 896
+    ) {
+        assertEquals(1760, it.encoder.width)
+        assertEquals(896, it.encoder.height)
+        verify(it.codecs.single()).start()
     }
 
     @Test fun vbrFallbackCanProbeOneOtherwiseSupportedHardwareFormat() = startup(
@@ -126,10 +155,23 @@ class SurfaceEncoderCapabilityTest {
         val sizeError: Boolean = false,
         val vbr: Boolean = false,
         val vbrFormat: Boolean = false,
-        val canonicalIndex: Int? = null
+        val canonicalIndex: Int? = null,
+        val supportedWidth: Int = 1920,
+        val supportedHeight: Int = 904,
+        val widthAlignment: Int = 2,
+        val heightAlignment: Int = 2,
+        val maxWidthAtHeight: Int = 1920
     )
 
     private data class Startup(val encoder: SurfaceEncoder, val names: List<String>, val codecs: List<MediaCodec>)
+
+    private fun range(lower: Int, upper: Int): Range<Int> {
+        @Suppress("UNCHECKED_CAST")
+        val range = mock(Range::class.java) as Range<Int>
+        `when`(range.lower).thenReturn(lower)
+        `when`(range.upper).thenReturn(upper)
+        return range
+    }
 
     private fun startup(
         capabilities: List<Capabilities>,
@@ -138,6 +180,9 @@ class SurfaceEncoderCapabilityTest {
         expectFailure: Boolean = false,
         allowVbr: Boolean = false,
         expectedBitrateMode: Int = BITRATE_MODE_CBR,
+        alignedStreamLimit: Pair<Int, Int>? = null,
+        expectedWidth: Int = 1920,
+        expectedHeight: Int = 904,
         check: (Startup) -> Unit
     ) {
         val infos = capabilities.mapIndexed { index, values ->
@@ -151,14 +196,23 @@ class SurfaceEncoderCapabilityTest {
                 val video = requireNotNull(caps.videoCapabilities)
                 val modes = requireNotNull(caps.encoderCapabilities)
                 caps.colorFormats = if (values.surface) intArrayOf(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) else intArrayOf()
-                `when`(video.isSizeSupported(1920, 904)).thenAnswer {
+                `when`(video.isSizeSupported(values.supportedWidth, values.supportedHeight)).thenAnswer {
                     if (values.sizeError) throw IllegalArgumentException("size query failed")
                     values.size
                 }
-                `when`(video.areSizeAndRateSupported(1920, 904, 30.0)).thenReturn(values.rate)
+                `when`(video.areSizeAndRateSupported(values.supportedWidth, values.supportedHeight, 30.0)).thenReturn(values.rate)
                 `when`(video.bitrateRange.contains(8_000_000)).thenReturn(values.bitrate)
-                `when`(video.widthAlignment).thenReturn(2)
-                `when`(video.heightAlignment).thenReturn(2)
+                `when`(video.widthAlignment).thenReturn(values.widthAlignment)
+                `when`(video.heightAlignment).thenReturn(values.heightAlignment)
+                if (alignedStreamLimit != null) {
+                    val widths = range(64, 1920)
+                    val heights = range(64, 1080)
+                    val widthsAtHeight = range(64, values.maxWidthAtHeight)
+                    `when`(video.supportedWidths).thenReturn(widths)
+                    `when`(video.supportedHeights).thenReturn(heights)
+                    `when`(video.getSupportedWidthsFor(anyInt())).thenReturn(widthsAtHeight)
+                    `when`(video.getSupportedHeightsFor(anyInt())).thenReturn(heights)
+                }
                 `when`(modes.isBitrateModeSupported(BITRATE_MODE_CBR)).thenReturn(values.cbr)
                 `when`(modes.isBitrateModeSupported(BITRATE_MODE_VBR)).thenReturn(values.vbr)
                 `when`(caps.isFormatSupported(any(MediaFormat::class.java))).thenAnswer {
@@ -177,9 +231,11 @@ class SurfaceEncoderCapabilityTest {
                     `when`(list.codecInfos).thenReturn(infos.toTypedArray())
                 }.use {
                     mockStatic(MediaFormat::class.java).use { formats ->
-                        formats.`when`<MediaFormat> { MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, 1920, 904) }
-                            .thenAnswer {
+                        formats.`when`<MediaFormat> { MediaFormat.createVideoFormat(eq(MediaFormat.MIMETYPE_VIDEO_AVC), anyInt(), anyInt()) }
+                            .thenAnswer { invocation ->
                                 mock(MediaFormat::class.java).also { format ->
+                                    `when`(format.getInteger(MediaFormat.KEY_WIDTH)).thenReturn(invocation.getArgument<Int>(1))
+                                    `when`(format.getInteger(MediaFormat.KEY_HEIGHT)).thenReturn(invocation.getArgument<Int>(2))
                                     var bitrateMode = -1
                                     doAnswer {
                                         bitrateMode = it.getArgument<Int>(1)
@@ -203,7 +259,7 @@ class SurfaceEncoderCapabilityTest {
                             }
                             val encoder = SurfaceEncoder(1920, 904, 30, 8_000_000, 0, {}, { _, _ -> },
                                 constantBitrate = true, savePower = true, allowFormatCapabilityProbe = allowProbe,
-                                allowVbrFallback = allowVbr)
+                                allowVbrFallback = allowVbr, alignedStreamLimit = alignedStreamLimit)
                             try {
                                 if (expectFailure) {
                                     assertThrows(IllegalStateException::class.java) { encoder.start() }
@@ -212,6 +268,8 @@ class SurfaceEncoderCapabilityTest {
                                 // Assert outside configure's catch block so test failures cannot
                                 // be mistaken for a vendor rejecting the format.
                                 for (format in configuredFormats) {
+                                    assertEquals(expectedWidth, format.getInteger(MediaFormat.KEY_WIDTH))
+                                    assertEquals(expectedHeight, format.getInteger(MediaFormat.KEY_HEIGHT))
                                     verify(format).setInteger(MediaFormat.KEY_BIT_RATE, 8_000_000)
                                     verify(format).setInteger(MediaFormat.KEY_FRAME_RATE, 30)
                                     verify(format).setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)

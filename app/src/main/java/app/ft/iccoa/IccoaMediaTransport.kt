@@ -22,7 +22,7 @@ internal class IccoaMediaTransport(
     private val onPlay: (IccoaVideoConfig) -> Unit,
     private val onPause: () -> Unit,
     private val onKeyframe: () -> Unit,
-    private val onTouch: (CarTouch) -> Unit,
+    private val onTouch: (CarTouch, IccoaVideoConfig) -> Unit,
     private val onKey: (Int) -> Unit,
     private val onClosed: (String, IccoaCloseReason) -> Unit
 ) : AutoCloseable {
@@ -204,26 +204,21 @@ internal class IccoaMediaTransport(
 
     private fun input(socket: Socket) {
         socket.soTimeout = 0
-        var lastTouch: CarTouch? = null
+        var lastTouch: Pair<CarTouch, IccoaVideoConfig>? = null
         val gesture = IccoaInputGesture {
-            lastTouch?.let { onTouch(it.copy(action = CarTouch.UP)) }
+            lastTouch?.let { (touch, video) -> onTouch(touch.copy(action = CarTouch.UP), video) }
             DiagLog.i("ICCOA", "UIBC clean-eof; released active gesture")
         }
         val json = IccoaInputJson { event ->
             if (event.optInt("type") == 1) {
                 val video = videoConfig ?: return@IccoaInputJson
-                val nativeTouch = IccoaInputEvent.touch(event, video) ?: return@IccoaInputJson
-                val plan = IccoaVideoPlan.from(video)
-                fun sx(x: Int) = if (x < 0) -1 else (x.toLong() * plan.streamWidth / video.width).toInt()
-                fun sy(y: Int) = if (y < 0) -1 else (y.toLong() * plan.streamHeight / video.height).toInt()
-                val touch = nativeTouch.copy(x = sx(nativeTouch.x), y = sy(nativeTouch.y),
-                    x2 = sx(nativeTouch.x2), y2 = sy(nativeTouch.y2))
+                val touch = IccoaInputEvent.touch(event, video) ?: return@IccoaInputJson
                 if (touch.action != CarTouch.MOVE) DiagLog.i("ICCOA",
                     "UIBC touch action=${touch.action} x=${touch.x} y=${touch.y} dst=${video.width}x${video.height}" +
                         " source=${event.optInt("width")}x${event.optInt("height")} raw=${event.optDouble("x0")},${event.optDouble("y0")}")
                 gesture.accept(touch.action)
-                lastTouch = touch
-                onTouch(touch)
+                lastTouch = touch to video
+                onTouch(touch, video)
             } else if (event.optInt("keycode") > 0 && event.optInt("action") == 0) {
                 onKey(event.optInt("keycode"))
             }

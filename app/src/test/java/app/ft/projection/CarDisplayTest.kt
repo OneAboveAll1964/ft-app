@@ -117,8 +117,24 @@ class CarDisplayTest {
         assertEquals(60, f.video?.fps)
     }
 
+    @Test fun alignedStreamKeepsContentAndTouchGeometryAcrossEncoderRetry() = fixture(alignedHeight = 912) { f ->
+        f.car.start(VideoPlan(1920, 904, 1920, 904, 30, 8_000_000), {}, { _, _ -> },
+            alignedStreamLimit = 1920 to 1080, content = {})
+        assertEquals(904, f.car.height)
+        assertEquals(912, f.video?.streamHeight)
+        assertEquals(true, f.video?.preserveAspect)
+        assertEquals(960 to 0, f.car.toContent(960, 4))
+        assertEquals(960 to 452, f.car.toContent(960, 456))
+        f.encoderFailures.last().invoke(mock(MediaCodec.CodecException::class.java))
+        f.runMain()
+        assertEquals(listOf(904, 912), f.encoderHeights)
+        assertEquals(912, f.video?.streamHeight)
+        assertEquals(960 to 452, f.car.toContent(960, 456))
+    }
+
     private class Fixture(val car: CarDisplay, val vd: VirtualDisplay,
                           val queue: ArrayDeque<Runnable>, val encoderRates: List<Int>,
+                          val encoderHeights: List<Int>,
                           val encoderFailures: List<(Throwable) -> Unit>,
                           val gates: () -> List<FrameGate>, val presentations: () -> List<CarPresentation>) {
         var failure: Throwable? = null
@@ -129,7 +145,7 @@ class CarDisplayTest {
         fun runMain() { while (queue.isNotEmpty()) queue.removeFirst().run() }
     }
 
-    private fun fixture(failShow: Boolean = false, onShow: (() -> Unit)? = null, test: (Fixture) -> Unit) {
+    private fun fixture(failShow: Boolean = false, onShow: (() -> Unit)? = null, alignedHeight: Int? = null, test: (Fixture) -> Unit) {
         val appField = FTApp::class.java.getDeclaredField("instance").apply { isAccessible = true }
         val previousApp = appField.get(null)
         val app = mock(FTApp::class.java)
@@ -144,6 +160,7 @@ class CarDisplayTest {
         `when`(manager.createVirtualDisplay(anyString(), anyInt(), anyInt(), anyInt(), any(Surface::class.java), anyInt())).thenReturn(vd)
         val queue = ArrayDeque<Runnable>()
         val encoderRates = ArrayList<Int>()
+        val encoderHeights = ArrayList<Int>()
         val encoderFailures = ArrayList<(Throwable) -> Unit>()
         try {
             mockConstruction(Handler::class.java) { handler, _ ->
@@ -153,7 +170,11 @@ class CarDisplayTest {
             }.use {
                 mockConstruction(DrawWatch::class.java).use {
                     mockConstruction(SurfaceEncoder::class.java) { encoder, construction ->
+                        val requestedHeight = construction.arguments()[1] as Int
+                        encoderHeights.add(requestedHeight)
                         encoderRates.add(construction.arguments()[2] as Int)
+                        `when`(encoder.width).thenReturn(construction.arguments()[0] as Int)
+                        `when`(encoder.height).thenReturn(alignedHeight ?: requestedHeight)
                         @Suppress("UNCHECKED_CAST")
                         val failure = construction.arguments()[11] as (Throwable) -> Unit
                         encoderFailures.add(failure)
@@ -169,7 +190,7 @@ class CarDisplayTest {
                                 if (failShow) doThrow(IllegalStateException("display vanished")).`when`(p).show()
                                 else if (onShow != null) doAnswer { onShow(); null }.`when`(p).show()
                             }.use { presentations ->
-                                val f = Fixture(CarDisplay(context), vd, queue, encoderRates, encoderFailures,
+                                val f = Fixture(CarDisplay(context), vd, queue, encoderRates, encoderHeights, encoderFailures,
                                     { gates.constructed() }, { presentations.constructed() })
                                 try { test(f) } finally { f.car.stop(); f.runMain() }
                             }
