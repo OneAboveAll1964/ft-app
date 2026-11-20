@@ -41,7 +41,9 @@ public final class Main {
             }
             Sys.context();
             Apps.undoLeftovers();
-            Bridge bridge = new Bridge(token);
+            String pkg = options.getOrDefault("pkg", "app.ft");
+            Apps.ourselves = pkg;
+            Bridge bridge = new Bridge(token, pkg + ".supercast");
             Commands commands = new Commands(token, bridge);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 Log.i("helper going away, giving the phone screen back");

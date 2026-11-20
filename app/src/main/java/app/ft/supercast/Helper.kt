@@ -19,15 +19,20 @@ object Helper {
         context.packageManager.getApplicationInfo(context.packageName, 0).sourceDir
     }.getOrNull()
 
+    private val pkg: String get() = app.ft.BuildConfig.APPLICATION_ID
+
+    // The helper looks for app.ft unless told otherwise; only the Play build has another package.
+    private val pkgArg: String get() = if (app.ft.BuildConfig.PLAY) " pkg=$pkg" else ""
+
     fun run(apk: String, token: String): String =
-        "CLASSPATH=$apk app_process / $MAIN token=$token"
+        "CLASSPATH=$apk app_process / $MAIN token=$token$pkgArg"
 
     private fun viaEnv(apk: String, token: String): String =
-        "env CLASSPATH=$apk app_process / $MAIN token=$token"
+        "env CLASSPATH=$apk app_process / $MAIN token=$token$pkgArg"
 
     fun computerCommand(context: Context, token: String): String {
-        val apk = apkPath(context) ?: "\$(pm path app.ft | cut -d: -f2)"
-        return "adb shell \"rm -f $LOG; CLASSPATH=$apk nohup app_process / $MAIN token=$token >$LOG 2>&1 &\""
+        val apk = apkPath(context) ?: "\$(pm path $pkg | cut -d: -f2)"
+        return "adb shell \"rm -f $LOG; CLASSPATH=$apk nohup app_process / $MAIN token=$token$pkgArg >$LOG 2>&1 &\""
     }
 
     fun running(): Boolean =

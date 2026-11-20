@@ -110,7 +110,7 @@
 
         <provider
             android:name=".supercast.SuperCastProvider"
-            android:authorities="app.ft.supercast"
+            android:authorities="${applicationId}.supercast"
             android:exported="true" />
 
         <service

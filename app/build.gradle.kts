@@ -11,6 +11,12 @@ val keystoreProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// The Play build is signed with an upload key; Google Play signs what users install.
+val playKeystoreProps = Properties().apply {
+    val f = rootProject.file("keystore-play.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "app.ft"
     compileSdk = 36
@@ -29,6 +35,25 @@ android {
             storePassword = keystoreProps.getProperty("storePassword")
             keyAlias = keystoreProps.getProperty("keyAlias")
             keyPassword = keystoreProps.getProperty("keyPassword")
+        }
+        create("upload") {
+            storeFile = rootProject.file(playKeystoreProps.getProperty("storeFile", "ft-upload.jks"))
+            storePassword = playKeystoreProps.getProperty("storePassword")
+            keyAlias = playKeystoreProps.getProperty("keyAlias")
+            keyPassword = playKeystoreProps.getProperty("keyPassword")
+        }
+    }
+
+    flavorDimensions += "store"
+    productFlavors {
+        create("github") {
+            dimension = "store"
+            buildConfigField("boolean", "PLAY", "false")
+        }
+        create("playstore") {
+            dimension = "store"
+            applicationId = "com.shkomaghdid.ft"
+            buildConfigField("boolean", "PLAY", "true")
         }
     }
 
@@ -50,6 +75,7 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+        buildConfig = true
     }
 
     testOptions {
@@ -63,6 +89,12 @@ android {
 
     packaging {
         resources.excludes += setOf("META-INF/*.version", "META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/versions/9/OSGI-INF/MANIFEST.MF")
+    }
+}
+
+androidComponents {
+    onVariants(selector().withFlavor("store" to "playstore").withBuildType("release")) { variant ->
+        variant.signingConfig.setConfig(android.signingConfigs.getByName("upload"))
     }
 }
 

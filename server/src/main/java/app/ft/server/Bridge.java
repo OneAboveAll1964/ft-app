@@ -4,14 +4,15 @@ import android.os.Bundle;
 import android.os.IBinder;
 
 public final class Bridge {
-    private static final String AUTHORITY = "app.ft.supercast";
     private static final String GET_CLIENT = "getClient";
 
     private final String token;
+    private final String authority;
     private IFtClient client;
 
-    public Bridge(String token) {
+    public Bridge(String token, String authority) {
         this.token = token;
+        this.authority = authority;
     }
 
     public IFtClient client() {
@@ -22,7 +23,7 @@ public final class Bridge {
         try {
             Bundle extras = new Bundle();
             extras.putString("token", token);
-            Bundle answer = Providers.call(AUTHORITY, GET_CLIENT, extras);
+            Bundle answer = Providers.call(authority, GET_CLIENT, extras);
             if (answer == null) {
                 Log.w("FT refused the bridge (wrong token, or FT is not running)");
                 return false;
