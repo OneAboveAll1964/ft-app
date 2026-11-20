@@ -44,7 +44,7 @@ See the [tester notes (Russian)](docs/ICCOA-TESTER-RU.md) and [development notes
 
 ## Building
 
-`./gradlew assembleRelease` builds `app/build/outputs/apk/release/app-release.apk`, signed with the keystore in `keystore.properties`. Android 10 and newer. Simulators for testing are in `tools/sim/`.
+There are two flavors. `./gradlew assembleGithubRelease` builds the GitHub APK (`app.ft`) at `app/build/outputs/apk/github/release/`, signed with the keystore in `keystore.properties`. `./gradlew bundlePlaystoreRelease` builds the Google Play bundle (`com.shkomaghdid.ft`) at `app/build/outputs/bundle/playstoreRelease/`, signed with the upload key in `keystore-play.properties`; Google Play signs what users install. The Play build never uses root and explains each permission and accessibility service before asking; see [PRIVACY.md](PRIVACY.md). Both keystore files stay on your machine and are ignored by git. Android 10 and newer. Simulators for testing are in `tools/sim/`.
 
 ## Credit and license
 
