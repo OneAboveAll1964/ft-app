@@ -53,6 +53,8 @@ android {
         create("playstore") {
             dimension = "store"
             applicationId = "com.shkomaghdid.ft"
+            // Play needs a new code for every upload; 184 is already on Play.
+            versionCode = 185
             buildConfigField("boolean", "PLAY", "true")
         }
     }
