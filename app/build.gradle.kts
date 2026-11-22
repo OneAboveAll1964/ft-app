@@ -19,8 +19,8 @@ android {
         applicationId = "app.ft"
         minSdk = 29
         targetSdk = 36
-        versionCode = 194
-        versionName = "3.9.79-iccoa-codec"
+        versionCode = 195
+        versionName = "3.9.80-carlife-phone-group"
     }
 
     signingConfigs {

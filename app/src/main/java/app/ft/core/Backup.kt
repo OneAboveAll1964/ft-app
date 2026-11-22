@@ -21,7 +21,7 @@ object Backup {
         "encoderSavePower", "carSizedApps", "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio",
         "aaBluetooth", "aaAutoStart", "aaOnly", "aaPrepareBeforeConnect", "aaShowReturnButton", "carClock24",
         "carShowLink", "carSongInfo", "modernPhoneUi", "autoConnect", "carBtReconnect",
-        "showOtherDevicesInLogs", "vehicleCoordinateLogging", "swapTrackKeys", "carP2pAutoRole",
+        "showOtherDevicesInLogs", "vehicleCoordinateLogging", "swapTrackKeys", "carP2pAutoRole", "carP2pPhoneGroup",
         "carInfoRight", "carShowClock", "carShowMusic", "carShowAa", "carShowCarHome",
         "weatherFahrenheit", "speedMph", "carDayNight", "supercastOn", "supercastScreenOff", "supercastDockHidden"
     )

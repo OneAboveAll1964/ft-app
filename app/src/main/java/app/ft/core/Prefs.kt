@@ -202,6 +202,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var guidanceMode: Int get() = int("directions", CarAudioBus.GUIDANCE_UNTOUCHED); set(v) = set("directions", v)
     var linkMode: Int get() = int("linkMode", 0); set(v) = set("linkMode", v)
     var carP2pAutoRole: Boolean get() = bool("carP2pAutoRole", false); set(v) = set("carP2pAutoRole", v)
+    var carP2pPhoneGroup: Boolean get() = bool("carP2pPhoneGroup", false); set(v) = set("carP2pPhoneGroup", v)
     var carWpsPin: String get() = str("carWpsPin", ""); set(v) = set("carWpsPin", v)
     var carJoinTimeoutSeconds: Int
         get() = JoinWatch.timeoutSeconds(int("carJoinTimeoutSeconds", JoinWatch.DEFAULT_TIMEOUT_SECONDS))
@@ -275,7 +276,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
             "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio", "iccoaMicGain", "directions",
             "carName", "autoConnect", "carProtocol", "linkMode", "carP2pName", "carBtName", "carBtAddress",
             "carBtReconnect", "carLifeVehicleAddress", "carLifeVehicleName", "carLifeWifiAddress", "carLifeVehicleRevision",
-            "carWpsPin", "carJoinTimeoutSeconds", "carP2pAutoRole", "swapTrackKeys", "wheelLongNext", "wheelLongPrev", "voiceAssistant",
+            "carWpsPin", "carJoinTimeoutSeconds", "carP2pAutoRole", "carP2pPhoneGroup", "swapTrackKeys", "wheelLongNext", "wheelLongPrev", "voiceAssistant",
             "gearReverse", "gearPark", "gearReverseSound", "gearParkSound", "gearReverseLevel", "gearParkLevel",
             "pkgMaps", "pkgMusic", "pkgVideo", "pkgPhone", "openOnConnect", "openOnConnectSecond",
             "carBackground", "carAccent", "carTiles", "carClock24", "carShowLink", "carSongInfo",

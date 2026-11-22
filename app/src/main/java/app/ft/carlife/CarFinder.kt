@@ -8,13 +8,16 @@ import android.content.IntentFilter
 import android.net.wifi.WpsInfo
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
+import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
+import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import app.ft.core.DiagLog
 import app.ft.core.Prefs
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +33,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     data class Peer(val name: String, val address: String, val status: Int, val groupOwner: Boolean)
     data class Link(val groupOwnerIp: String, val iface: String?, val weAreOwner: Boolean, val name: String)
     private data class ServiceMatch(val address: String, val name: String, val expiresAt: Long)
+    private class PhoneGroup(val peer: Peer, val name: String) {
+        var invitationSent = false
+
+        fun owns(group: WifiP2pGroup) = group.isGroupOwner && group.networkName == name
+    }
 
     private val tag = "P2P"
     private val manager = context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
@@ -66,6 +74,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var joiningRoleGeneration: Long? = null
     private var joiningOwnerIntent = 0
     private var waitingForRoleClient = false
+    private var phoneGroup: PhoneGroup? = null
+    private var phoneGroupTriedFor = ""
     private var lastNoMatch = ""
     private var lastSnapshot = ""
     private var lastGroupSnapshot = ""
@@ -109,6 +119,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (!bluetoothAddress.equals(address, true)) {
             bluetoothGeneration++
             resetRoleRetry()
+            phoneGroupTriedFor = ""
         }
         bluetoothAddress = address
         announcedName = ""
@@ -217,8 +228,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                     delay(1000)
                     if (lifecycle == life && channel == null && receiver != null) {
                         channel = openChannel()
-                        checkExisting()
-                        if (searching && enabled) discover()
+                        val pending = phoneGroup?.takeIf { _link.value == null }
+                        if (pending != null) {
+                            restart(pending.peer, "WiFi Direct channel was lost during temporary group setup")
+                        } else {
+                            checkExisting()
+                            if (searching && enabled) discover()
+                        }
                     }
                 }
             }
@@ -236,11 +252,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         retryOwnerIntent = defaultOwnerIntent()
     }
 
-    private fun planRoleRetry(address: String, ownerIntent: Int, generation: Long) {
+    private fun planRoleRetry(address: String, ownerIntent: Int, generation: Long, reason: String = "join timeout") {
         if (prefs.carP2pAutoRole && address.isNotBlank() && generation == bluetoothGeneration) {
             roleRetryAddress = address
             retryOwnerIntent = if (ownerIntent == 0) 15 else 0
-            DiagLog.i(tag, "automatic role retry: ownerIntent=$ownerIntent -> $retryOwnerIntent after join timeout; actual role will be negotiated")
+            DiagLog.i(tag, "role retry: ownerIntent=$ownerIntent -> $retryOwnerIntent after $reason; actual role will be negotiated")
         } else resetRoleRetry()
     }
 
@@ -487,6 +503,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                 DiagLog.i(tag, if (on) "WiFi Direct enabled" else "WiFi Direct disabled")
                 if (!on) {
                     cancelAttempt()
+                    phoneGroup = null
+                    phoneGroupTriedFor = ""
+                    if (prefs.carP2pPhoneGroup) failures = 0
                     groupVersion++
                     peersVersion++
                     _peers.value = emptyList()
@@ -517,6 +536,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
                     cancelGroupProbe()
                     if (_link.value != null) {
                         cancelAttempt()
+                        phoneGroup = null
+                        phoneGroupTriedFor = ""
                         peersVersion++
                         _peers.value = emptyList()
                         _link.value = null
@@ -556,7 +577,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val life = lifecycle
         val id = attempt
         val group = groupVersion
-        if (_link.value == null && groupProbe == null) {
+        val temporary = phoneGroup
+        if (temporary == null && _link.value == null && groupProbe == null) {
             // Group formation and its usable metadata arrive independently. Give
             // this group one bounded window, never extended by repeated broadcasts.
             val observedAt = android.os.SystemClock.elapsedRealtime()
@@ -582,7 +604,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             }
         }
         val ip = info.groupOwnerAddress?.hostAddress
-        if (ip == null) {
+        if (ip == null && temporary == null) {
             DiagLog.d(tag, "group formed without an owner address yet, asking again")
             return
         }
@@ -593,10 +615,26 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             // CONNECTED peers may precede our own connect()/INVITED path. Attribute an
             // existing group through the complete peer snapshot, not just the group owner.
             val selected = pick(_peers.value)
-            val expected = joiningAddress.ifBlank {
+            val expected = temporary?.peer?.address ?: joiningAddress.ifBlank {
                 selected?.address ?: if (locked) prefs.carLifeWifiAddress.orEmpty() else ""
             }
-            val matched = devices.firstOrNull { expected.isNotBlank() && it.deviceAddress.equals(expected, true) }
+            val ownTemporaryGroup = temporary != null && info.isGroupOwner && temporary.owns(g)
+            val matched = devices.firstOrNull {
+                (temporary == null || ownTemporaryGroup) && expected.isNotBlank() && it.deviceAddress.equals(expected, true)
+            }
+            if (temporary != null && matched == null) {
+                if (_link.value != null) {
+                    connectionGeneration++
+                    _link.value = null
+                    DiagLog.w(tag, "car left the temporary WiFi Direct group")
+                    restart(temporary.peer, "the car left the temporary group")
+                    onLeft?.invoke()
+                } else if (ownTemporaryGroup && !temporary.invitationSent) {
+                    inviteToPhoneGroup(m, ch, temporary, life, id)
+                }
+                return@requestGroupInfo
+            }
+            if (ip == null) return@requestGroupInfo
             // Keep the owner's IP separate from its P2P device MAC. Report membership
             // before accepting a group, including an empty phone-owned group.
             val ownerAddress = g.owner?.deviceAddress.orEmpty()
@@ -665,6 +703,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             failures = 0
             joiningRoleGeneration = null
             resetRoleRetry()
+            phoneGroupTriedFor = ""
             _link.value = l
             if (transportChanged) {
                 val details = if (matched != null || prefs.showOtherDevicesInLogs) " network=${g.networkName} ${g.frequency} MHz" else ""
@@ -717,9 +756,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
         when (target.status) {
             WifiP2pDevice.INVITED -> {
-                // After confirmed cleanup, an INVITED snapshot must not prevent
-                // sending the new role preference on the fresh retry.
-                if (armed && prefs.carP2pAutoRole && roleRetryAddress.equals(target.address, true)) {
+                // Discovery can still report INVITED after cleanup has finished.
+                val retryRole = prefs.carP2pAutoRole && roleRetryAddress.equals(target.address, true)
+                val retryPhoneGroupMode = prefs.carP2pPhoneGroup && failures > 0
+                if (armed && (retryRole || retryPhoneGroupMode)) {
                     connect(target)
                     return
                 }
@@ -765,11 +805,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             preparation = scope.launch(Dispatchers.Main) { onRetryReady?.invoke(true) }
             return
         }
-        resetRoleRetry()
         if (recovery != null) {
             DiagLog.i(tag, "manual retry: WiFi Direct cleanup is already in progress")
             return
         }
+        // An interrupted join can try the other role. During discovery, retain
+        // the role already planned for this peer until it comes back.
+        joiningRoleGeneration?.let { planRoleRetry(joiningAddress, joiningOwnerIntent, it, "manual retry") }
         // A new Bluetooth exchange alone cannot replace an active invitation.
         // Invalidate old callbacks, cancel the join, then use fresh peers only.
         groupVersion++
@@ -796,12 +838,93 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         joiningAddress = p.address
         joiningBluetoothAddress = if (serviceName != null && trustedAnnouncement.isNotBlank()) bluetoothAddress else bluetoothFor(p.address)
         connectedPeerAddress = ""
+        val timeoutMs = prefs.carJoinTimeoutSeconds * 1_000L
+        attemptAt = SystemClock.elapsedRealtime()
+        val readyForPhoneGroup = p.status == WifiP2pDevice.AVAILABLE || (p.status == WifiP2pDevice.INVITED && failures > 0)
+        if (prefs.carP2pPhoneGroup && readyForPhoneGroup && p.address.isNotBlank() &&
+            !phoneGroupTriedFor.equals(p.address, true)) {
+            createPhoneGroup(m, ch, p, life, id, maxOf(timeoutMs, JoinWatch.GIVE_UP_MS))
+            return
+        }
         if (!prefs.carP2pAutoRole || !roleRetryAddress.equals(p.address, true)) resetRoleRetry()
         val ownerIntent = retryOwnerIntent
         joiningOwnerIntent = ownerIntent
         joiningRoleGeneration = if (prefs.carP2pAutoRole) bluetoothGeneration else null
-        val timeoutMs = prefs.carJoinTimeoutSeconds * 1_000L
         DiagLog.i(tag, "connecting to ${p.name} (${p.address}), join timeout ${timeoutMs / 1000}s ownerIntent=$ownerIntent autoRole=${prefs.carP2pAutoRole}")
+        val cfg = peerConfig(p, ownerIntent, id)
+        // Android can omit the action callback altogether. Bound the whole
+        // request, including that wait, without extending it on a late success.
+        watch(p, timeoutMs, ownerIntent)
+        m.connect(ch, cfg, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                if (!current(ch, life) || attempt != id || connecting != p.name) return
+                DiagLog.d(tag, "join attempt=$id accepted by Android; waiting for group formation")
+            }
+
+            override fun onFailure(reason: Int) {
+                if (!current(ch, life) || attempt != id || connecting != p.name) return
+                DiagLog.w(tag, "connect to ${p.name} failed reason=$reason (${failureName(reason)}) attempt=$id")
+                restart(p, if (reason == WifiP2pManager.BUSY) "WiFi Direct was busy" else "the request failed ($reason)")
+            }
+        })
+    }
+
+    private fun createPhoneGroup(
+        m: WifiP2pManager, ch: WifiP2pManager.Channel, p: Peer, life: Long, id: Long, timeoutMs: Long
+    ) {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(20)
+        val trial = PhoneGroup(p, "DIRECT-FT-$suffix")
+        phoneGroupTriedFor = p.address
+        phoneGroup = trial
+        joiningRoleGeneration = null
+        DiagLog.i(tag, "phone group attempt=$id creating ${trial.name} for ${p.name} (${p.address}); timeout=${timeoutMs}ms")
+        watchdog = scope.launch(Dispatchers.Main) {
+            while (isActive && current(ch, life) && attempt == id && _link.value == null) {
+                delay(500)
+                if (SystemClock.elapsedRealtime() - attemptAt >= timeoutMs) {
+                    val why = if (trial.invitationSent) "the car did not join the temporary group" else "the temporary group did not form"
+                    onJoinTimeout?.invoke((timeoutMs / 1000).toInt())
+                    restart(p, why)
+                    return@launch
+                }
+                checkExisting()
+            }
+        }
+        runCatching {
+            val config = WifiP2pConfig.Builder()
+                .setNetworkName(trial.name)
+                .setPassphrase(UUID.randomUUID().toString())
+                .enablePersistentMode(false)
+                .build()
+            m.createGroup(ch, config, phoneGroupAction(ch, life, id, trial, "create the temporary group"))
+        }.onFailure { restart(p, "could not request a temporary group (${it.javaClass.simpleName})") }
+    }
+
+    private fun inviteToPhoneGroup(m: WifiP2pManager, ch: WifiP2pManager.Channel, trial: PhoneGroup, life: Long, id: Long) {
+        trial.invitationSent = true
+        DiagLog.i(tag, "phone group attempt=$id inviting ${trial.peer.name} (${trial.peer.address}) to ${trial.name}")
+        runCatching {
+            m.connect(ch, peerConfig(trial.peer, 15, id), phoneGroupAction(ch, life, id, trial, "invite the car"))
+        }.onFailure { restart(trial.peer, "could not invite the car to the temporary group (${it.javaClass.simpleName})") }
+    }
+
+    private fun phoneGroupAction(ch: WifiP2pManager.Channel, life: Long, id: Long, trial: PhoneGroup, action: String) =
+        object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                if (current(ch, life) && attempt == id && phoneGroup === trial && _link.value == null) {
+                    DiagLog.d(tag, "phone group attempt=$id Android accepted the request to $action")
+                    checkExisting()
+                }
+            }
+
+            override fun onFailure(reason: Int) {
+                if (current(ch, life) && attempt == id && phoneGroup === trial && _link.value == null) {
+                    restart(trial.peer, "could not $action (${failureName(reason)})")
+                }
+            }
+        }
+
+    private fun peerConfig(p: Peer, ownerIntent: Int, id: Long): WifiP2pConfig {
         val fresh = runCatching {
             WifiP2pConfig.Builder()
                 .setDeviceAddress(android.net.MacAddress.fromString(p.address))
@@ -821,26 +944,12 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             }
             groupOwnerIntent = ownerIntent
         }
-        attemptAt = android.os.SystemClock.elapsedRealtime()
         val networkId = if (Build.VERSION.SDK_INT >= 30) cfg.networkId.toString() else "unavailable"
         DiagLog.d(tag, "join attempt=$id peerStatus=${statusName(p.status)} peerOwner=${p.groupOwner} " +
             "wps=${if (cfg.wps.setup == WpsInfo.PBC) "push-button" else "keypad"} ownerIntent=${cfg.groupOwnerIntent} " +
             "configSource=${if (fresh != null) "builder" else "legacy"} networkId=$networkId " +
             "persistentSave=${if (fresh != null) "false" else "default"}")
-        // Android can omit the action callback altogether. Bound the whole
-        // request, including that wait, without extending it on a late success.
-        watch(p, timeoutMs, ownerIntent)
-        m.connect(ch, cfg, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                if (!current(ch, life) || attempt != id || connecting != p.name) return
-                DiagLog.d(tag, "join attempt=$id accepted by Android; waiting for group formation")
-            }
-            override fun onFailure(reason: Int) {
-                if (!current(ch, life) || attempt != id || connecting != p.name) return
-                DiagLog.w(tag, "connect to ${p.name} failed reason=$reason (${failureName(reason)}) attempt=$id")
-                restart(p, if (reason == WifiP2pManager.BUSY) "WiFi Direct was busy" else "the request failed ($reason)")
-            }
-        })
+        return cfg
     }
 
     private fun watch(p: Peer, timeoutMs: Long, ownerIntent: Int = 0) {
@@ -874,6 +983,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val ch = channel ?: return
         val life = lifecycle
         val id = ++attempt
+        val temporary = phoneGroup
         cancelOwnerDiscovery()
         busyProbe?.cancel()
         busyProbe = null
@@ -897,11 +1007,13 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             // A rejected connect (including BUSY) can also leave negotiation active.
             // Do not overlap discovery/new joins with an unfinished teardown.
             while (isActive && current(ch, life) && enabled && attempt == id) {
-                if (clearGroup(m, ch)) break
+                val cleared = if (temporary == null) clearGroup(m, ch) else clearPhoneGroup(m, ch, temporary)
+                if (cleared) break
                 DiagLog.w(tag, "WiFi Direct cleanup not confirmed; waiting before trying cleanup again")
                 delay(JoinWatch.DISCOVER_EVERY_MS)
             }
             if (!current(ch, life) || !enabled || attempt != id) return@launch
+            phoneGroup = null
             if (JoinWatch.renewChannel(failures)) renewChannel()
             // Ask the head unit to prepare again even when its peer stayed visible.
             // Keep recovery active during the exchange and backoff: Bluetooth replies
@@ -943,6 +1055,38 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             DiagLog.i(tag, "recovery complete; waiting for the car in a fresh WiFi Direct peer list")
             refreshPeers()
             discover()
+        }
+    }
+
+    private suspend fun clearPhoneGroup(m: WifiP2pManager, ch: WifiP2pManager.Channel, trial: PhoneGroup): Boolean {
+        return try {
+            withTimeoutOrNull(5_000) {
+                val group = groupInfo(m, ch)
+                if (group != null && !trial.owns(group)) return@withTimeoutOrNull false
+                val result = if (group == null) {
+                    awaitAction("cancel temporary group setup") { m.cancelConnect(ch, it) }
+                } else {
+                    awaitAction("remove temporary group ${trial.name}") { m.removeGroup(ch, it) }
+                }
+                if (groupInfo(m, ch) != null) return@withTimeoutOrNull false
+                result == -1 || idleNetwork(m, ch)
+            } == true
+        } catch (e: SecurityException) {
+            DiagLog.w(tag, "temporary group cleanup permission denied: ${e.javaClass.simpleName}")
+            false
+        } catch (e: IllegalArgumentException) {
+            DiagLog.w(tag, "temporary group cleanup unavailable: ${e.javaClass.simpleName}")
+            false
+        }
+    }
+
+    private suspend fun groupInfo(m: WifiP2pManager, ch: WifiP2pManager.Channel): WifiP2pGroup? {
+        val result = CompletableDeferred<WifiP2pGroup?>()
+        try {
+            m.requestGroupInfo(ch) { result.complete(it) }
+            return result.await()
+        } finally {
+            result.cancel()
         }
     }
 
@@ -1031,6 +1175,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
 
     fun stop() {
         val pendingJoin = _link.value == null && (connecting != null || recovery != null)
+        val temporary = phoneGroup
+        phoneGroup = null
+        phoneGroupTriedFor = ""
         lifecycle++
         loop?.cancel()
         loop = null
@@ -1049,7 +1196,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         // Closing the app's channel does not cancel Android's negotiation. Send
         // cancellation before closing it so the next service can discover peers.
         // An established group can be reused on the next start and is kept.
-        if (m != null && ch != null && pendingJoin) runCatching { m.cancelConnect(ch, null) }
+        if (m != null && ch != null && pendingJoin && temporary == null) runCatching { m.cancelConnect(ch, null) }
         if (m != null && ch != null) runCatching { m.stopPeerDiscovery(ch, null) }
         if (m != null && ch != null && servicesChannel === ch) runCatching { m.clearServiceRequests(ch, null) }
         servicesChannel = null
@@ -1067,7 +1214,32 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         lastNoMatch = ""
         notedMatch = ""
         narrowNoted = false
-        runCatching { ch?.close() }
+        if (m != null && ch != null && temporary != null) closePhoneGroup(m, ch, temporary, pendingJoin)
+        else runCatching { ch?.close() }
+    }
+
+    private fun closePhoneGroup(m: WifiP2pManager, ch: WifiP2pManager.Channel, trial: PhoneGroup, pendingJoin: Boolean) {
+        val handler = Handler(Looper.getMainLooper())
+        var closed = false
+        val close = Runnable {
+            if (!closed) {
+                closed = true
+                runCatching { ch.close() }
+            }
+        }
+        handler.postDelayed(close, 2_000)
+        if (pendingJoin) runCatching { m.cancelConnect(ch, null) }
+        runCatching {
+            m.requestGroupInfo(ch) { g ->
+                if (closed) return@requestGroupInfo
+                if (g != null && trial.owns(g)) runCatching { m.removeGroup(ch, null) }
+                handler.removeCallbacks(close)
+                close.run()
+            }
+        }.onFailure {
+            handler.removeCallbacks(close)
+            close.run()
+        }
     }
 
     private fun statusName(s: Int) = when (s) {

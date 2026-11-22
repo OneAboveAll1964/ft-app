@@ -288,16 +288,20 @@ class CarLifeServiceRetryTest {
         verify(h.finder).retry()
     }
 
-    @Test fun anAbsentPeerGetsFourIoRequestsThenOnlyItsBluetoothConversationIsRetired() = startupCheck { h ->
+    @Test fun anAbsentPeerGetsARequestToEnableWifiBeforeItsBluetoothConversationIsRetired() = startupCheck { h ->
         h.state.value = h.state.value.copy(carWifi = "CarLife")
         val writer = AtomicReference<Thread>()
         val mainThread = Thread.currentThread()
-        doAnswer { writer.set(Thread.currentThread()); null }.`when`(h.wireless).askName()
-        for (at in listOf(0L, 2_000L, 7_000L, 17_000L, 27_000L, 37_000L, 100_000L)) {
+        doAnswer { writer.set(Thread.currentThread()); true }.`when`(h.wireless).begin()
+        for (at in listOf(0L, 2_000L, 7_000L, 17_000L, 27_000L)) {
             h.service.askCarAgain(at)
         }
         assertNotSame(mainThread, writer.get())
-        verify(h.wireless, times(4)).askName()
+        verify(h.wireless).begin()
+        verify(h.wireless, times(3)).askName()
+        verify(h.bt, never()).disconnect(anyLong())
+        h.service.askCarAgain(37_000)
+        h.service.askCarAgain(100_000)
         verify(h.bt).disconnect(7L)
         verify(h.bt, never()).stop()
         verify(h.finder, never()).stop()

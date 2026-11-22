@@ -7,10 +7,15 @@ class WirelessPeerWatchTest {
     @Test fun repeatedAnnouncementsDoNotPostponeReconnectingAnAbsentCar() {
         val watch = WirelessPeerWatch()
         assertNull(watch.next(7, "Car", true, 0))
-        val asks = listOf(2_000L, 7_000L, 17_000L, 27_000L)
-        for (time in asks) {
+        val requests = listOf(
+            2_000L to WirelessPeerWatch.Action.ASK_NAME,
+            7_000L to WirelessPeerWatch.Action.ASK_NAME,
+            17_000L to WirelessPeerWatch.Action.REARM_WIFI,
+            27_000L to WirelessPeerWatch.Action.ASK_NAME
+        )
+        for ((time, action) in requests) {
             assertNull(watch.next(7, "Car", true, time - 1))
-            assertEquals(WirelessPeerWatch.Action.ASK_NAME, watch.next(7, "Car", true, time))
+            assertEquals(action, watch.next(7, "Car", true, time))
         }
         assertNull(watch.next(7, "Car", true, 36_999))
         assertEquals(WirelessPeerWatch.Action.RECONNECT_BLUETOOTH, watch.next(7, "Car", true, 37_000))

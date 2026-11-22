@@ -1223,21 +1223,21 @@ class CarLifeService : Service() {
             session?.projecting != true
 
     internal suspend fun askCarAgain(now: Long = android.os.SystemClock.elapsedRealtime()) {
-        val request = withContext(Dispatchers.Main) {
+        withContext(Dispatchers.Main) {
             val f = finder
             val name = _state.value.carWifi
             val generation = wirelessBluetoothGeneration
             if (f == null || name == null) {
                 peerWatch.reset()
-                return@withContext null
+                return@withContext
             }
             val action = peerWatch.next(generation, name, canRecoverMissingPeer(f, name, generation),
-                now) ?: return@withContext null
+                now) ?: return@withContext
             if (action == WirelessPeerWatch.Action.RECONNECT_BLUETOOTH) {
                 // Main also admits peers/groups/CMD. No working transport can
                 // be admitted between this last check and retiring the socket.
                 if (canRecoverMissingPeer(f, name, generation)) {
-                    DiagLog.w(tag, "WiFi + BL: '$name' is still absent after four name requests; reopening the Bluetooth conversation")
+                    DiagLog.w(tag, "WiFi + BL: '$name' is still absent after wireless recovery; reopening the Bluetooth conversation")
                     if (wireless.waitingForAddress) {
                         DiagLog.w(tag, "WiFi + BL: the car requested an IP but no local group or peer appeared; " +
                             "reopen CarLife on the car and check whether another projection is active")
@@ -1245,16 +1245,20 @@ class CarLifeService : Service() {
                     }
                     bt.disconnect(generation)
                 }
-                null
-            } else Triple(f, name, generation)
-        } ?: return
-        withContext(Dispatchers.IO) {
-            val job = currentCoroutineContext()
-            synchronized(wireless) {
-                job.ensureActive()
-                if (canRecoverMissingPeer(request.first, request.second, request.third)) {
-                    DiagLog.i(tag, "WiFi + BL: '${request.second}' is absent, asking for a fresh name over bluetooth")
-                    wireless.askName()
+                return@withContext
+            }
+            withContext(Dispatchers.IO) {
+                val job = currentCoroutineContext()
+                synchronized(wireless) {
+                    job.ensureActive()
+                    if (!canRecoverMissingPeer(f, name, generation)) return@synchronized
+                    if (action == WirelessPeerWatch.Action.REARM_WIFI) {
+                        DiagLog.i(tag, "WiFi + BL: '$name' is still absent, asking the car to enable WiFi Direct again")
+                        wireless.begin()
+                    } else {
+                        DiagLog.i(tag, "WiFi + BL: '$name' is absent, asking for a fresh name over bluetooth")
+                        wireless.askName()
+                    }
                 }
             }
         }
