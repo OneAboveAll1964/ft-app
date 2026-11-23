@@ -473,7 +473,19 @@ class CarLifeSession(
             CarLifeProtocol.CMD_HU_AUTHEN_RESULT -> {
                 DiagLog.i(tag, "HU authen result ${ProtoReader(c.payload).bool(1)}")
             }
-            CarLifeProtocol.CMD_GO_TO_FOREGROUND -> DiagLog.i(tag, "head unit asked FT to come forward, it already draws on the car")
+            CarLifeProtocol.CMD_GO_TO_FOREGROUND -> {
+                val mode = feed.start()
+                projecting = true
+                aaMusic.ready(true)
+                if (streamStartedAt == 0L) streamStartedAt = android.os.SystemClock.elapsedRealtime()
+                _state.value = State.Projecting(link.name, width, height, fps, streamWidth, streamHeight)
+                startVideoTimer()
+                if (mode == VideoFeed.Mode.RESUMING) onVideoBack?.invoke()
+                onNeedKeyframe?.invoke()
+                cmd(CarLifeProtocol.CMD_FOREGROUND)
+                DiagLog.i(tag, "head unit brought CarLife forward, resumed projection ($mode)")
+                onProjectionShown?.invoke()
+            }
             CarLifeProtocol.CMD_LAUNCH_MODE_NORMAL -> {
                 media.launchedAgain()
             }
@@ -511,6 +523,15 @@ class CarLifeSession(
             }
             CarLifeProtocol.CMD_VEHICLE_FOREGROUND -> {
                 DiagLog.i(tag, "the car shows CarLife")
+                if (feed.mode == VideoFeed.Mode.PAUSED) {
+                    val mode = feed.start()
+                    projecting = true
+                    aaMusic.ready(true)
+                    _state.value = State.Projecting(link.name, width, height, fps, streamWidth, streamHeight)
+                    startVideoTimer()
+                    if (mode == VideoFeed.Mode.RESUMING) onVideoBack?.invoke()
+                    onNeedKeyframe?.invoke()
+                }
                 onProjectionShown?.invoke()
             }
             CarLifeProtocol.CMD_VEHICLE_BACKGROUND -> DiagLog.i(tag, "the car moved CarLife to the background")

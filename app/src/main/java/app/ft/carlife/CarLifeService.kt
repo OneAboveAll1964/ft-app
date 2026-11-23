@@ -2104,7 +2104,10 @@ class CarLifeService : Service() {
         if (gear !in 1..5) DiagLog.w(tag, "the car sent gear $gear, which is not a gear FT knows, so it counts only if it lasts")
         gearHeld?.cancel()
         gearHeld = null
-        if (gear == GearAction.GEAR_REVERSE) cancelGearReturn()
+        if (gear == GearAction.GEAR_REVERSE) {
+            cancelGearReturn()
+            gearHidProjection = true
+        }
         val stopped = gearShown == GearAction.GEAR_REVERSE || gearShown == GearAction.GEAR_PARK
         val stopping = gear == GearAction.GEAR_REVERSE || gear == GearAction.GEAR_PARK
         if (stopped && !stopping) {
@@ -2136,10 +2139,13 @@ class CarLifeService : Service() {
             GearAction.GEAR_PARK -> gearSoundFor(gear, p.gearParkSound, p.gearParkLevel)
             else -> gearSoundFor(gear, GearAction.SOUND_KEEP, 100)
         }
+        if (gear == GearAction.GEAR_REVERSE) {
+            gearHidProjection = true
+        }
         if (GearAction.restores(action)) {
             cancelGearReturn()
             carHome(gear)
-        } else if (gear != GearAction.GEAR_REVERSE && gearHidProjection && gearReturn == null) {
+        } else if (gear != GearAction.GEAR_REVERSE && (gearHidProjection || wasReverse) && gearReturn == null) {
             // Park acts immediately for sound, but the camera still needs time to close.
             val firstDelay = if (wasReverse && gear == GearAction.GEAR_PARK) GEAR_HOLD_MS else 0L
             requestGearProjectionReturn(s, firstDelay)
@@ -2151,6 +2157,7 @@ class CarLifeService : Service() {
     }
 
     private fun requestGearProjectionReturn(s: CarLifeSession, firstDelay: Long) {
+        gearHidProjection = true
         gearReturn = scope.launch(Dispatchers.Main) {
             delay(firstDelay)
             repeat(GEAR_RETURN_ATTEMPTS) { attempt ->
