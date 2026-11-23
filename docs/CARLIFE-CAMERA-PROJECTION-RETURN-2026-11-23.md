@@ -1,7 +1,9 @@
 # Возврат экрана проекции CarLife после камер и задней передачи
 
-Дата: 23 ноября 2026 года.  
-Связанные компоненты: `CarLifeSession.kt`, `CarLifeService.kt`, `VideoFeed.kt`, `CarDisplay.kt`.  
+Дата: 23 ноября 2026 года.
+
+Связанные компоненты: `CarLifeSession.kt`, `CarLifeService.kt`, `VideoFeed.kt`, `CarDisplay.kt`.
+
 Логи: `.codex-attachments/baidu-20261122/ft.log` (строки 21540–21820).
 
 ---
@@ -44,7 +46,7 @@
    Флаг `gearHidProjection = true` выставлялся только в том случае, если пользователь явно настроил действие «Экран авто» (`GearAction.CAR_SCREEN`). Если действие было выключено (`NONE`), при выходе из задней передачи попытка возврата вообще не стартовала, несмотря на то, что камеры в автомобиле переключаются аппаратно.
 
 5. **Гонка состояний при задержке `GEAR_HOLD_MS` (700 мс):**
-   При переходе R → D задержка 700 мс предотвращает дергание экрана во время маневров. Однако если подтверждение от ГУ приходило во время действия таймера, флаг `gearHidProjection` сбрасывался до запуска `applyGear`, блокируя запуск таймера повторов.
+   При переходе R → D задержка 700 мс предотвращает дёргание экрана во время манёвров. Раннее подтверждение от ГУ сбрасывало `gearHidProjection`, но после задержки проверка `wasReverse` в `applyGear` всё равно запускала запрос возврата.
 
 ---
 
@@ -52,24 +54,26 @@
 
 ### 1. `CarLifeSession.kt`
 - Добавлена полноценная обработка `CMD_GO_TO_FOREGROUND` (`0x00018025`):
-  - Вызов `feed.start()` для перевода видеопотока из `Mode.PAUSED` в `Mode.RESUMING`.
+  - Вызов `feed.start()` для перевода видеопотока из `Mode.PAUSED` в `Mode.RESUMING`. Если кодировщик ещё не инициализирован (`Mode.OFF`), обработчик завершится. Штатное подтверждение отправится при `CMD_VIDEO_ENCODER_INIT`.
   - Установка `projecting = true` и состояния `State.Projecting`.
   - Запуск видеотаймера `startVideoTimer()`.
-  - Вызов `onVideoBack?.invoke()` (`carDisplay.wake()`) и `onNeedKeyframe?.invoke()` для немедленной генерации IDR-кадра кодировщиком.
+  - Вызов `onVideoBack?.invoke()` (`carDisplay.wake()`) при возобновлении после паузы и запрос ключевого кадра через `onNeedKeyframe?.invoke()`.
   - Отправка ГУ подтверждения `CMD_FOREGROUND` (`0x0001001B`).
   - Вызов `onProjectionShown?.invoke()` для оповещения сервиса об успешном возврате.
 - В обработчик `CMD_VEHICLE_FOREGROUND` (`0x00018097`) добавлено возобновление видеопотока, если он находился в режиме паузы.
 
 ### 2. `CarLifeService.kt`
 - Включение задней передачи (`gear == GEAR_REVERSE`) теперь всегда выставляет `gearHidProjection = true`, независимо от того, выбрано ли в настройках действие `CAR_SCREEN` или `NONE` (учитывая аппаратное включение камер авто).
-- При выходе из задней передачи (`wasReverse && gear != GEAR_REVERSE`) запуск `requestGearProjectionReturn` гарантирован даже при пустом действии в профиле.
-- Устранена гонка состояний между ранним `onGearProjectionShown` и отложенным `applyGear`.
+- При выходе из задней передачи `requestGearProjectionReturn` запускается, пока `gearHidProjection` выставлен, в том числе при `gearReverse = NONE`.
+- Подтверждение `onGearProjectionShown` во время задержки сбрасывает `gearHidProjection`. Отложенный `applyGear` применяет передачу и настройки звука без запроса возврата.
 
 ### 3. Тестирование
 Создан набор модульных тестов в `app/src/test/java/app/ft/carlife/CarLifeProjectionReturnTest.kt`:
-- `goToForegroundResumesPausedVideoFeedAndConfirmsToCar`: проверка возобновления `VideoFeed` из `PAUSED`, генерации ключевого кадра, отправки `CMD_FOREGROUND` и вызова `onProjectionShown`.
+- `goToForegroundResumesPausedVideoFeedAndConfirmsToCar` проверяет возобновление `VideoFeed` из `PAUSED`, запрос ключевого кадра, отправку нового `CMD_FOREGROUND` в ответ на команду и вызов `onProjectionShown`.
+- `goToForegroundBeforeVideoInitKeepsProjectionOff` проверяет состояние сеанса и отсутствие подтверждения до инициализации кодировщика.
 - `vehicleForegroundResumesPausedVideoFeed`: проверка восстановления видео при получении `CMD_VEHICLE_FOREGROUND`.
 - `leavingReverseGearRequestsForegroundEvenWhenActionIsNone`: проверка запроса возврата проекции при выходе из задней передачи при `gearReverse = NONE`.
+- `projectionShownDuringGearHoldSkipsForegroundRequest` проверяет применение передачи и отсутствие повторного запроса после раннего подтверждения.
 
 ---
 
@@ -79,11 +83,11 @@
 > **Архитектурные правила для работы с CarLife проекцией и камерами авто:**
 > 1. **Семантика команд переднего плана:**
 >    - `CMD_REQUEST_GO_TO_FOREGROUND` (`0x00010038`, MD → HU) — телефон просит ГУ показать CarLife.
->    - `CMD_GO_TO_FOREGROUND` (`0x00018025`, HU → MD) — ГУ сообщает телефону: «Переходи на передний план и давай видео». **Обязательно требует возобновления видеопотока, IDR-кадра и подтверждения `CMD_FOREGROUND` (`0x0001001B`).** Никогда не трактовать эту команду как no-op!
->    - `CMD_VEHICLE_FOREGROUND` (`0x00018097`, HU → MD) — ГУ подтверждает видимость окна CarLife.
+>    - `CMD_GO_TO_FOREGROUND` (`0x00018025`, HU → MD) — команда, которую Toyota отправила при выходе из режима камер. В FT после инициализации кодировщика она возобновляет приостановленный поток, запрашивает ключевой кадр и отправляет `CMD_FOREGROUND` (`0x0001001B`). [Таблица команд SDK Baidu](https://github.com/fgrcwp/apollo-DuerOS/blob/master/CarLife-Android-Vehicle-V2.0/carlife-sdk/src/main/java/com/baidu/carlife/sdk/internal/protocol/ServiceTypes.kt#L93)
+>    - `CMD_VEHICLE_FOREGROUND` (`0x00018097`, HU → MD) — FT обрабатывает эту команду как подтверждение видимости окна CarLife.
 > 2. **Состояния `VideoFeed`:**
 >    - После `CMD_VIDEO_ENCODER_PAUSE` видеопоток находится в `Mode.PAUSED`. Любые кадры от `CarDisplay` в этом режиме дропаются.
 >    - Выход из `Mode.PAUSED` возможен **только** через `feed.start()`. Если не вызвать `feed.start()`, видео никогда не пойдёт на экран авто.
->    - Переход `PAUSED` → `RESUMING` требует отправки нового IDR-кадра с заголовками SPS/PPS, чтобы аппаратный декодер ГУ смог начать воспроизведение без ожидания следующего естественного ключевого кадра.
+>    - При переходе `PAUSED` → `RESUMING` FT запрашивает ключевой кадр, чтобы ускорить восстановление изображения.
 > 3. **Аппаратные камеры автомобиля:**
->    - Логика восстановления CarLife не должна полагаться исключительно на пользовательскую настройку `gearReverse = CAR_SCREEN`. На современных авто (Toyota RAV4, Jetta, Chery, Geely и др.) камеры активируются на уровне CAN-контроллера ГУ без участия CarLife. Выход из передачи R всегда является триггером для проверки и восстановления проекции.
+>    - ГУ может переключиться на камеры без участия CarLife. FT проверяет необходимость возврата после выхода из R даже при `gearReverse = NONE`. Если ГУ уже подтвердило возврат во время задержки, дополнительный запрос не нужен.

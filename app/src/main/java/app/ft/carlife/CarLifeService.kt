@@ -2139,13 +2139,10 @@ class CarLifeService : Service() {
             GearAction.GEAR_PARK -> gearSoundFor(gear, p.gearParkSound, p.gearParkLevel)
             else -> gearSoundFor(gear, GearAction.SOUND_KEEP, 100)
         }
-        if (gear == GearAction.GEAR_REVERSE) {
-            gearHidProjection = true
-        }
         if (GearAction.restores(action)) {
             cancelGearReturn()
             carHome(gear)
-        } else if (gear != GearAction.GEAR_REVERSE && (gearHidProjection || wasReverse) && gearReturn == null) {
+        } else if (gear != GearAction.GEAR_REVERSE && gearHidProjection && gearReturn == null) {
             // Park acts immediately for sound, but the camera still needs time to close.
             val firstDelay = if (wasReverse && gear == GearAction.GEAR_PARK) GEAR_HOLD_MS else 0L
             requestGearProjectionReturn(s, firstDelay)

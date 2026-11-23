@@ -33,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import app.ft.core.CarProtocol
 import app.ft.core.DiagLog
+import app.ft.core.Lang
 import app.ft.core.ProtoWriter
 import app.ft.core.VehicleTelemetry
 import app.ft.core.VehicleLocation
@@ -188,7 +189,7 @@ class IccoaService : Service() {
         }
     }
     private val connectionTimeout = Runnable {
-        if (_state.value.connecting) connectionFailed(getString(app.ft.R.string.iccoa_msg_timeout))
+        if (_state.value.connecting) connectionFailed(Lang.str(R.string.iccoa_msg_timeout))
     }
 
     private var bluetoothCalls: app.ft.core.BluetoothCalls? = null
@@ -519,7 +520,7 @@ class IccoaService : Service() {
         dropRecovery.onConnected()
         val screen = projection.state.value
         _state.update { it.copy(connecting = false, connected = true, pinRequired = false,
-            status = getString(app.ft.R.string.iccoa_msg_linked, plan.streamWidth, plan.streamHeight, plan.fps)) }
+            status = Lang.str(R.string.iccoa_msg_linked, screen.width, screen.height, screen.fps)) }
     }
 
     /** Reference 7.62 phone state: no experimental call-state field is advertised. */
@@ -580,11 +581,11 @@ class IccoaService : Service() {
         if (number != null) {
             // A new scan is mandatory: Toyota can rotate its BLE address.
             autoConnectAttempted = false
-            _state.update { it.copy(status = getString(R.string.iccoa_msg_reconnecting, reason, number, IccoaDropRecovery.MAX_ATTEMPTS)) }
+            _state.update { it.copy(status = Lang.str(R.string.iccoa_msg_reconnecting, reason, number, IccoaDropRecovery.MAX_ATTEMPTS)) }
             scheduleRecoveryScan(number)
         } else {
             autoConnectAttempted = true
-            _state.update { it.copy(status = getString(R.string.iccoa_msg_retries_stopped, reason)) }
+            _state.update { it.copy(status = Lang.str(R.string.iccoa_msg_retries_stopped, reason)) }
             // A manual receiver selection is still possible after any failure.
             if (_state.value.running) discovery?.start()
         }
@@ -630,7 +631,7 @@ class IccoaService : Service() {
         val launch = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val note = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_tile_ft)
-            .setContentTitle(getString(R.string.iccoa_msg_notification_title)).setContentText(getString(R.string.iccoa_msg_notification_text))
+            .setContentTitle(Lang.str(R.string.iccoa_msg_notification_title)).setContentText(Lang.str(R.string.iccoa_msg_notification_text))
             .setContentIntent(launch).setOngoing(true).build()
         val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
             (if (withProjection) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)

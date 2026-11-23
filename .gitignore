@@ -15,8 +15,7 @@ ft-xa60-signing.properties
 *.p12
 *.jks
 # Signing passwords for the GitHub and Play builds stay on this machine.
-keystore.properties
-keystore-play.properties
+keystore*.properties
 tools/video/node_modules/
 tools/video/out/
 tools/sim/fake_aa/out/

@@ -2,25 +2,30 @@ package app.ft.carlife
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.media.AudioManager
 import app.ft.core.Prefs
 import app.ft.core.ProtoWriter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mockito.Mockito.CALLS_REAL_METHODS
 import org.mockito.Mockito.anyBoolean
 import org.mockito.Mockito.anyInt
 import org.mockito.Mockito.anyString
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -53,6 +58,7 @@ class CarLifeProjectionReturnTest {
         keyframeCalled = false
 
         // 3. Head unit sends CMD_GO_TO_FOREGROUND (e.g. exiting camera / user returns)
+        val sentBeforeForeground = link.sent.size
         link.command(CarLifeProtocol.CMD_GO_TO_FOREGROUND)
 
         // Verify video feed resumed, keyframe was requested, foreground was confirmed, and listener was notified
@@ -61,7 +67,29 @@ class CarLifeProjectionReturnTest {
         assertTrue(videoBackCalled)
         assertTrue(keyframeCalled)
         assertTrue(shownCalled)
-        assertTrue("Expected CMD_FOREGROUND in sent commands", link.sent.contains(CarLifeProtocol.CMD_FOREGROUND))
+        assertTrue("Expected a new CMD_FOREGROUND", CarLifeProtocol.CMD_FOREGROUND in link.sent.drop(sentBeforeForeground))
+    }
+
+    @Test
+    fun goToForegroundBeforeVideoInitKeepsProjectionOff() = runTest {
+        val link = TestLink()
+        val session = session(link, backgroundScope)
+        val initialState = session.state.value
+        var callbacks = 0
+        session.onVideoBack = { callbacks++ }
+        session.onNeedKeyframe = { callbacks++ }
+        session.onProjectionShown = { callbacks++ }
+
+        link.command(CarLifeProtocol.CMD_GO_TO_FOREGROUND)
+
+        assertEquals(VideoFeed.Mode.OFF, session.videoMode)
+        assertFalse(session.projecting)
+        assertEquals(initialState, session.state.value)
+        assertEquals(0, callbacks)
+        assertFalse(CarLifeProtocol.CMD_FOREGROUND in link.sent)
+
+        link.command(CarLifeProtocol.CMD_VIDEO_ENCODER_INIT, videoInitPayload(800, 480, 24))
+        assertTrue(CarLifeProtocol.CMD_FOREGROUND in link.sent)
     }
 
     @Test
@@ -99,25 +127,9 @@ class CarLifeProjectionReturnTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         Dispatchers.setMain(dispatcher)
         try {
-            val service = mock(CarLifeService::class.java, org.mockito.Mockito.CALLS_REAL_METHODS)
             val session = mock(CarLifeSession::class.java)
-            val prefs = mock(Prefs::class.java)
-            val am = mock(android.media.AudioManager::class.java)
-            val context = mock(Context::class.java)
-
-            `when`(service.getSystemService(Context.AUDIO_SERVICE)).thenReturn(am)
-            `when`(service.applicationContext).thenReturn(context)
-            `when`(prefs.gearReverse).thenReturn(GearAction.NONE)
-            `when`(prefs.gearPark).thenReturn(GearAction.NONE)
-            `when`(prefs.gearReverseSound).thenReturn(GearAction.SOUND_KEEP)
-            `when`(prefs.gearParkSound).thenReturn(GearAction.SOUND_KEEP)
             `when`(session.requestForeground()).thenReturn(true)
-
-            setField(service, "gearSound", GearSound())
-            setField(service, "tag", "CarLifeServiceTest")
-            setField(service, "scope", backgroundScope)
-            setField(service, "session", session)
-            setField(service, "prefs", prefs)
+            val service = gearService(session, backgroundScope)
 
             // 1. Enter Reverse (gear 5)
             invokeOnGear(service, session, GearAction.GEAR_REVERSE)
@@ -131,17 +143,63 @@ class CarLifeProjectionReturnTest {
             dispatcher.scheduler.runCurrent()
 
             // Verify foreground request was triggered
-            val gearReturn = getField(service, "gearReturn") as? kotlinx.coroutines.Job
+            val gearReturn = getField(service, "gearReturn") as? Job
             assertTrue(gearReturn != null && gearReturn.isActive)
-            org.mockito.Mockito.verify(session).requestForeground()
+            verify(session).requestForeground()
 
             // 3. Confirm projection return
             invokeOnGearProjectionShown(service, session)
             assertEquals(false, getField(service, "gearHidProjection"))
-            assertEquals(null, getField(service, "gearReturn"))
+            assertNull(getField(service, "gearReturn"))
         } finally {
             Dispatchers.resetMain()
         }
+    }
+
+    @Test
+    fun projectionShownDuringGearHoldSkipsForegroundRequest() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        try {
+            val session = mock(CarLifeSession::class.java)
+            val service = gearService(session, backgroundScope)
+
+            invokeOnGear(service, session, GearAction.GEAR_REVERSE)
+            invokeOnGear(service, session, 3)
+            dispatcher.scheduler.runCurrent()
+            assertEquals(GearAction.GEAR_REVERSE, getField(service, "gearShown"))
+
+            invokeOnGearProjectionShown(service, session)
+            assertEquals(false, getField(service, "gearHidProjection"))
+            advanceTimeBy(800)
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(3, getField(service, "gearShown"))
+            assertNull(getField(service, "gearReturn"))
+            verify(session, never()).requestForeground()
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    private fun gearService(session: CarLifeSession, scope: CoroutineScope): CarLifeService {
+        val service = mock(CarLifeService::class.java, CALLS_REAL_METHODS)
+        val prefs = mock(Prefs::class.java)
+        val am = mock(AudioManager::class.java)
+        val context = mock(Context::class.java)
+        `when`(service.getSystemService(Context.AUDIO_SERVICE)).thenReturn(am)
+        `when`(service.applicationContext).thenReturn(context)
+        `when`(prefs.gearReverse).thenReturn(GearAction.NONE)
+        `when`(prefs.gearPark).thenReturn(GearAction.NONE)
+        `when`(prefs.gearReverseSound).thenReturn(GearAction.SOUND_KEEP)
+        `when`(prefs.gearParkSound).thenReturn(GearAction.SOUND_KEEP)
+
+        setField(service, "gearSound", GearSound())
+        setField(service, "tag", "CarLifeServiceTest")
+        setField(service, "scope", scope)
+        setField(service, "session", session)
+        setField(service, "prefs", prefs)
+        return service
     }
 
     private fun session(link: TestLink, scope: CoroutineScope): CarLifeSession {

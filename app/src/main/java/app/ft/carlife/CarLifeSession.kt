@@ -475,6 +475,10 @@ class CarLifeSession(
             }
             CarLifeProtocol.CMD_GO_TO_FOREGROUND -> {
                 val mode = feed.start()
+                if (mode == VideoFeed.Mode.OFF) {
+                    DiagLog.i(tag, "head unit asked for foreground before video encoder init")
+                    return
+                }
                 projecting = true
                 aaMusic.ready(true)
                 if (streamStartedAt == 0L) streamStartedAt = android.os.SystemClock.elapsedRealtime()

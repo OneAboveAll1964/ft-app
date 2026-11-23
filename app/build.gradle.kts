@@ -71,9 +71,6 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            if (hasReleaseKeystore) {
-                signingConfig = signingConfigs.getByName("release")
-            }
         }
         debug {
             // Default to Android SDK debug key so debug builds work cleanly out-of-the-box
@@ -107,6 +104,11 @@ android {
 }
 
 androidComponents {
+    onVariants(selector().withFlavor("store" to "github").withBuildType("release")) { variant ->
+        if (hasReleaseKeystore) {
+            variant.signingConfig.setConfig(android.signingConfigs.getByName("release"))
+        }
+    }
     onVariants(selector().withFlavor("store" to "playstore").withBuildType("release")) { variant ->
         if (hasPlayKeystore) {
             variant.signingConfig.setConfig(android.signingConfigs.getByName("upload"))
