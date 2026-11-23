@@ -135,7 +135,7 @@ fun SuperCastSettings() {
     }
 
     Text(stringResource(R.string.supercast_ways), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-    Way(
+    if (!app.ft.BuildConfig.PLAY) Way(
         index = 0,
         open = open,
         onOpen = { open = if (open == 0) -1 else 0 },
@@ -150,7 +150,9 @@ fun SuperCastSettings() {
         title = stringResource(R.string.supercast_way_wireless),
         body = stringResource(R.string.supercast_way_wireless_body),
         best = !root
-    )
+    ) {
+        CopyLine(Helper.OPEN_BRIDGE)
+    }
     Way(
         index = 2,
         open = open,
@@ -165,9 +167,9 @@ fun SuperCastSettings() {
 @Composable
 internal fun SuperCastComputerCommand() {
     val context = LocalContext.current
-    var command by remember { mutableStateOf(Helper.computerCommand(SuperCast.token)) }
+    var command by remember { mutableStateOf(Helper.computerCommand(context, SuperCast.token)) }
     LifecycleResumeEffect(Unit) {
-        command = Helper.computerCommand(SuperCast.token)
+        command = Helper.computerCommand(context, SuperCast.token)
         onPauseOrDispose { }
     }
     SelectionContainer {
@@ -175,10 +177,23 @@ internal fun SuperCastComputerCommand() {
     }
     TextButton(onClick = {
         // The helper token may have changed since this screen was opened.
-        val current = Helper.computerCommand(SuperCast.token)
+        val current = Helper.computerCommand(context, SuperCast.token)
         command = current
         context.getSystemService(ClipboardManager::class.java)
             ?.setPrimaryClip(ClipData.newPlainText("FT", current))
+        Toast.makeText(context, context.getString(R.string.supercast_copy_command), Toast.LENGTH_SHORT).show()
+    }) { Text(stringResource(R.string.supercast_copy_command)) }
+}
+
+@Composable
+private fun CopyLine(line: String) {
+    val context = LocalContext.current
+    SelectionContainer {
+        Text(line, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+    }
+    TextButton(onClick = {
+        context.getSystemService(ClipboardManager::class.java)
+            ?.setPrimaryClip(ClipData.newPlainText("FT", line))
         Toast.makeText(context, context.getString(R.string.supercast_copy_command), Toast.LENGTH_SHORT).show()
     }) { Text(stringResource(R.string.supercast_copy_command)) }
 }

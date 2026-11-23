@@ -42,6 +42,12 @@ object SuperCast {
                 return
             }
             server = bound
+            runCatching {
+                bound.asBinder().linkToDeath({
+                    synchronized(lifecycleLock) { if (server === bound) drop() }
+                    DiagLog.w(TAG, "the SuperCast helper went away")
+                }, 0)
+            }.onFailure { drop(); return }
             _ready.value = true
             CarConnection.lifecycleChanged()
             DiagLog.i(TAG, "the SuperCast helper is connected")

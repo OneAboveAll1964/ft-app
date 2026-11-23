@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iccoa_msg_connecting_bluetooth">Connecting to ICCOA over Bluetooth…</string>
+    <string name="iccoa_msg_bluetooth_timeout">ICCOA Bluetooth connection timed out</string>
+    <string name="iccoa_msg_bluetooth_connect_failed">Could not connect over Bluetooth (%1$s)</string>
+    <string name="iccoa_msg_quick_checking">ICCOA Quick: checking the trusted phone…</string>
+    <string name="iccoa_msg_quick_queue_error">QUICK: Bluetooth queue error</string>
+    <string name="iccoa_msg_quick_not_confirmed">Quick was not confirmed. Enter the car\'s current PIN</string>
+    <string name="iccoa_msg_quick_bluetooth_error">QUICK: Bluetooth error (%1$s)</string>
+    <string name="iccoa_msg_enter_code">Enter the six-digit code from the car screen</string>
+    <string name="iccoa_msg_checking_code">Checking the ICCOA code…</string>
+    <string name="iccoa_msg_code_send_failed">Could not send the code. Enter the current PIN</string>
+    <string name="iccoa_msg_car_no_answer">The car did not respond. Enter the current code from its screen</string>
+    <string name="iccoa_msg_code_send_error">Could not send the ICCOA code (%1$s)</string>
+    <string name="iccoa_msg_channel_closed">ICCOA channel %1$d closed (%2$s)</string>
+    <string name="iccoa_msg_control_queue_full">ICCOA control queue is full</string>
+    <string name="iccoa_msg_bluetooth_closed">ICCOA Bluetooth connection closed (status=%1$d)</string>
+    <string name="iccoa_msg_no_channel">The device did not provide an ICCOA channel (%1$s)</string>
+    <string name="iccoa_msg_code_rejected">The car rejected the code (status=%1$d)</string>
+    <string name="iccoa_msg_services_request_failed">Could not request ICCOA services</string>
+    <string name="iccoa_msg_services_error">Bluetooth services error (%1$s)</string>
+    <string name="iccoa_msg_wifi_direct_unsupported">The car asked for Wi-Fi Direct. This ICCOA version supports only access point (AP) mode</string>
+    <string name="iccoa_msg_wifi_params_invalid">Invalid ICCOA Wi-Fi settings (%1$s)</string>
+    <string name="iccoa_msg_wifi_unavailable">Car Wi-Fi connection was canceled or timed out</string>
+    <string name="iccoa_msg_wifi_lost">Lost connection to the car Wi-Fi</string>
+    <string name="iccoa_msg_wifi_connecting">Connecting to the car Wi-Fi. Confirm the Android request</string>
+    <string name="iccoa_msg_wifi_denied">Android blocked the connection to the car Wi-Fi (%1$s)</string>
+    <string name="iccoa_msg_wifi_request_failed">Could not request the car Wi-Fi (%1$s)</string>
+    <string name="iccoa_msg_wifi_no_gateway">Car Wi-Fi connected, but no verified gateway address was received</string>
+    <string name="iccoa_msg_wifi_no_ipv4">No IPv4 address received from the car Wi-Fi</string>
+    <string name="iccoa_msg_wifi_waiting_gateway">Wi-Fi connected. Waiting for the car gateway address…</string>
+    <string name="iccoa_msg_no_auth_method">No confirmed ICCOA sign-in method</string>
+    <string name="iccoa_msg_authenticating">Verifying ICCOA…</string>
+    <string name="iccoa_msg_auth_done">ICCOA: verified, waiting for car channels…</string>
+    <string name="iccoa_msg_no_control_channel">The car did not open the ICCOA control channel</string>
+    <string name="iccoa_msg_hint_pin_mac">The code and the car\'s response did not match. Start a new connection with the current code</string>
+    <string name="iccoa_msg_hint_new_pin">The car asked for a new connection with a code</string>
+    <string name="iccoa_msg_hint_confirm_on_car">The car asked for confirmation on its screen</string>
+    <string name="iccoa_msg_hint_car_error">The car reported an internal error</string>
+    <string name="iccoa_msg_hint_mode_rejected">The car rejected the connection mode</string>
+    <string name="iccoa_msg_hint_rejected">The car rejected the connection</string>
+    <string name="iccoa_msg_hint_send_report">Send a report from FT</string>
+    <string name="iccoa_msg_auth_failed">ICCOA failed at stage %1$s (%2$s). %3$s</string>
+    <string name="iccoa_msg_wifi_changed">The car Wi-Fi network changed. Reconnecting ICCOA…</string>
+    <string name="iccoa_msg_car_ended">The car ended the ICCOA connection</string>
+    <string name="iccoa_msg_send_timeout">ICCOA data send timed out</string>
+    <string name="iccoa_msg_connection_error">ICCOA connection error (%1$s)</string>
+    <string name="iccoa_msg_reconnecting">%1$s. Reconnecting %2$d/%3$d</string>
+    <string name="iccoa_msg_retries_stopped">%1$s. Automatic retries stopped</string>
+    <string name="iccoa_msg_notification_title">FT · ICCOA Carlink</string>
+    <string name="iccoa_msg_notification_text">Experimental wireless projection</string>
+    <string name="iccoa_msg_forget_body">Delete the saved car key, old PIN and selected device? The next connection will need a new code from the car screen.</string>
+    <string name="iccoa_msg_forget_confirm">Remove pairing</string>
+    <string name="iccoa_msg_cancel">Cancel</string>
+    <string name="iccoa_msg_forget">Forget trusted car</string>
+    <string name="iccoa_msg_normal_new_pin">Normal · new PIN</string>
+    <string name="iccoa_msg_carlink_only">CarLink / ICCOA only</string>
+    <string name="iccoa_msg_show_all">Show all Bluetooth devices</string>
+    <string name="iccoa_msg_timeout">Connection timed out. Open ICCOA on the car and try again.</string>
+    <string name="iccoa_msg_linked">ICCOA linked · waiting for video · %1$d×%2$d · %3$d fps</string>
+</resources>

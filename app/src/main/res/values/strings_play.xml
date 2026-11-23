@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown only in the Google Play build. -->
+    <string name="play_perm_title">Before FT asks for permissions</string>
+    <string name="play_perm_intro">FT shows your phone on your car\'s screen. Android will now ask for the permissions below. FT has no account, no ads and no analytics, and what it uses stays on your phone.</string>
+    <string name="play_perm_more">You can change these at any time in Android settings. Settings → About FT explains every permission.</string>
+    <string name="play_perm_continue">Continue</string>
+    <string name="play_perm_later">Not now</string>
+
+    <string name="play_touch_title">Let the car\'s touchscreen control your phone</string>
+    <string name="play_touch_body">FT uses an Accessibility service called “FT car touch” so that, when your phone screen or a phone app is shown on the car, your taps and swipes on the car\'s touchscreen reach the phone, and the car\'s buttons can press Back, Home and Recent apps and open notifications.\n\nTo do this, the service can perform gestures and see which window is on screen. FT uses it only while your phone is shown on the car. It does not collect, store or share anything on your screen, and nothing leaves your phone.\n\nYou can turn it off at any time in Android\'s accessibility settings.</string>
+    <string name="play_starter_title">Let FT start Android Auto\'s head unit server</string>
+    <string name="play_starter_body">Android Auto connects to FT only while its “head unit server” is running, and Android turns it off after a restart or an Android Auto update. A separate Accessibility service called “FT — Android Auto server” can turn it back on for you.\n\nWhen you start Android Auto from FT, the service opens Android Auto\'s settings, reads that screen to find “Start head unit server”, selects it and returns to FT. It works only inside the Android Auto app, only when you ask, and for at most eight seconds. It cannot perform gestures. It does not collect, store or share anything it reads, and nothing leaves your phone.\n\nYou can turn it off at any time in Android\'s accessibility settings.</string>
+    <string name="play_disclosure_agree">Agree and open settings</string>
+    <string name="play_disclosure_decline">No thanks</string>
+
+    <string name="settings_about_title">About FT</string>
+    <string name="settings_about_about">Version, privacy policy and why FT asks for each permission</string>
+    <string name="about_version">Version %1$s (%2$d)</string>
+    <string name="about_edition">Google Play edition</string>
+    <string name="about_privacy">Privacy policy</string>
+    <string name="about_source">Source code</string>
+    <string name="about_license">Licence: Apache 2.0</string>
+    <string name="about_data">FT has no account, no ads and no analytics. Your settings, logs and car profiles stay on your phone. The weather widget sends a rounded location to Open-Meteo to get the forecast. A diagnostic report leaves your phone only when you share it yourself.</string>
+    <string name="about_permissions_title">Permissions and why FT asks for them</string>
+    <string name="about_review_permissions">Review permissions</string>
+    <string name="about_trademarks">FT is an independent app and is not affiliated with or endorsed by Google, Baidu, Huawei or Toyota. Android Auto is a trademark of Google LLC. CarLife is a trademark of Baidu.</string>
+
+    <string name="perm_nearby">Nearby devices and Bluetooth</string>
+    <string name="perm_nearby_why">Finds and connects to your car over Bluetooth and WiFi Direct, and starts FT when the car\'s Bluetooth connects.</string>
+    <string name="perm_location">Location</string>
+    <string name="perm_location_why">Android needs it for WiFi Direct on Android 12 and older. The speed and weather widgets on the car screen use it too.</string>
+    <string name="perm_mic">Microphone</string>
+    <string name="perm_mic_why">Passes your voice to the assistant in Android Auto and shares your phone\'s sound with the car. Nothing is recorded or stored.</string>
+    <string name="perm_media">Music and videos</string>
+    <string name="perm_media_why">Plays the music and videos saved on your phone from the car screen.</string>
+    <string name="perm_calendar">Calendar</string>
+    <string name="perm_calendar_why">Shows your next event on the car screen, only if you add the calendar widget.</string>
+    <string name="perm_notifications">Notifications</string>
+    <string name="perm_notifications_why">Shows that FT is connected to your car, so Android keeps the connection running.</string>
+    <string name="perm_screen">Screen sharing</string>
+    <string name="perm_screen_why">Shows your phone screen or your phone\'s sound on the car when you ask for it. Android asks you each time.</string>
+    <string name="perm_overlay">Display over other apps</string>
+    <string name="perm_overlay_why">Shows the small FT button over Android Auto and other apps so you can get back to FT.</string>
+    <string name="perm_settings">Modify system settings</string>
+    <string name="perm_settings_why">Keeps the phone\'s rotation steady while its screen is shown on the car, then puts it back.</string>
+    <string name="perm_battery">Ignore battery optimisation</string>
+    <string name="perm_battery_why">Stops Android from pausing FT in the middle of a drive, which would drop the connection to the car.</string>
+    <string name="perm_accessibility">Accessibility services</string>
+    <string name="perm_accessibility_why">Two optional services: one lets the car\'s touchscreen control your phone screen when it is shown on the car, the other turns on Android Auto\'s head unit server. Each explains itself before you turn it on.</string>
+    <string name="perm_startup">Start at boot and with the car</string>
+    <string name="perm_startup_why">Lets FT wait for your car after the phone restarts and start when the car\'s Bluetooth connects.</string>
+    <string name="perm_network">WiFi and internet</string>
+    <string name="perm_network_why">Connects to your car over the phone\'s hotspot or WiFi Direct, and gets the forecast for the weather widget.</string>
+    <string name="perm_helper">Apps on the car (optional)</string>
+    <string name="perm_helper_why">With USB debugging on, you can start FT\'s helper from a computer or from the phone\'s own debug bridge. It runs your apps on hidden screens for the car and stops when the phone restarts.</string>
+</resources>

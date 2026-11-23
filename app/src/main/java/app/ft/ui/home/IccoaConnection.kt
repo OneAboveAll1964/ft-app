@@ -149,18 +149,17 @@ internal fun IccoaConnectionControls(state: IccoaState, actions: IccoaConnection
         if (!state.connected && !state.connecting) {
             Text(stringResource(R.string.iccoa_device_count, scan.peers.size))
             if (forgetConfirmation) {
-                Text("Удалить сохранённый ключ автомобиля, старый PIN и выбранное устройство? " +
-                    "Для следующего подключения потребуется новый код с экрана автомобиля.")
+                Text(stringResource(R.string.iccoa_msg_forget_body))
                 Row {
                     TextButton(onClick = {
                         IccoaService.forget(context)
                         forgetConfirmation = false
-                    }) { Text("Удалить сопряжение") }
-                    TextButton(onClick = { forgetConfirmation = false }) { Text("Отмена") }
+                    }) { Text(stringResource(R.string.iccoa_msg_forget_confirm)) }
+                    TextButton(onClick = { forgetConfirmation = false }) { Text(stringResource(R.string.iccoa_msg_cancel)) }
                 }
             } else {
                 TextButton(onClick = { forgetConfirmation = true }) {
-                    Text("Забыть доверенный автомобиль")
+                    Text(stringResource(R.string.iccoa_msg_forget))
                 }
             }
         }
@@ -201,7 +200,7 @@ internal fun LazyListScope.iccoaDevices(state: IccoaState, showAll: Boolean, wif
                     }
                     TextButton(onClick = { IccoaService.connectNormal(context, peer.address) },
                         enabled = canConnect) {
-                        Text("Normal · новый PIN")
+                        Text(stringResource(R.string.iccoa_msg_normal_new_pin))
                     }
                 }
             }

@@ -32,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -108,7 +109,8 @@ enum class SettingsPage(@StringRes val title: Int, @StringRes val about: Int) {
     ANDROID_AUTO(R.string.settings_aa_title, R.string.settings_aa_about),
     SUPERCAST(R.string.settings_supercast_title, R.string.settings_supercast_about),
     ADVANCED(R.string.settings_advanced_title, R.string.settings_advanced_about),
-    BACKUP(R.string.settings_backup_title, R.string.settings_backup_about)
+    BACKUP(R.string.settings_backup_title, R.string.settings_backup_about),
+    ABOUT(R.string.settings_about_title, R.string.settings_about_about)
 }
 
 private fun SettingsPage.icon(): ImageVector = when (this) {
@@ -121,10 +123,11 @@ private fun SettingsPage.icon(): ImageVector = when (this) {
     SettingsPage.SUPERCAST -> CarIcons.Apps
     SettingsPage.ADVANCED -> Icons.Filled.Build
     SettingsPage.BACKUP -> Icons.Filled.Share
+    SettingsPage.ABOUT -> Icons.Filled.Info
 }
 
 @Composable
-fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> Unit, onOpen: (SettingsPage) -> Unit) {
+fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onOpen: (SettingsPage) -> Unit) {
     val modern = LocalModernPhoneUi.current
     val root = rememberRootGranted()
     val carPage = page == SettingsPage.CAR_SCREEN
@@ -143,24 +146,22 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         when {
-            page == null && !modern -> {
-                items(SettingsPage.entries) { p -> PageButton(p) { onOpen(p) } }
-                item { MadeBy() }
-            }
             page == null -> {
                 items(listOf(
                     listOf(SettingsPage.LOOK, SettingsPage.CAR_SCREEN, SettingsPage.PICTURE, SettingsPage.SOUND),
                     listOf(SettingsPage.CAR, SettingsPage.ANDROID_AUTO, SettingsPage.SUPERCAST),
-                    listOf(SettingsPage.ADVANCED, SettingsPage.BACKUP)
+                    listOf(SettingsPage.ADVANCED, SettingsPage.BACKUP) + if (app.ft.BuildConfig.PLAY) listOf(SettingsPage.ABOUT) else emptyList()
                 )) { pages ->
                     Card(
                         shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (modern) app.ft.ui.theme.sectionCardColor() else MaterialTheme.colorScheme.surfaceContainer
+                        )
                     ) {
                         pages.forEachIndexed { index, p ->
                             PageButton(p) { onOpen(p) }
                             if (index < pages.lastIndex) HorizontalDivider(
-                                modifier = Modifier.padding(start = 68.dp, end = 16.dp),
+                                modifier = Modifier.padding(start = if (modern) 68.dp else 76.dp, end = 16.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
                         }
@@ -178,7 +179,7 @@ fun SettingsScreen(pad: PaddingValues, page: SettingsPage?, onPickAaFile: () -> 
                 item(key = "connect") { Group { CarConnectSettings() } }
             }
             else -> {
-                if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup(onPickAaFile) } }
+                if (page == SettingsPage.ANDROID_AUTO && !root) item { Group { AaSetup() } }
                 item { Group { PageContent(page) } }
             }
         }
@@ -217,7 +218,10 @@ private fun MadeBy() {
         }) {
             Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
         }
-        if (version.isNotBlank()) {
+        if (version.isNotBlank() && app.ft.BuildConfig.PLAY) {
+            // Google Play builds update only through Play, so the version does not link to other downloads.
+            Text("FT $version", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(8.dp))
+        } else if (version.isNotBlank()) {
             TextButton(onClick = { app.ft.core.Links.openOnPhone(context, app.ft.core.Links.RELEASES) }) {
                 Text("FT $version", style = MaterialTheme.typography.labelMedium)
             }
@@ -227,7 +231,7 @@ private fun MadeBy() {
 
 
 @Composable
-private fun AaSetup(onPickAaFile: () -> Unit) {
+private fun AaSetup() {
     val context = LocalContext.current
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
@@ -237,7 +241,7 @@ private fun AaSetup(onPickAaFile: () -> Unit) {
     val installed = remember(resumed) { AaInstaller.installed(context) }
     val ownCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
     val serverOn = rememberAaServerOn()
-    if (installed) AaStart(serverOn, ownCopy, framed = false) else AaMissing(onPickAaFile, framed = false)
+    if (installed) AaStart(serverOn, ownCopy, framed = false) else AaMissing(framed = false)
 }
 
 @Composable
@@ -344,6 +348,7 @@ private fun PageContent(page: SettingsPage) {
         }
         SettingsPage.SUPERCAST -> SuperCastSettings()
         SettingsPage.BACKUP -> BackupSettings()
+        SettingsPage.ABOUT -> app.ft.ui.play.AboutSettings()
     }
 }
 
@@ -518,6 +523,9 @@ private fun AaPreparationSetting() {
     val root = rememberRootGranted()
     val helper by AaStarterAccessibilityService.connected.collectAsStateWithLifecycle()
     val helperEnabled = rememberAaStarterEnabled()
+    val openStarterSettings = app.ft.ui.play.rememberAccessibilityConsent(app.ft.ui.play.AccessibilityUse.AA_STARTER) {
+        AaSwitch.openAccessibilitySettings(context)
+    }
     BoolSetting(stringResource(R.string.aa_prepare_before_connect), enabled,
         stringResource(R.string.aa_prepare_before_connect_body)) {
         enabled = it
@@ -526,7 +534,7 @@ private fun AaPreparationSetting() {
     if (enabled && !root && !helper) {
         Text(stringResource(if (helperEnabled) R.string.aa_helper_disconnected else R.string.aa_prepare_helper_body), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { AaSwitch.openAccessibilitySettings(context) }) {
+        TextButton(onClick = openStarterSettings) {
             Text(stringResource(if (helperEnabled) R.string.aa_helper_settings else R.string.aa_let_ft))
         }
     }
@@ -762,20 +770,14 @@ private fun wheelIcon(action: Int): ImageVector = when (action) {
 
 @Composable
 private fun ClassicPageButton(page: SettingsPage, onClick: () -> Unit) {
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-                Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
-            }
-            Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+            Icon(page.icon(), contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
         }
+        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(page.about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

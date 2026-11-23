@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown only in the Google Play build. -->
+    <string name="play_perm_title">Прежде чем FT запросит разрешения</string>
+    <string name="play_perm_intro">FT показывает ваш телефон на экране автомобиля. Сейчас Android запросит разрешения, перечисленные ниже. В FT нет аккаунта, рекламы и аналитики, а всё, что он использует, остаётся на вашем телефоне.</string>
+    <string name="play_perm_more">Их можно изменить в любой момент в настройках Android. Зачем нужно каждое разрешение, объясняется в разделе «Настройки» → «О приложении FT».</string>
+    <string name="play_perm_continue">Продолжить</string>
+    <string name="play_perm_later">Не сейчас</string>
+
+    <string name="play_touch_title">Разрешите сенсорному экрану автомобиля управлять телефоном</string>
+    <string name="play_touch_body">FT использует службу специальных возможностей под названием «FT — касания в автомобиле», чтобы, когда экран телефона или приложение телефона показывается в автомобиле, ваши касания и свайпы на сенсорном экране автомобиля доходили до телефона, а кнопки автомобиля могли нажимать «Назад», «Главный экран» и «Недавние приложения» и открывать уведомления.\n\nДля этого служба может выполнять жесты и видеть, какое окно открыто на экране. FT использует её, только пока телефон показывается в автомобиле. Она не собирает, не хранит и не передаёт ничего с вашего экрана, и ничего не покидает телефон.\n\nОтключить её можно в любой момент в разделе «Специальные возможности» настроек Android.</string>
+    <string name="play_starter_title">Разрешите FT запускать сервер головного устройства Android Auto</string>
+    <string name="play_starter_body">Android Auto подключается к FT, только пока работает его «сервер головного устройства», а Android выключает его после перезагрузки телефона или обновления Android Auto. Отдельная служба специальных возможностей «FT — запуск Android Auto» может снова включать его за вас.\n\nКогда вы запускаете Android Auto из FT, служба открывает настройки Android Auto, читает этот экран, чтобы найти пункт «Запустить сервер головного устройства» (Start head unit server), выбирает его и возвращается в FT. Она работает только внутри приложения Android Auto, только по вашему запросу и не дольше восьми секунд. Она не может выполнять жесты. Она не собирает, не хранит и не передаёт ничего из прочитанного, и ничего не покидает телефон.\n\nОтключить её можно в любой момент в разделе «Специальные возможности» настроек Android.</string>
+    <string name="play_disclosure_agree">Согласиться и открыть настройки</string>
+    <string name="play_disclosure_decline">Нет, спасибо</string>
+
+    <string name="settings_about_title">О приложении FT</string>
+    <string name="settings_about_about">Версия, политика конфиденциальности и зачем FT нужно каждое разрешение</string>
+    <string name="about_version">Версия %1$s (%2$d)</string>
+    <string name="about_edition">Версия для Google Play</string>
+    <string name="about_privacy">Политика конфиденциальности</string>
+    <string name="about_source">Исходный код</string>
+    <string name="about_license">Лицензия: Apache 2.0</string>
+    <string name="about_data">В FT нет аккаунта, рекламы и аналитики. Ваши настройки, журналы и профили автомобилей остаются на телефоне. Виджет погоды отправляет в Open-Meteo округлённые координаты, чтобы получить прогноз. Диагностический отчёт покидает телефон, только если вы сами им поделитесь.</string>
+    <string name="about_permissions_title">Разрешения и зачем они нужны FT</string>
+    <string name="about_review_permissions">Проверить разрешения</string>
+    <string name="about_trademarks">FT — независимое приложение, не связанное с Google, Baidu, Huawei или Toyota и не одобренное ими. Android Auto — товарный знак Google LLC. CarLife — товарный знак Baidu.</string>
+
+    <string name="perm_nearby">Устройства поблизости и Bluetooth</string>
+    <string name="perm_nearby_why">Находит автомобиль и подключается к нему по Bluetooth и WiFi Direct, а также запускает FT, когда подключается Bluetooth автомобиля.</string>
+    <string name="perm_location">Местоположение</string>
+    <string name="perm_location_why">Нужно Android для WiFi Direct на Android 12 и более ранних версиях. Его также используют виджеты скорости и погоды на экране автомобиля.</string>
+    <string name="perm_mic">Микрофон</string>
+    <string name="perm_mic_why">Передаёт ваш голос ассистенту в Android Auto и выводит звук телефона в автомобиль. Ничего не записывается и не сохраняется.</string>
+    <string name="perm_media">Музыка и видео</string>
+    <string name="perm_media_why">Воспроизводит с экрана автомобиля музыку и видео, сохранённые на телефоне.</string>
+    <string name="perm_calendar">Календарь</string>
+    <string name="perm_calendar_why">Показывает ваше следующее событие на экране автомобиля, только если вы добавили виджет календаря.</string>
+    <string name="perm_notifications">Уведомления</string>
+    <string name="perm_notifications_why">Показывает, что FT подключён к автомобилю, чтобы Android не прерывал соединение.</string>
+    <string name="perm_screen">Трансляция экрана</string>
+    <string name="perm_screen_why">Показывает экран телефона или выводит звук телефона в автомобиле, когда вы об этом просите. Android каждый раз спрашивает разрешение.</string>
+    <string name="perm_overlay">Поверх других приложений</string>
+    <string name="perm_overlay_why">Показывает маленькую кнопку FT поверх Android Auto и других приложений, чтобы можно было вернуться в FT.</string>
+    <string name="perm_settings">Изменение системных настроек</string>
+    <string name="perm_settings_why">Фиксирует поворот экрана телефона, пока он показывается в автомобиле, а затем возвращает прежнюю настройку.</string>
+    <string name="perm_battery">Отключение оптимизации батареи</string>
+    <string name="perm_battery_why">Не даёт Android приостановить FT посреди поездки, из-за чего оборвалось бы соединение с автомобилем.</string>
+    <string name="perm_accessibility">Специальные возможности</string>
+    <string name="perm_accessibility_why">Две необязательные службы: одна позволяет управлять экраном телефона с сенсорного экрана автомобиля, когда он показывается в автомобиле, другая включает сервер головного устройства Android Auto. Каждая объясняет, что она делает, прежде чем вы её включите.</string>
+    <string name="perm_startup">Запуск при включении телефона и с автомобилем</string>
+    <string name="perm_startup_why">Позволяет FT ждать автомобиль после перезагрузки телефона и запускаться, когда подключается Bluetooth автомобиля.</string>
+    <string name="perm_network">WiFi и интернет</string>
+    <string name="perm_network_why">Подключается к автомобилю через точку доступа телефона или WiFi Direct и загружает прогноз для виджета погоды.</string>
+    <string name="perm_helper">Приложения в автомобиле (необязательно)</string>
+    <string name="perm_helper_why">При включённой отладке по USB помощника FT можно запустить с компьютера или через беспроводную отладку на самом телефоне. Он запускает ваши приложения на скрытых экранах для автомобиля и останавливается при перезагрузке телефона.</string>
+</resources>

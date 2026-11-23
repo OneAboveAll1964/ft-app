@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown only in the Google Play build. -->
+    <string name="play_perm_title">قبل أن يطلب FT الأذونات</string>
+    <string name="play_perm_intro">يعرض FT هاتفك على شاشة سيارتك. سيطلب منك Android الآن الأذونات أدناه. لا يوجد في FT حساب ولا إعلانات ولا تحليلات، وكل ما يستخدمه يبقى على هاتفك.</string>
+    <string name="play_perm_more">يمكنك تغيير هذه الأذونات في أي وقت من إعدادات Android. وفي «الإعدادات ← حول FT» شرح لكل إذن.</string>
+    <string name="play_perm_continue">متابعة</string>
+    <string name="play_perm_later">ليس الآن</string>
+
+    <string name="play_touch_title">اسمح لشاشة اللمس في السيارة بالتحكم بهاتفك</string>
+    <string name="play_touch_body">يستخدم FT خدمة إمكانية وصول باسم «FT – لمس السيارة» لكي تصل لمساتك وسحباتك على شاشة اللمس في السيارة إلى الهاتف عندما تُعرض شاشة هاتفك أو أحد تطبيقات الهاتف على السيارة، ولكي تتمكن أزرار السيارة من الضغط على «رجوع» و«الرئيسية» و«التطبيقات الأخيرة» وفتح الإشعارات.\n\nولهذا تستطيع الخدمة تنفيذ الإيماءات ومعرفة النافذة الظاهرة على الشاشة. لا يستخدمها FT إلا أثناء عرض هاتفك على السيارة. وهي لا تجمع أي شيء مما يظهر على شاشتك ولا تخزّنه ولا تشاركه، ولا يخرج أي شيء من هاتفك.\n\nيمكنك إيقافها في أي وقت من إعدادات إمكانية الوصول في Android.</string>
+    <string name="play_starter_title">اسمح لـ FT بتشغيل خادم head unit في Android Auto</string>
+    <string name="play_starter_body">لا يتصل Android Auto بـ FT إلا أثناء عمل «خادم head unit» الخاص به، ويوقفه Android بعد إعادة تشغيل الهاتف أو تحديث Android Auto. ويمكن لخدمة إمكانية وصول منفصلة باسم «FT — خادم Android Auto» أن تعيد تشغيله لك.\n\nعندما تشغّل Android Auto من FT، تفتح الخدمة إعدادات Android Auto، وتقرأ تلك الشاشة لتجد «Start head unit server»، فتختاره ثم تعود إلى FT. وهي لا تعمل إلا داخل تطبيق Android Auto، وفقط عندما تطلب ذلك، ولمدة ثماني ثوانٍ على الأكثر. ولا يمكنها تنفيذ الإيماءات. وهي لا تجمع أي شيء مما تقرؤه ولا تخزّنه ولا تشاركه، ولا يخرج أي شيء من هاتفك.\n\nيمكنك إيقافها في أي وقت من إعدادات إمكانية الوصول في Android.</string>
+    <string name="play_disclosure_agree">الموافقة وفتح الإعدادات</string>
+    <string name="play_disclosure_decline">لا، شكرًا</string>
+
+    <string name="settings_about_title">حول FT</string>
+    <string name="settings_about_about">الإصدار وسياسة الخصوصية وسبب طلب FT لكل إذن</string>
+    <string name="about_version">الإصدار %1$s (%2$d)</string>
+    <string name="about_edition">نسخة Google Play</string>
+    <string name="about_privacy">سياسة الخصوصية</string>
+    <string name="about_source">الشيفرة المصدرية</string>
+    <string name="about_license">الترخيص: Apache 2.0</string>
+    <string name="about_data">لا يوجد في FT حساب ولا إعلانات ولا تحليلات. تبقى إعداداتك وسجلاتك وملفات تعريف سياراتك على هاتفك. ترسل بطاقة الطقس موقعًا تقريبيًا إلى Open-Meteo للحصول على توقعات الطقس. ولا يخرج تقرير التشخيص من هاتفك إلا عندما تشاركه بنفسك.</string>
+    <string name="about_permissions_title">الأذونات وسبب طلب FT لها</string>
+    <string name="about_review_permissions">مراجعة الأذونات</string>
+    <string name="about_trademarks">FT تطبيق مستقل، وهو غير تابع لـ Google أو Baidu أو Huawei أو Toyota وغير معتمد منها. Android Auto علامة تجارية لشركة Google LLC. وCarLife علامة تجارية لشركة Baidu.</string>
+
+    <string name="perm_nearby">الأجهزة المجاورة والبلوتوث</string>
+    <string name="perm_nearby_why">يعثر على سيارتك ويتصل بها عبر البلوتوث وWiFi Direct، ويشغّل FT عند اتصال بلوتوث السيارة.</string>
+    <string name="perm_location">الموقع</string>
+    <string name="perm_location_why">يحتاجه Android لتشغيل WiFi Direct في Android 12 والإصدارات الأقدم. وتستخدمه أيضًا بطاقتا السرعة والطقس على شاشة السيارة.</string>
+    <string name="perm_mic">الميكروفون</string>
+    <string name="perm_mic_why">ينقل صوتك إلى المساعد في Android Auto، ويشارك صوت هاتفك مع السيارة. لا يُسجَّل أي شيء ولا يُخزَّن.</string>
+    <string name="perm_media">الموسيقى والفيديوهات</string>
+    <string name="perm_media_why">يشغّل الموسيقى والفيديوهات المحفوظة على هاتفك من شاشة السيارة.</string>
+    <string name="perm_calendar">التقويم</string>
+    <string name="perm_calendar_why">يعرض موعدك القادم على شاشة السيارة، فقط إذا أضفت بطاقة التقويم.</string>
+    <string name="perm_notifications">الإشعارات</string>
+    <string name="perm_notifications_why">يُظهر أن FT متصل بسيارتك، فيُبقي Android الاتصال قائمًا.</string>
+    <string name="perm_screen">مشاركة الشاشة</string>
+    <string name="perm_screen_why">يعرض شاشة هاتفك على السيارة أو يشغّل صوت هاتفك فيها عندما تطلب ذلك. ويسألك Android في كل مرة.</string>
+    <string name="perm_overlay">الظهور فوق التطبيقات الأخرى</string>
+    <string name="perm_overlay_why">يعرض زر FT الصغير فوق Android Auto والتطبيقات الأخرى لتتمكن من العودة إلى FT.</string>
+    <string name="perm_settings">تعديل إعدادات النظام</string>
+    <string name="perm_settings_why">يثبّت اتجاه شاشة الهاتف أثناء عرضها على السيارة، ثم يعيده كما كان.</string>
+    <string name="perm_battery">تجاهل تحسين البطارية</string>
+    <string name="perm_battery_why">يمنع Android من إيقاف FT مؤقتًا في منتصف الرحلة، لأن ذلك يقطع الاتصال بالسيارة.</string>
+    <string name="perm_accessibility">خدمات إمكانية الوصول</string>
+    <string name="perm_accessibility_why">خدمتان اختياريتان: الأولى تتيح لشاشة اللمس في السيارة التحكم بشاشة هاتفك عندما تُعرض على السيارة، والثانية تشغّل خادم head unit في Android Auto. وكل منهما تشرح ما تفعله قبل أن تفعّلها.</string>
+    <string name="perm_startup">التشغيل عند بدء الهاتف ومع السيارة</string>
+    <string name="perm_startup_why">يتيح لـ FT انتظار سيارتك بعد إعادة تشغيل الهاتف، والتشغيل عند اتصال بلوتوث السيارة.</string>
+    <string name="perm_network">Wi-Fi والإنترنت</string>
+    <string name="perm_network_why">يتصل بسيارتك عبر نقطة اتصال الهاتف أو WiFi Direct، ويجلب توقعات الطقس لبطاقة الطقس.</string>
+    <string name="perm_helper">التطبيقات على السيارة (اختياري)</string>
+    <string name="perm_helper_why">عند تفعيل تصحيح أخطاء USB، يمكنك تشغيل مساعد FT من كمبيوتر أو عبر جسر التصحيح في الهاتف نفسه. يشغّل تطبيقاتك على شاشات خفية للسيارة، ويتوقف عند إعادة تشغيل الهاتف.</string>
+</resources>

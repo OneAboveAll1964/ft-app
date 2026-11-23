@@ -27,7 +27,7 @@ class IccoaNetworkReplacementTest {
             }.`when`(handler).post(any(Runnable::class.java))
         }.use {
             val session = IccoaSession(
-                context = mock(Context::class.java), onStatus = {}, onPinRequired = {},
+                context = context(), onStatus = {}, onPinRequired = {},
                 onReady = { _, _ -> }, onMessage = { _, _, _ -> },
                 onClosed = { message, _ -> closed += message }, vehicleProfileId = "review")
             val attemptType = Class.forName("app.ft.iccoa.IccoaSession\$Attempt")
@@ -137,6 +137,12 @@ class IccoaNetworkReplacementTest {
         }
     }
 
+    /** Mock Context resolving IccoaSession's string resources to their id, like a real Context would to text. */
+    private fun context(): Context = mock(Context::class.java) { call ->
+        if (call.method.name == "getString") "string#${call.arguments.first()}"
+        else RETURNS_DEFAULTS.answer(call)
+    }
+
     private fun select(session: IccoaSession, attempt: Any, network: Network): Boolean =
         IccoaSession::class.java.getDeclaredMethod("selectNetwork", attempt.javaClass, Network::class.java)
             .apply { isAccessible = true }.invoke(session, attempt, network) as Boolean
@@ -152,7 +158,7 @@ class IccoaNetworkReplacementTest {
             doAnswer { call -> pending.addLast(call.getArgument(0, Runnable::class.java)); true }
                 .`when`(handler).post(any(Runnable::class.java))
         }.use {
-            val session = IccoaSession(mock(Context::class.java), {}, {},
+            val session = IccoaSession(context(), {}, {},
                 { network, _ -> ready += network }, { _, _, _ -> }, { _, cause -> closed += cause },
                 vehicleProfileId = "test")
             val type = Class.forName("app.ft.iccoa.IccoaSession\$Attempt")

@@ -1,5 +1,7 @@
 package app.ft.ui.home
 
+import app.ft.ui.play.AccessibilityUse
+import app.ft.ui.play.rememberAccessibilityConsent
 import app.ft.core.LocalModernPhoneUi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
@@ -150,6 +152,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     LaunchedEffect(Unit) { RootPrep.revision.collect { resumed++ } }
     val radios = rememberRadios(context, resumed)
     val touchOn = remember(resumed) { FTTouchService.enabled }
+    val openTouchSettings = rememberAccessibilityConsent(AccessibilityUse.TOUCH, onOpenAccessibility)
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
     val backgroundOn = remember(resumed) { (context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) != false }
     val aaOwnCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
@@ -233,15 +236,15 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         if (iccoa && projecting && !screenState.aaOverlay && !screenState.mirroring) item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Калибровка экрана Toyota", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.touch_cal_title), style = MaterialTheme.typography.titleMedium)
                     Text(if (touchCalibration.step > 0)
-                        "На экране автомобиля нажмите точно в центр зелёного круга. Точка ${touchCalibration.step} из 4."
-                        else "Запуск с телефона: четыре точки откалибруют горизонтальные и вертикальные касания.")
+                        stringResource(R.string.touch_cal_step, touchCalibration.step)
+                        else stringResource(R.string.touch_cal_about))
                     FilledTonalButton(onClick = { IccoaService.calibrateTouch() }) {
-                        Text(if (touchCalibration.step > 0) "Начать заново" else "Калибровать X/Y на ГУ")
+                        Text(stringResource(if (touchCalibration.step > 0) R.string.touch_cal_restart else R.string.touch_cal_start))
                     }
                     TextButton(onClick = { IccoaService.resetTouchCalibration() }) {
-                        Text("Сбросить калибровку")
+                        Text(stringResource(R.string.touch_cal_reset))
                     }
                 }
             }
@@ -344,7 +347,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
         if (iccoa) {
             item {
                 androidx.compose.material3.TextButton(onClick = { iccoaShowAll = !iccoaShowAll }) {
-                    Text(if (iccoaShowAll) "Только CarLink / ICCOA" else "Показать все Bluetooth-устройства")
+                    Text(stringResource(if (iccoaShowAll) R.string.iccoa_msg_carlink_only else R.string.iccoa_msg_show_all))
                 }
             }
             iccoaDevices(iccoaState, showAll = iccoaShowAll, wifiEnabled = radios.wifi)
@@ -355,7 +358,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 Section(stringResource(R.string.home_finish_setup)) {
                     Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
                     Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
                     Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
@@ -420,7 +423,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 Section(stringResource(R.string.home_finish_setup)) {
                     Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, onOpenAccessibility)
+                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
                     Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
                     Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
@@ -609,7 +612,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
     }
     Column(Modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp))
-        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = app.ft.ui.theme.sectionCardColor())) {
             Column(Modifier.fillMaxWidth().padding(16.dp), content = content)
         }
     }

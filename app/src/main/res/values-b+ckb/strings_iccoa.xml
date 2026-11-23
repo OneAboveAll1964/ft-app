@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iccoa_msg_connecting_bluetooth">پەیوەستبوون بە ICCOA لە ڕێگەی بلوتوسەوە…</string>
+    <string name="iccoa_msg_bluetooth_timeout">کاتی پەیوەستبوونی ICCOA بە بلوتوس تەواو بوو</string>
+    <string name="iccoa_msg_bluetooth_connect_failed">نەتوانرا بە بلوتوس پەیوەست بێت (%1$s)</string>
+    <string name="iccoa_msg_quick_checking">ICCOA Quick: پشکنینی مۆبایلی متمانەپێکراو…</string>
+    <string name="iccoa_msg_quick_queue_error">QUICK: هەڵەی ڕیزی بلوتوس</string>
+    <string name="iccoa_msg_quick_not_confirmed">Quick پشتڕاست نەکرایەوە. PINی ئێستای ئۆتۆمبێلەکە بنووسە</string>
+    <string name="iccoa_msg_quick_bluetooth_error">QUICK: هەڵەی بلوتوس (%1$s)</string>
+    <string name="iccoa_msg_enter_code">کۆدە شەش ژمارەییەکەی سەر شاشەی ئۆتۆمبێل بنووسە</string>
+    <string name="iccoa_msg_checking_code">پشکنینی کۆدی ICCOA…</string>
+    <string name="iccoa_msg_code_send_failed">نەتوانرا کۆدەکە بنێردرێت. PINی ئێستا بنووسە</string>
+    <string name="iccoa_msg_car_no_answer">ئۆتۆمبێلەکە وەڵامی نەدایەوە. کۆدی ئێستا لە شاشەکەیەوە بنووسە</string>
+    <string name="iccoa_msg_code_send_error">هەڵە لە ناردنی کۆدی ICCOA (%1$s)</string>
+    <string name="iccoa_msg_channel_closed">کەناڵی ICCOA %1$d داخرا (%2$s)</string>
+    <string name="iccoa_msg_control_queue_full">ڕیزی کۆنتڕۆڵی ICCOA پڕ بووە</string>
+    <string name="iccoa_msg_bluetooth_closed">پەیوەندیی بلوتوسی ICCOA داخرا (status=%1$d)</string>
+    <string name="iccoa_msg_no_channel">ئامێرەکە کەناڵی ICCOAی دابین نەکرد (%1$s)</string>
+    <string name="iccoa_msg_code_rejected">ئۆتۆمبێلەکە کۆدەکەی ڕەتکردەوە (status=%1$d)</string>
+    <string name="iccoa_msg_services_request_failed">نەتوانرا داوای خزمەتگوزارییەکانی ICCOA بکرێت</string>
+    <string name="iccoa_msg_services_error">هەڵەی خزمەتگوزارییەکانی بلوتوس (%1$s)</string>
+    <string name="iccoa_msg_wifi_direct_unsupported">ئۆتۆمبێلەکە داوای Wi-Fi Directی کرد. ئەم وەشانەی ICCOA تەنها دۆخی خاڵی دەستگەیشتن (AP) پشتگیری دەکات</string>
+    <string name="iccoa_msg_wifi_params_invalid">ڕێکخستنەکانی Wi-Fiی ICCOA نادروستن (%1$s)</string>
+    <string name="iccoa_msg_wifi_unavailable">پەیوەستبوون بە Wi-Fiی ئۆتۆمبێل هەڵوەشێنرایەوە یان کاتەکەی تەواو بوو</string>
+    <string name="iccoa_msg_wifi_lost">پەیوەندی لەگەڵ Wi-Fiی ئۆتۆمبێل پچڕا</string>
+    <string name="iccoa_msg_wifi_connecting">پەیوەستبوون بە Wi-Fiی ئۆتۆمبێل. داواکاریی Android پشتڕاست بکەرەوە</string>
+    <string name="iccoa_msg_wifi_denied">Android ڕێگەی نەدا بە Wi-Fiی ئۆتۆمبێل پەیوەست بێت (%1$s)</string>
+    <string name="iccoa_msg_wifi_request_failed">نەتوانرا داوای Wi-Fiی ئۆتۆمبێل بکرێت (%1$s)</string>
+    <string name="iccoa_msg_wifi_no_gateway">Wi-Fiی ئۆتۆمبێل پەیوەست بوو، بەڵام ناونیشانی دەروازەی پشتڕاستکراو وەرنەگیرا</string>
+    <string name="iccoa_msg_wifi_no_ipv4">ناونیشانی IPv4 لە Wi-Fiی ئۆتۆمبێلەوە وەرنەگیرا</string>
+    <string name="iccoa_msg_wifi_waiting_gateway">Wi-Fi پەیوەست بوو. چاوەڕوانی ناونیشانی دەروازەی ئۆتۆمبێل…</string>
+    <string name="iccoa_msg_no_auth_method">هیچ ڕێگەیەکی پشتڕاستکراوەی چوونەژوورەوەی ICCOA نییە</string>
+    <string name="iccoa_msg_authenticating">پشتڕاستکردنەوەی ICCOA…</string>
+    <string name="iccoa_msg_auth_done">ICCOA: پشتڕاستکردنەوە تەواو بوو، چاوەڕوانی کەناڵەکانی ئۆتۆمبێل…</string>
+    <string name="iccoa_msg_no_control_channel">ئۆتۆمبێلەکە کەناڵی کۆنتڕۆڵی ICCOAی نەکردەوە</string>
+    <string name="iccoa_msg_hint_pin_mac">کۆدەکە و وەڵامی ئۆتۆمبێلەکە یەک ناگرنەوە. پەیوەندییەکی نوێ بە کۆدی ئێستا دەست پێبکە</string>
+    <string name="iccoa_msg_hint_new_pin">ئۆتۆمبێلەکە داوای پەیوەندییەکی نوێی بە کۆد کرد</string>
+    <string name="iccoa_msg_hint_confirm_on_car">ئۆتۆمبێلەکە داوای پشتڕاستکردنەوەی لەسەر شاشەکەی خۆی کرد</string>
+    <string name="iccoa_msg_hint_car_error">ئۆتۆمبێلەکە هەڵەیەکی ناوخۆیی ڕاگەیاند</string>
+    <string name="iccoa_msg_hint_mode_rejected">ئۆتۆمبێلەکە دۆخی پەیوەندییەکەی ڕەتکردەوە</string>
+    <string name="iccoa_msg_hint_rejected">ئۆتۆمبێلەکە پەیوەندییەکەی ڕەتکردەوە</string>
+    <string name="iccoa_msg_hint_send_report">ڕاپۆرتێک لە FTەوە بنێرە</string>
+    <string name="iccoa_msg_auth_failed">ICCOA لە قۆناغی %1$s شکستی هێنا (%2$s). %3$s</string>
+    <string name="iccoa_msg_wifi_changed">تۆڕی Wi-Fiی ئۆتۆمبێل گۆڕا. پەیوەستکردنەوەی ICCOA…</string>
+    <string name="iccoa_msg_car_ended">ئۆتۆمبێلەکە پەیوەندیی ICCOAی کۆتایی پێهێنا</string>
+    <string name="iccoa_msg_send_timeout">کاتی ناردنی داتای ICCOA تەواو بوو</string>
+    <string name="iccoa_msg_connection_error">هەڵەی پەیوەندیی ICCOA (%1$s)</string>
+    <string name="iccoa_msg_reconnecting">%1$s. پەیوەستکردنەوە %2$d/%3$d</string>
+    <string name="iccoa_msg_retries_stopped">%1$s. هەوڵە خۆکارەکان ڕاگیران</string>
+    <string name="iccoa_msg_notification_title">FT · ICCOA Carlink</string>
+    <string name="iccoa_msg_notification_text">پیشاندانی بێتەلی تاقیکاری</string>
+    <string name="iccoa_msg_forget_body">کلیلی پاشەکەوتکراوی ئۆتۆمبێل، PINی کۆن و ئامێری هەڵبژێردراو بسڕدرێنەوە؟ بۆ پەیوەندیی داهاتوو کۆدێکی نوێ لە شاشەی ئۆتۆمبێلەوە پێویست دەبێت.</string>
+    <string name="iccoa_msg_forget_confirm">سڕینەوەی هاوتاکردن</string>
+    <string name="iccoa_msg_cancel">هەڵوەشاندنەوە</string>
+    <string name="iccoa_msg_forget">لەبیرکردنی ئۆتۆمبێلی متمانەپێکراو</string>
+    <string name="iccoa_msg_normal_new_pin">Normal · PINی نوێ</string>
+    <string name="iccoa_msg_carlink_only">تەنها CarLink / ICCOA</string>
+    <string name="iccoa_msg_show_all">پیشاندانی هەموو ئامێرەکانی بلوتوس</string>
+    <string name="iccoa_msg_timeout">کاتی پەیوەندی تەواو بوو. ICCOA لەسەر ئۆتۆمبێلەکە بکەرەوە و دووبارە هەوڵ بدەرەوە.</string>
+    <string name="iccoa_msg_linked">ICCOA بەستراوە · چاوەڕوانی ڤیدیۆ · %1$d×%2$d · %3$d fps</string>
+</resources>

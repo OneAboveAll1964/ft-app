@@ -28,6 +28,10 @@ object Root {
     val granted: Boolean get() = _state.value == State.GRANTED
 
     fun refresh(): State {
+        if (app.ft.BuildConfig.PLAY) {
+            _state.value = State.NONE
+            return State.NONE
+        }
         val out = probe()
         val next = when {
             out == null -> State.NONE
@@ -46,6 +50,8 @@ object Root {
     }
 
     fun run(vararg commands: String): Out? {
+        // The Play build never asks for root.
+        if (app.ft.BuildConfig.PLAY) return null
         val su = binary ?: findBinary() ?: return null
         return try {
             collect(ProcessBuilder(su).start(), 15_000, commands.toList())

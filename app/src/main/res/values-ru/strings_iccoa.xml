@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="iccoa_msg_connecting_bluetooth">Подключение ICCOA по Bluetooth…</string>
+    <string name="iccoa_msg_bluetooth_timeout">Тайм-аут подключения ICCOA по Bluetooth</string>
+    <string name="iccoa_msg_bluetooth_connect_failed">Не удалось подключиться по Bluetooth (%1$s)</string>
+    <string name="iccoa_msg_quick_checking">ICCOA Quick: проверка доверенного телефона…</string>
+    <string name="iccoa_msg_quick_queue_error">QUICK: ошибка очереди Bluetooth</string>
+    <string name="iccoa_msg_quick_not_confirmed">Quick не подтверждён. Введите текущий PIN автомобиля</string>
+    <string name="iccoa_msg_quick_bluetooth_error">QUICK: ошибка Bluetooth (%1$s)</string>
+    <string name="iccoa_msg_enter_code">Введите шестизначный код с экрана автомобиля</string>
+    <string name="iccoa_msg_checking_code">Проверка кода ICCOA…</string>
+    <string name="iccoa_msg_code_send_failed">Не удалось отправить код. Введите текущий PIN</string>
+    <string name="iccoa_msg_car_no_answer">Автомобиль не ответил. Введите текущий код с его экрана</string>
+    <string name="iccoa_msg_code_send_error">Ошибка отправки кода ICCOA (%1$s)</string>
+    <string name="iccoa_msg_channel_closed">Канал ICCOA %1$d закрыт (%2$s)</string>
+    <string name="iccoa_msg_control_queue_full">Переполнена очередь управления ICCOA</string>
+    <string name="iccoa_msg_bluetooth_closed">Соединение Bluetooth ICCOA закрыто (status=%1$d)</string>
+    <string name="iccoa_msg_no_channel">Устройство не предоставило канал ICCOA (%1$s)</string>
+    <string name="iccoa_msg_code_rejected">Автомобиль отклонил запись кода (status=%1$d)</string>
+    <string name="iccoa_msg_services_request_failed">Не удалось запросить службы ICCOA</string>
+    <string name="iccoa_msg_services_error">Ошибка служб Bluetooth (%1$s)</string>
+    <string name="iccoa_msg_wifi_direct_unsupported">Автомобиль запросил Wi-Fi Direct. Эта версия ICCOA поддерживает только режим точки доступа (AP)</string>
+    <string name="iccoa_msg_wifi_params_invalid">Некорректные параметры Wi-Fi ICCOA (%1$s)</string>
+    <string name="iccoa_msg_wifi_unavailable">Подключение к Wi-Fi автомобиля отменено или истёк тайм-аут</string>
+    <string name="iccoa_msg_wifi_lost">Соединение с Wi-Fi автомобиля потеряно</string>
+    <string name="iccoa_msg_wifi_connecting">Подключение к Wi-Fi автомобиля. Подтвердите запрос Android</string>
+    <string name="iccoa_msg_wifi_denied">Android запретил подключение к Wi-Fi автомобиля (%1$s)</string>
+    <string name="iccoa_msg_wifi_request_failed">Не удалось запросить Wi-Fi автомобиля (%1$s)</string>
+    <string name="iccoa_msg_wifi_no_gateway">Wi-Fi автомобиля подключён, но не получен проверенный адрес шлюза</string>
+    <string name="iccoa_msg_wifi_no_ipv4">Не получен IPv4-адрес Wi-Fi автомобиля</string>
+    <string name="iccoa_msg_wifi_waiting_gateway">Wi-Fi подключён. Ожидание адреса шлюза автомобиля…</string>
+    <string name="iccoa_msg_no_auth_method">Нет подтверждённого способа авторизации ICCOA</string>
+    <string name="iccoa_msg_authenticating">Проверка подлинности ICCOA…</string>
+    <string name="iccoa_msg_auth_done">ICCOA: аутентификация завершена, ожидание каналов автомобиля…</string>
+    <string name="iccoa_msg_no_control_channel">Автомобиль не открыл канал управления ICCOA</string>
+    <string name="iccoa_msg_hint_pin_mac">Код и ответ автомобиля не совпали. Начните новое подключение с текущим кодом</string>
+    <string name="iccoa_msg_hint_new_pin">Автомобиль запросил новое подключение с кодом</string>
+    <string name="iccoa_msg_hint_confirm_on_car">Автомобиль запросил подтверждение на своём экране</string>
+    <string name="iccoa_msg_hint_car_error">Автомобиль сообщил о внутренней ошибке</string>
+    <string name="iccoa_msg_hint_mode_rejected">Автомобиль отклонил режим подключения</string>
+    <string name="iccoa_msg_hint_rejected">Автомобиль отклонил подключение</string>
+    <string name="iccoa_msg_hint_send_report">Отправьте отчёт из FT</string>
+    <string name="iccoa_msg_auth_failed">Сбой ICCOA на этапе %1$s (%2$s). %3$s</string>
+    <string name="iccoa_msg_wifi_changed">Сеть Wi-Fi автомобиля изменилась. Переподключение ICCOA…</string>
+    <string name="iccoa_msg_car_ended">Автомобиль завершил соединение ICCOA</string>
+    <string name="iccoa_msg_send_timeout">Тайм-аут отправки данных ICCOA</string>
+    <string name="iccoa_msg_connection_error">Ошибка подключения ICCOA (%1$s)</string>
+    <string name="iccoa_msg_reconnecting">%1$s. Переподключение %2$d/%3$d</string>
+    <string name="iccoa_msg_retries_stopped">%1$s. Автоматические попытки остановлены</string>
+    <string name="iccoa_msg_notification_title">FT · ICCOA Carlink</string>
+    <string name="iccoa_msg_notification_text">Экспериментальная беспроводная проекция</string>
+    <string name="iccoa_msg_forget_body">Удалить сохранённый ключ автомобиля, старый PIN и выбранное устройство? Для следующего подключения потребуется новый код с экрана автомобиля.</string>
+    <string name="iccoa_msg_forget_confirm">Удалить сопряжение</string>
+    <string name="iccoa_msg_cancel">Отмена</string>
+    <string name="iccoa_msg_forget">Забыть доверенный автомобиль</string>
+    <string name="iccoa_msg_normal_new_pin">Normal · новый PIN</string>
+    <string name="iccoa_msg_carlink_only">Только CarLink / ICCOA</string>
+    <string name="iccoa_msg_show_all">Показать все Bluetooth-устройства</string>
+    <string name="iccoa_msg_timeout">Время подключения истекло. Откройте ICCOA на автомобиле и попробуйте снова.</string>
+    <string name="iccoa_msg_linked">ICCOA подключён · ожидание видео · %1$d×%2$d · %3$d fps</string>
+</resources>

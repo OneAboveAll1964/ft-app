@@ -32,7 +32,6 @@ class DevelopmentActivity : MainActivity() {
             val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
             am.mode = if (intent.getBooleanExtra("fakeCall", false)) android.media.AudioManager.MODE_IN_COMMUNICATION else android.media.AudioManager.MODE_NORMAL
         }
-        if (intent.getBooleanExtra("aaSetup", false)) pickAndroidAuto()
         if (intent.getBooleanExtra("startAa", false)) CarControls.startAa()
         if (intent.getBooleanExtra("aaWireless", false)) CarControls.startAaWireless()
         intent.getStringExtra("btSend")?.let { CarLifeService.btSend(it) }

@@ -1,16 +1,14 @@
 package app.ft
 
+import app.ft.ui.play.PermissionsDisclosure
 import app.ft.core.LocalModernPhoneUi
 import androidx.compose.ui.unit.sp
 import app.ft.ui.components.FitText
 import app.ft.ui.car.CarStyles
 import android.Manifest
 import android.app.Activity
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
@@ -74,6 +72,7 @@ import app.ft.ui.diag.DiagnosticsScreen
 import app.ft.ui.home.HomeScreen
 import app.ft.ui.home.rememberIccoaConnectionActions
 import app.ft.ui.cars.CarsScreen
+import app.ft.ui.cars.displayName
 import app.ft.ui.car.CarIcons
 import app.ft.core.CarProtocol
 import app.ft.ui.settings.SettingsPage
@@ -120,29 +119,6 @@ open class MainActivity : ComponentActivity() {
 
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
-    private val pickAaApk = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) DiagLog.w("AaSetup", "no file chosen") else AaInstaller.install(this, uri)
-    }
-
-    private val installResult = object : BroadcastReceiver() {
-        override fun onReceive(c: Context?, i: Intent?) {
-            when (i?.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
-                PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                    val next = if (Build.VERSION.SDK_INT >= 33)
-                        i.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                    else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_INTENT) as Intent?
-                    next?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    runCatching { startActivity(next) }
-                }
-                PackageInstaller.STATUS_SUCCESS -> {
-                    DiagLog.i("AaSetup", "Android Auto installed by FT, so FT is now its installer")
-                    AaInstaller.enableWirelessComponents(this@MainActivity)
-                }
-                else -> DiagLog.w("AaSetup", "the Android Auto install did not finish: ${i?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "cancelled"}")
-            }
-        }
-    }
-
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(newBase)
         applyOverrideConfiguration(Sizing.phone(newBase))
@@ -151,7 +127,6 @@ open class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyBars(Looks.dark(Looks.mode.value, (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES))
-        registerReceiver(installResult, IntentFilter(AaInstaller.ACTION_RESULT), RECEIVER_NOT_EXPORTED)
         requestRuntimePermissions()
         handleIntent(intent)
         if (app.prefs.autoConnect) CarConnection.startAuto(this)
@@ -162,10 +137,17 @@ open class MainActivity : ComponentActivity() {
                 val background = MaterialTheme.colorScheme.background
                 LaunchedEffect(background) { window.setBackgroundDrawable(ColorDrawable(background.toArgb())) }
                 Localized {
+                    if (explainPermissions.value) PermissionsDisclosure(
+                        onContinue = {
+                            app.prefs.playPermissionsExplained = true
+                            explainPermissions.value = false
+                            requestRuntimePermissions()
+                        },
+                        onLater = { explainPermissions.value = false }
+                    )
                     FTRoot(
                         onOpenAccessibility = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                        onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) },
-                        onPickAaFile = { pickAndroidAuto() }
+                        onOpenOverlay = { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
                     )
                 }
             }
@@ -200,72 +182,73 @@ open class MainActivity : ComponentActivity() {
 
     protected open fun handleDevelopmentIntent(intent: Intent) = Unit
 
-    protected fun pickAndroidAuto() {
-        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
-            DiagLog.i("AaSetup", "let FT install apps on the screen that just opened, then tap Pick file again")
-            runCatching { startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))) }
-            return
-        }
-        DiagLog.i("AaSetup", "pick a saved copy of Android Auto, an apk or an apks, and FT will install it")
-        runCatching { pickAaApk.launch(arrayOf("*/*")) }
-            .onFailure { DiagLog.e("AaSetup", "no file picker available", it) }
-    }
-
-    override fun onDestroy() {
-        runCatching { unregisterReceiver(installResult) }
-        super.onDestroy()
-    }
-
     protected fun requestMirror() {
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         val request = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()) else mpm.createScreenCaptureIntent()
         mirrorConsent.launch(request)
     }
 
+    private val explainPermissions = androidx.compose.runtime.mutableStateOf(false)
+
     private fun requestRuntimePermissions() {
-        val wanted = ArrayList<String>()
-        if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
-        if (Build.VERSION.SDK_INT >= 31) {
-            wanted += Manifest.permission.BLUETOOTH_CONNECT
-            wanted += Manifest.permission.BLUETOOTH_SCAN
-            wanted += Manifest.permission.BLUETOOTH_ADVERTISE
+        val missing = runtimePermissions(this)
+        if (missing.isEmpty()) return
+        // Google Play: explain what each permission is for before Android asks.
+        if (BuildConfig.PLAY && !app.prefs.playPermissionsExplained) {
+            explainPermissions.value = true
+            return
         }
-        if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.NEARBY_WIFI_DEVICES
-        else wanted += Manifest.permission.ACCESS_FINE_LOCATION
-        wanted += Manifest.permission.RECORD_AUDIO
-        if (Build.VERSION.SDK_INT >= 33) {
-            wanted += Manifest.permission.READ_MEDIA_VIDEO
-            wanted += Manifest.permission.READ_MEDIA_AUDIO
-        } else {
-            wanted += Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        val missing = wanted.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
+        permissions.launch(missing)
     }
 }
 
+/** The runtime permissions FT asks for at start, minus those already granted. */
+fun runtimePermissions(context: Context): Array<String> {
+    val wanted = ArrayList<String>()
+    if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
+    if (Build.VERSION.SDK_INT >= 31) {
+        wanted += Manifest.permission.BLUETOOTH_CONNECT
+        wanted += Manifest.permission.BLUETOOTH_SCAN
+        wanted += Manifest.permission.BLUETOOTH_ADVERTISE
+    }
+    if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.NEARBY_WIFI_DEVICES
+    else wanted += Manifest.permission.ACCESS_FINE_LOCATION
+    wanted += Manifest.permission.RECORD_AUDIO
+    if (Build.VERSION.SDK_INT >= 33) {
+        wanted += Manifest.permission.READ_MEDIA_VIDEO
+        wanted += Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        wanted += Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    return wanted.filter { context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }.toTypedArray()
+}
+
 @Composable
-fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
+fun FTRoot(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
     val modern by app.ft.core.PhoneStyle.modern.collectAsState()
     androidx.compose.runtime.CompositionLocalProvider(LocalModernPhoneUi provides modern) {
-        FTRootContent(onOpenAccessibility, onOpenOverlay, onPickAaFile)
+        FTRootContent(onOpenAccessibility, onOpenOverlay)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit, onPickAaFile: () -> Unit) {
+private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> Unit) {
     var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
     var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     var settingsFromCars by rememberSaveable { mutableStateOf(false) }
+    var carPage by rememberSaveable { mutableStateOf<String?>(null) }
     val profiles by FTApp.instance.cars.state.collectAsState()
     val screenStates = rememberSaveableStateHolder()
     val context = androidx.compose.ui.platform.LocalContext.current
     val iccoaActions = rememberIccoaConnectionActions()
     val inPage = screen == Screen.SETTINGS && settingsPage != null
+    val inCar = screen == Screen.CARS && carPage != null
+    val inSub = inPage || inCar
     fun back() {
         if (inPage && settingsFromCars) { screen = Screen.CARS; settingsPage = null }
         else if (inPage) settingsPage = null
+        else if (inCar) carPage = null
         else screen = Screen.HOME
     }
     BackHandler(enabled = screen != Screen.HOME) { back() }
@@ -277,7 +260,12 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
         topBar = {
             TopAppBar(
                 title = {
-                    val heading = stringResource(if (inPage) settingsPage?.title ?: screen.label else screen.label)
+                    val carHeading = when {
+                        !inCar -> null
+                        carPage == app.ft.ui.cars.NEW_CAR -> stringResource(R.string.cars_add)
+                        else -> profiles.profiles.firstOrNull { it.id == carPage }?.let { it.displayName() }
+                    }
+                    val heading = carHeading ?: stringResource(if (inPage) settingsPage?.title ?: screen.label else screen.label)
                     AnimatedContent(targetState = screen to heading, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "title") { (s, text) ->
                         if (s == Screen.HOME) Image(
                             painter = painterResource(R.drawable.ft_logo),
@@ -288,7 +276,7 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
                     }
                 },
                 navigationIcon = {
-                    if (inPage) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back)) }
+                    if (inSub) IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_back)) }
                 },
                 actions = {
                     if (screen == Screen.LOG) {
@@ -301,13 +289,14 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
             )
         },
         bottomBar = {
-            AnimatedVisibility(visible = !inPage, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            AnimatedVisibility(visible = !inSub, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                 NavigationBar {
                     Screen.entries.forEach { s ->
                         NavigationBarItem(
                             selected = screen == s,
                             onClick = {
                                 if (s == Screen.SETTINGS) { settingsPage = null; settingsFromCars = false }
+                                if (s == Screen.CARS) carPage = null
                                 screen = s
                             },
                             icon = { Icon(s.icon, contentDescription = stringResource(s.label)) },
@@ -319,23 +308,27 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
         }
     ) { pad ->
         AnimatedContent(
-            targetState = screen to settingsPage,
+            targetState = Triple(screen, settingsPage, if (screen == Screen.CARS || settingsFromCars) carPage else null),
             modifier = Modifier.fillMaxSize(),
             transitionSpec = {
-                val (from, fromPage) = initialState
-                val (to, toPage) = targetState
-                val inSettings = from == Screen.SETTINGS && to == Screen.SETTINGS
+                fun depth(state: Triple<Screen, SettingsPage?, String?>) = when {
+                    state.first == Screen.SETTINGS && state.second != null -> if (state.third != null) 2 else 1
+                    state.first == Screen.CARS && state.third != null -> 1
+                    else -> 0
+                }
+                val from = depth(initialState)
+                val to = depth(targetState)
                 when {
-                    inSettings && fromPage == null && toPage != null ->
+                    to > from ->
                         (slideInHorizontally { it } + fadeIn()) togetherWith (slideOutHorizontally { -it / 4 } + fadeOut())
-                    inSettings && fromPage != null && toPage == null ->
+                    to < from ->
                         (slideInHorizontally { -it / 4 } + fadeIn()) togetherWith (slideOutHorizontally { it } + fadeOut())
                     else -> fadeIn() togetherWith fadeOut()
                 }
             },
             label = "screen"
-        ) { (s, page) ->
-            val stateKey = "${s.name}:${page?.name.orEmpty()}:" +
+        ) { (s, page, car) ->
+            val stateKey = "${s.name}:${page?.name.orEmpty()}:${if (s == Screen.CARS) car.orEmpty() else ""}:" +
                 if (s == Screen.HOME || s == Screen.SETTINGS) profiles.activeId else ""
             screenStates.SaveableStateProvider(stateKey) {
             key(if (s == Screen.HOME || s == Screen.SETTINGS) profiles.activeId else s.name) {
@@ -354,19 +347,21 @@ private fun FTRootContent(onOpenAccessibility: () -> Unit, onOpenOverlay: () -> 
                         settingsPage = SettingsPage.ANDROID_AUTO
                         screen = Screen.SETTINGS
                     },
-                    onOpenCars = { screen = Screen.CARS },
+                    onOpenCars = { carPage = null; screen = Screen.CARS },
                     iccoaConnectionActions = iccoaActions
                 )
                 Screen.CARS -> CarsScreen(pad,
+                    page = car,
+                    onOpen = { carPage = it },
                     onOpenSettings = { settingsPage = it; settingsFromCars = true; screen = Screen.SETTINGS },
                     onConnect = {
                         if (FTApp.instance.prefs.carProtocol == CarProtocol.ICCOA) iccoaActions.start(false)
                         else CarConnection.switchOn(context)
+                        carPage = null
                         screen = Screen.HOME
-                    },
-                    isActive = screen == Screen.CARS)
+                    })
                 Screen.LOG -> DiagnosticsScreen(pad)
-                Screen.SETTINGS -> SettingsScreen(pad, page, onPickAaFile) { settingsPage = it }
+                Screen.SETTINGS -> SettingsScreen(pad, page) { settingsPage = it }
             }
             }
             }

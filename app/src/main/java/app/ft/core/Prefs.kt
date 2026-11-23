@@ -249,6 +249,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var weatherAt: Long get() = lng("weatherAt", 0L); set(v) = set("weatherAt", v)
 
     var supercastToken: String get() = str("supercastToken", ""); set(v) = set("supercastToken", v)
+    var playPermissionsExplained: Boolean get() = bool("playPermissionsExplained", false); set(v) = set("playPermissionsExplained", v)
     var supercastOn: Boolean get() = bool("supercastOn", false); set(v) = set("supercastOn", v)
     var supercastScreenOff: Boolean get() = bool("supercastScreenOff", true); set(v) = set("supercastScreenOff", v)
     var supercastApps: String get() = str("supercastApps", ""); set(v) = set("supercastApps", v)

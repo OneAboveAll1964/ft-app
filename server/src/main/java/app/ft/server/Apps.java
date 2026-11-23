@@ -48,7 +48,7 @@ public final class Apps {
     }
 
     public static void ownWindow(String packageName) {
-        if (leaveSystemAlone || packageName == null || packageName.isEmpty() || OURSELVES.equals(packageName)) {
+        if (leaveSystemAlone || packageName == null || packageName.isEmpty() || ourselves.equals(packageName)) {
             return;
         }
         synchronized (ownWindow) {
@@ -177,7 +177,7 @@ public final class Apps {
         }
     }
 
-    private static final String OURSELVES = "app.ft";
+    static volatile String ourselves = "app.ft";
 
     public static Bundle list() {
         Bundle answer = new Bundle();
@@ -189,7 +189,7 @@ public final class Apps {
             List<String[]> rows = new ArrayList<>();
             for (ResolveInfo info : manager.queryIntentActivities(intent, 0)) {
                 ApplicationInfo application = info.activityInfo.applicationInfo;
-                if (OURSELVES.equals(application.packageName)) {
+                if (ourselves.equals(application.packageName)) {
                     continue;
                 }
                 boolean seen = false;

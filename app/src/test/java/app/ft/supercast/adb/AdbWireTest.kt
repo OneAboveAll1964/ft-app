@@ -17,6 +17,25 @@ class AdbWireTest {
         .generateKeyPair().public as RSAPublicKey
 
     @Test
+    fun commandsGoOnTheWireAsTheirAdbNames() {
+        mapOf(
+            "CNXN" to AdbWire.CNXN, "AUTH" to AdbWire.AUTH, "OPEN" to AdbWire.OPEN,
+            "OKAY" to AdbWire.OKAY, "CLSE" to AdbWire.CLSE, "WRTE" to AdbWire.WRTE
+        ).forEach { (name, command) ->
+            val bytes = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(command).array()
+            assertEquals(name, String(bytes, Charsets.US_ASCII))
+        }
+    }
+
+    @Test
+    fun shellV2PacketsKeepOutputAndDropTheExitCode() {
+        fun packet(kind: Int, data: ByteArray) =
+            ByteBuffer.allocate(5 + data.size).order(ByteOrder.LITTLE_ENDIAN).put(kind.toByte()).putInt(data.size).put(data).array()
+        val stream = packet(1, "hel".toByteArray()) + packet(2, "lo".toByteArray()) + packet(3, byteArrayOf(0))
+        assertEquals("hello", AdbWire.shellOutput(stream))
+    }
+
+    @Test
     fun aMessageFramesIntoTwentyFourBytesPlusPayload() {
         val message = AdbMessage(AdbWire.OPEN, 7, 0, "shell:id\u0000".toByteArray())
         val framed = AdbWire.frame(message)

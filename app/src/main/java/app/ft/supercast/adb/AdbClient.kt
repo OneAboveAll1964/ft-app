@@ -80,21 +80,21 @@ class AdbClient(private val keys: AdbKeys, private val host: String = "127.0.0.1
     }
 
     fun shell(command: String, waitMs: Int = 8000): String? {
-        val id = open("shell:$command") ?: return null
-        val text = StringBuilder()
+        val id = open("shell,v2,raw:$command") ?: return null
+        val raw = java.io.ByteArrayOutputStream()
         val deadline = System.currentTimeMillis() + waitMs
         while (System.currentTimeMillis() < deadline) {
             val message = runCatching { read() }.getOrNull() ?: break
             when (message.command) {
                 AdbWire.WRTE -> {
-                    text.append(String(message.payload))
+                    raw.write(message.payload)
                     send(AdbWire.okay(id.first, id.second))
                 }
-                AdbWire.CLSE -> return text.toString().trim()
+                AdbWire.CLSE -> break
                 else -> Unit
             }
         }
-        return text.toString().trim()
+        return AdbWire.shellOutput(raw.toByteArray()).trim()
     }
 
     fun push(local: File, remote: String, mode: Int = 493): Boolean {

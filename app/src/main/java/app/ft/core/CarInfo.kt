@@ -198,7 +198,9 @@ object CarInfo {
             val url = URL(
                 String.format(
                     Locale.US,
-                    "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code",
+                    // The Play build sends a location rounded to about a kilometre, as its privacy policy says.
+                    if (app.ft.BuildConfig.PLAY) "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=temperature_2m,weather_code"
+                    else "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code",
                     latitude, longitude
                 )
             )
