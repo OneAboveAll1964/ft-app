@@ -11,11 +11,16 @@ val keystoreProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+val hasReleaseKeystore = keystoreProps.getProperty("storePassword") != null &&
+    rootProject.file(keystoreProps.getProperty("storeFile", "ft-release.jks")).exists()
+
 // The Play build is signed with an upload key; Google Play signs what users install.
 val playKeystoreProps = Properties().apply {
     val f = rootProject.file("keystore-play.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
+val hasPlayKeystore = playKeystoreProps.getProperty("storePassword") != null &&
+    rootProject.file(playKeystoreProps.getProperty("storeFile", "ft-upload.jks")).exists()
 
 android {
     namespace = "app.ft"
@@ -31,16 +36,20 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = rootProject.file(keystoreProps.getProperty("storeFile", "ft-release.jks"))
-            storePassword = keystoreProps.getProperty("storePassword")
-            keyAlias = keystoreProps.getProperty("keyAlias")
-            keyPassword = keystoreProps.getProperty("keyPassword")
+            if (hasReleaseKeystore) {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile", "ft-release.jks"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
         }
         create("upload") {
-            storeFile = rootProject.file(playKeystoreProps.getProperty("storeFile", "ft-upload.jks"))
-            storePassword = playKeystoreProps.getProperty("storePassword")
-            keyAlias = playKeystoreProps.getProperty("keyAlias")
-            keyPassword = playKeystoreProps.getProperty("keyPassword")
+            if (hasPlayKeystore) {
+                storeFile = rootProject.file(playKeystoreProps.getProperty("storeFile", "ft-upload.jks"))
+                storePassword = playKeystoreProps.getProperty("storePassword")
+                keyAlias = playKeystoreProps.getProperty("keyAlias")
+                keyPassword = playKeystoreProps.getProperty("keyPassword")
+            }
         }
     }
 
@@ -62,10 +71,13 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            // Default to Android SDK debug key so debug builds work cleanly out-of-the-box
+            signingConfig = signingConfigs.getByName("debug")
         }
         create("unsignedTransit") {
             initWith(getByName("release"))
@@ -96,7 +108,9 @@ android {
 
 androidComponents {
     onVariants(selector().withFlavor("store" to "playstore").withBuildType("release")) { variant ->
-        variant.signingConfig.setConfig(android.signingConfigs.getByName("upload"))
+        if (hasPlayKeystore) {
+            variant.signingConfig.setConfig(android.signingConfigs.getByName("upload"))
+        }
     }
 }
 
