@@ -57,6 +57,7 @@ class FTApp : Application() {
         scope.launch(Dispatchers.IO) {
             app.ft.aa.AaInstaller.forgetOldCopy(this@FTApp)
             if (app.ft.core.Root.ensure()) app.ft.core.RootPrep.grants(this@FTApp)
+            app.ft.core.AutoBackup.trigger(this@FTApp, app.ft.core.AutoBackup.Trigger.APP_START)
         }
     }
 

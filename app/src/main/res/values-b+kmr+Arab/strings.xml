@@ -542,4 +542,18 @@
     <string name="touch_cal_reset">رێکخستنێ ڤەگەرینە</string>
     <string name="touch_cal_car_step">دەستلێدانا %1$d/4: تام ناڤەراستا بازنا کەسک بکێشە</string>
     <string name="touch_cal_car_cancel">بۆ هەلوەشاندنێ، گۆشەیا سەرێ چەپێ یا شاشێ بکێشە</string>
+    <string name="backup_save_all">هەمی ترۆمبێلان د فایەلەکی دا پاشکەفت بکە</string>
+    <string name="backup_auto_title">پاشکەفتکرنا خۆکار</string>
+    <string name="backup_auto_about">کۆپیەکا خۆکار یا هەمی ترۆمبێل و رێکخستنان د بیرگەها ئەپێ دا دهێلیت.</string>
+    <string name="backup_auto_interval">خشتەیا پاشکەفتکرنا خۆکار</string>
+    <string name="backup_interval_off">نەچالاک</string>
+    <string name="backup_interval_drive">پشتی هەر شۆفێریەکێ</string>
+    <string name="backup_interval_daily">رۆژانە</string>
+    <string name="backup_interval_weekly">حەفتیانە</string>
+    <string name="backup_auto_last">دوماهیک کۆپی: %1$s (%2$d ترۆمبێل)</string>
+    <string name="backup_auto_none">هێشتا چ پاشکەفتەکا خۆکار نەهاتیە چێکرن.</string>
+    <string name="backup_restore_auto">ڤەگەراندن ژ پاشکەفتا خۆکار</string>
+    <string name="backup_auto_now">نوکە پاشکەفت بکە</string>
+    <string name="backup_restore_confirm">هەمی رێکخستن و ترۆمبێل ژ دوماهیک پاشکەفتێ بهێنە ڤەگەراندن؟</string>
+    <string name="backup_share">بەلاڤکرنا پاشکەفتێ</string>
 </resources>

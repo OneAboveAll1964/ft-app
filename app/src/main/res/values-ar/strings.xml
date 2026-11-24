@@ -542,4 +542,18 @@
     <string name="touch_cal_reset">إعادة ضبط المعايرة</string>
     <string name="touch_cal_car_step">اللمسة %1$d/4: اضغط في منتصف الدائرة الخضراء تمامًا</string>
     <string name="touch_cal_car_cancel">للإلغاء، اضغط في الزاوية العلوية اليسرى من الشاشة</string>
+    <string name="backup_save_all">حفظ كل السيارات في ملف</string>
+    <string name="backup_auto_title">النسخ الاحتياطي التلقائي</string>
+    <string name="backup_auto_about">يحفظ نسخة احتياطية تلقائية لجميع السيارات والإعدادات.</string>
+    <string name="backup_auto_interval">جدول النسخ الاحتياطي</string>
+    <string name="backup_interval_off">إيقاف</string>
+    <string name="backup_interval_drive">بعد كل رحلة</string>
+    <string name="backup_interval_daily">يوميًا</string>
+    <string name="backup_interval_weekly">أسبوعيًا</string>
+    <string name="backup_auto_last">آخر نسخة: %1$s (%2$d سيارات)</string>
+    <string name="backup_auto_none">لم يتم إنشاء نسخة احتياطية بعد.</string>
+    <string name="backup_restore_auto">استعادة من النسخة التلقائية</string>
+    <string name="backup_auto_now">إنشاء نسخة الآن</string>
+    <string name="backup_restore_confirm">استعادة جميع الإعدادات والسيارات من آخر نسخة احتياطية؟</string>
+    <string name="backup_share">مشاركة النسخة الاحتياطية</string>
 </resources>

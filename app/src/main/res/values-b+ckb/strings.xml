@@ -542,4 +542,18 @@
     <string name="touch_cal_reset">ڕێکخستنەکە بگەڕێنەوە</string>
     <string name="touch_cal_car_step">دەستلێدانی %1$d/4: ڕێک ناوەڕاستی بازنە سەوزەکە دابگرە</string>
     <string name="touch_cal_car_cancel">بۆ هەڵوەشاندنەوە، گۆشەی سەرەوەی چەپی شاشەکە دابگرە</string>
+    <string name="backup_save_all">هەموو ئۆتۆمبێلەکان لە پەڕگەیەکدا پاشەکەوت بکە</string>
+    <string name="backup_auto_title">پاشەکەوتکردنی خۆکار</string>
+    <string name="backup_auto_about">کۆپییەکی خۆکاری هەموو ئۆتۆمبێل و ڕێکخستنەکان لە بیرگەی ئەپەکە دەهێڵێتەوە.</string>
+    <string name="backup_auto_interval">خشتەی پاشەکەوتکردنی خۆکار</string>
+    <string name="backup_interval_off">ناچالاک</string>
+    <string name="backup_interval_drive">دوای هەر شۆفێرییەک</string>
+    <string name="backup_interval_daily">ڕۆژانە</string>
+    <string name="backup_interval_weekly">هەفتانە</string>
+    <string name="backup_auto_last">دوایین کۆپی: %1$s (%2$d ئۆتۆمبێل)</string>
+    <string name="backup_auto_none">هێشتا هیچ پاشەکەوتێکی خۆکار دروست نەکراوە.</string>
+    <string name="backup_restore_auto">گەڕاندنەوە لە پاشەکەوتی خۆکار</string>
+    <string name="backup_auto_now">ئێستا پاشەکەوت بکە</string>
+    <string name="backup_restore_confirm">هەموو ڕێکخستن و ئۆتۆمبێلەکان لە دوایین پاشەکەوت بگێڕدرێنەوە؟</string>
+    <string name="backup_share">هاوبەشکردنی پاشەکەوت</string>
 </resources>

@@ -542,4 +542,18 @@
     <string name="touch_cal_reset">Сбросить калибровку</string>
     <string name="touch_cal_car_step">Касание %1$d/4: нажмите точно в центр зелёного круга</string>
     <string name="touch_cal_car_cancel">Для отмены нажмите в верхнем левом углу экрана</string>
+    <string name="backup_save_all">Сохранить все авто в файл</string>
+    <string name="backup_auto_title">Автоматический бэкап</string>
+    <string name="backup_auto_about">Сохраняет актуальную резервную копию всех автомобилей и настроек в хранилище приложения.</string>
+    <string name="backup_auto_interval">Периодичность бэкапа</string>
+    <string name="backup_interval_off">Выключено</string>
+    <string name="backup_interval_drive">После каждой поездки</string>
+    <string name="backup_interval_daily">Раз в день</string>
+    <string name="backup_interval_weekly">Раз в неделю</string>
+    <string name="backup_auto_last">Последняя копия: %1$s (%2$d авто)</string>
+    <string name="backup_auto_none">Автоматическая копия ещё не создана.</string>
+    <string name="backup_restore_auto">Восстановить автокопию</string>
+    <string name="backup_auto_now">Создать сейчас</string>
+    <string name="backup_restore_confirm">Восстановить все настройки и автомобили из последней резервной копии?</string>
+    <string name="backup_share">Поделиться бэкапом</string>
 </resources>

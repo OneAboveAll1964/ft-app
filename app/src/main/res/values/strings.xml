@@ -543,4 +543,18 @@
     <string name="touch_cal_reset">Reset calibration</string>
     <string name="touch_cal_car_step">Touch %1$d/4: tap the exact centre of the green circle</string>
     <string name="touch_cal_car_cancel">To cancel, tap the top left corner of the screen</string>
+    <string name="backup_save_all">Save all cars to a file</string>
+    <string name="backup_auto_title">Automatic backup</string>
+    <string name="backup_auto_about">Keeps an automatic backup of all cars and settings in the app\'s storage.</string>
+    <string name="backup_auto_interval">Automatic backup schedule</string>
+    <string name="backup_interval_off">Off</string>
+    <string name="backup_interval_drive">After every drive</string>
+    <string name="backup_interval_daily">Daily</string>
+    <string name="backup_interval_weekly">Weekly</string>
+    <string name="backup_auto_last">Latest backup: %1$s (%2$d cars)</string>
+    <string name="backup_auto_none">No automatic backup created yet.</string>
+    <string name="backup_restore_auto">Restore from auto-backup</string>
+    <string name="backup_auto_now">Backup now</string>
+    <string name="backup_restore_confirm">Restore all settings and vehicles from the latest backup?</string>
+    <string name="backup_share">Share backup</string>
 </resources>

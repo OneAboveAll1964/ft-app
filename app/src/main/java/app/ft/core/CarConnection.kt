@@ -17,8 +17,20 @@ object CarConnection {
     val isBusy: Boolean get() = CarLifeService.isBusy || IccoaService.isBusy ||
         AaHeadUnitService.isBusy || SuperCast.isBusy
 
+    private var previouslyBusy = false
+
     /** Called at dispatch, creation and after teardown, including failed starts. */
-    internal fun lifecycleChanged() { mutableBusy.value = isBusy }
+    internal fun lifecycleChanged() {
+        val nowBusy = isBusy
+        val driveEnded = previouslyBusy && !nowBusy
+        previouslyBusy = nowBusy
+        mutableBusy.value = nowBusy
+        if (driveEnded) {
+            runCatching {
+                AutoBackup.trigger(FTApp.instance, AutoBackup.Trigger.DRIVE_ENDED)
+            }
+        }
+    }
 
     fun startAuto(context: Context) {
         val prefs = FTApp.instance.prefs

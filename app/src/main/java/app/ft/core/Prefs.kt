@@ -9,7 +9,7 @@ import app.ft.projection.VideoProfile
 /** A preference handle stays bound to its vehicle, even after the selected vehicle changes. */
 class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(context)) {
     val profileId: String = vehicleProfileId.also { require(CarProfiles.isProfileId(it)) }
-    private val global: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
+    internal val global: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
     private val sp: SharedPreferences = if (profileId == LEGACY_ID) global else
         context.getSharedPreferences(profileStoreName(profileId), Context.MODE_PRIVATE)
 
@@ -257,7 +257,15 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var supercastDockHidden: Boolean get() = bool("supercastDockHidden", false); set(v) = set("supercastDockHidden", v)
     var supercastSplit: Float get() = flt("supercastSplit", 0.5f); set(v) = set("supercastSplit", v)
 
+    var autoBackupInterval: Int get() = int("autoBackupInterval", AUTO_BACKUP_AFTER_DRIVE); set(v) = set("autoBackupInterval", v)
+    var lastAutoBackupTime: Long get() = lng("lastAutoBackupTime", 0L); set(v) = set("lastAutoBackupTime", v)
+
     companion object {
+        const val AUTO_BACKUP_OFF = 0
+        const val AUTO_BACKUP_AFTER_DRIVE = 1
+        const val AUTO_BACKUP_DAILY = 2
+        const val AUTO_BACKUP_WEEKLY = 3
+
         const val LEGACY_ID = "legacy"
         internal const val AA_DRIVING_RESTRICTIONS = "aaDrivingRestrictions"
         internal fun profileStoreName(id: String) = "ft-car-$id"

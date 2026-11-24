@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -32,6 +33,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.ft.FTApp
 import app.ft.R
+import app.ft.core.Prefs
+import app.ft.core.AutoBackup
 import app.ft.core.Backup
 import app.ft.core.CarConnection
 import app.ft.core.DiagLog
@@ -51,6 +54,13 @@ fun BackupSettings() {
     val prefs = FTApp.instance.prefs
     var showCode by remember { mutableStateOf(false) }
     var pasting by remember { mutableStateOf(false) }
+    var autoBackupInterval by remember { mutableStateOf(prefs.autoBackupInterval) }
+    var autoBackupInfo by remember { mutableStateOf(AutoBackup.info(context)) }
+    var confirmRestoreAuto by remember { mutableStateOf(false) }
+
+    fun refreshAutoBackup() {
+        autoBackupInfo = AutoBackup.info(context)
+    }
 
     fun reloadEverything() {
         Lang.init(prefs)
@@ -69,6 +79,17 @@ fun BackupSettings() {
         Toast.makeText(context, context.getString(if (ok) R.string.backup_saved else R.string.backup_failed), Toast.LENGTH_LONG).show()
     }
 
+    val saveAll = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val ok = runCatching {
+            context.contentResolver.openOutputStream(uri)?.use {
+                it.write(Backup.everythingAllCars(FTApp.instance.cars, prefs).toByteArray())
+            }
+            true
+        }.getOrDefault(false)
+        Toast.makeText(context, context.getString(if (ok) R.string.backup_saved else R.string.backup_failed), Toast.LENGTH_LONG).show()
+    }
+
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         if (CarConnection.isBusy || prefs.profileId != FTApp.instance.prefs.profileId) {
@@ -78,8 +99,11 @@ fun BackupSettings() {
         val text = runCatching {
             context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
         }.getOrNull()
-        val count = if (text == null) 0 else Backup.restore(prefs, text)
-        if (count > 0) reloadEverything()
+        val count = if (text == null) 0 else Backup.restore(prefs, text, profiles = FTApp.instance.cars)
+        if (count > 0) {
+            reloadEverything()
+            refreshAutoBackup()
+        }
         DiagLog.i("Backup", "restored $count settings from a file")
         Toast.makeText(
             context,
@@ -92,10 +116,65 @@ fun BackupSettings() {
     Text(stringResource(R.string.cars_backup_about), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(onClick = { save.launch("FT-settings.json") }) { Text(stringResource(R.string.backup_save)) }
+        TextButton(onClick = { saveAll.launch("FT-all-cars-backup.json") }) { Text(stringResource(R.string.backup_save_all)) }
         TextButton(onClick = {
             if (CarConnection.isBusy) Toast.makeText(context, R.string.cars_backup_idle, Toast.LENGTH_LONG).show()
             else open.launch(arrayOf("application/json", "*/*"))
         }) { Text(stringResource(R.string.backup_load)) }
+    }
+
+    Text(stringResource(R.string.backup_auto_title), style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.backup_auto_about), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val intervals = listOf(
+            Prefs.AUTO_BACKUP_OFF to R.string.backup_interval_off,
+            Prefs.AUTO_BACKUP_AFTER_DRIVE to R.string.backup_interval_drive,
+            Prefs.AUTO_BACKUP_DAILY to R.string.backup_interval_daily,
+            Prefs.AUTO_BACKUP_WEEKLY to R.string.backup_interval_weekly
+        )
+        intervals.forEach { (interval, labelRes) ->
+            FilterChip(
+                selected = autoBackupInterval == interval,
+                onClick = {
+                    prefs.autoBackupInterval = interval
+                    autoBackupInterval = interval
+                },
+                label = { Text(stringResource(labelRes)) }
+            )
+        }
+    }
+
+    val info = autoBackupInfo
+    if (info != null) {
+        Text(stringResource(R.string.backup_auto_last, info.formattedDate(context), info.carCount),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    } else {
+        Text(stringResource(R.string.backup_auto_none),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = { confirmRestoreAuto = true }, enabled = autoBackupInfo != null) {
+            Text(stringResource(R.string.backup_restore_auto))
+        }
+        TextButton(onClick = {
+            AutoBackup.performBackup(context, FTApp.instance.cars, prefs)
+            refreshAutoBackup()
+            Toast.makeText(context, R.string.backup_saved, Toast.LENGTH_SHORT).show()
+        }) {
+            Text(stringResource(R.string.backup_auto_now))
+        }
+        TextButton(onClick = {
+            val file = AutoBackup.latestFile(context)
+            if (file.exists()) {
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("application/json")
+                    .putExtra(Intent.EXTRA_TEXT, file.readText())
+                runCatching { context.startActivity(Intent.createChooser(send, context.getString(R.string.backup_share))) }
+            }
+        }, enabled = autoBackupInfo != null) {
+            Text(stringResource(R.string.backup_share))
+        }
     }
 
     Text(stringResource(R.string.backup_look_about), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -161,6 +240,37 @@ fun BackupSettings() {
                 }
             },
             dismissButton = { Localized { TextButton(onClick = { pasting = false }) { Text(stringResource(R.string.action_cancel)) } } }
+        )
+    }
+
+    if (confirmRestoreAuto) {
+        AlertDialog(
+            onDismissRequest = { confirmRestoreAuto = false },
+            title = { Localized { Text(stringResource(R.string.backup_restore_auto)) } },
+            text = { Localized { Text(stringResource(R.string.backup_restore_confirm)) } },
+            confirmButton = {
+                Localized {
+                    TextButton(onClick = {
+                        confirmRestoreAuto = false
+                        val count = AutoBackup.restoreLatest(context, FTApp.instance.cars, prefs)
+                        if (count > 0) reloadEverything()
+                        Toast.makeText(
+                            context,
+                            if (count > 0) context.getString(R.string.backup_restored, count) else context.getString(R.string.backup_failed),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }) {
+                        Text(stringResource(R.string.backup_load))
+                    }
+                }
+            },
+            dismissButton = {
+                Localized {
+                    TextButton(onClick = { confirmRestoreAuto = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                }
+            }
         )
     }
 }
