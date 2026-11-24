@@ -565,4 +565,8 @@
     <string name="backup_auto_now">Backup now</string>
     <string name="backup_restore_confirm">Restore all settings and vehicles from the latest backup?</string>
     <string name="backup_share">Share backup</string>
+    <string name="backup_saf_folder_title">Backup folder (Google Drive / SAF)</string>
+    <string name="backup_saf_folder_none">App storage only</string>
+    <string name="backup_saf_folder_about">Backups will automatically sync to the chosen folder on Google Drive, cloud storage, or device.</string>
+    <string name="backup_saf_folder_clear">Reset folder (save locally only)</string>
 </resources>

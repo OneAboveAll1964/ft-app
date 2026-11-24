@@ -1,6 +1,8 @@
 package app.ft.core
 
 import android.content.Context
+import android.net.Uri
+import android.provider.DocumentsContract
 import app.ft.FTApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,6 +45,75 @@ object AutoBackup {
     fun latestFile(context: Context): File = File(backupDir(context), LATEST_FILE)
     fun previousFile(context: Context): File = File(backupDir(context), PREV_FILE)
 
+    fun getFolderDisplayName(context: Context, treeUri: Uri?): String {
+        if (treeUri == null) return "Folder"
+        val fallback = runCatching { treeUri.lastPathSegment.orEmpty() }.getOrNull().orEmpty()
+        return runCatching {
+            val resolver = context.contentResolver ?: return fallback.ifEmpty { "Folder" }
+            val docId = DocumentsContract.getTreeDocumentId(treeUri) ?: return fallback.ifEmpty { "Folder" }
+            val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId) ?: return fallback.ifEmpty { "Folder" }
+            resolver.query(
+                docUri,
+                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                    if (idx >= 0) cursor.getString(idx) else null
+                } else null
+            }
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: fallback.ifEmpty { "Folder" }
+    }
+
+    fun syncToSafFolder(context: Context, treeUri: Uri, json: String): Boolean {
+        return runCatching {
+            val resolver = context.contentResolver
+            val treeDocId = DocumentsContract.getTreeDocumentId(treeUri)
+            val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocId)
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, treeDocId)
+
+            var targetUri: Uri? = null
+            resolver.query(
+                childrenUri,
+                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                while (cursor.moveToNext()) {
+                    val name = if (nameCol >= 0) cursor.getString(nameCol) else null
+                    if (name == LATEST_FILE) {
+                        val docId = cursor.getString(idCol)
+                        targetUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+                        break
+                    }
+                }
+            }
+
+            if (targetUri == null) {
+                targetUri = DocumentsContract.createDocument(resolver, parentUri, "application/json", LATEST_FILE)
+            }
+
+            if (targetUri != null) {
+                resolver.openOutputStream(targetUri, "wt")?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                    out.flush()
+                }
+                DiagLog.i("Backup", "Auto-backup synced to SAF folder: $treeUri")
+                true
+            } else {
+                DiagLog.w("Backup", "Could not create document in SAF folder: $treeUri")
+                false
+            }
+        }.onFailure {
+            DiagLog.w("Backup", "Failed to sync auto-backup to SAF folder: ${it.message}")
+        }.getOrDefault(false)
+    }
+
     fun info(context: Context, file: File = latestFile(context)): BackupInfo? {
         if (!file.exists() || file.length() == 0L) return null
         return runCatching {
@@ -74,6 +145,12 @@ object AutoBackup {
             if (tmp.renameTo(latest)) {
                 prefs.lastAutoBackupTime = System.currentTimeMillis()
                 DiagLog.i("Backup", "Auto-backup saved to ${latest.absolutePath} (${profiles.state.value.profiles.size} cars)")
+                val folderUriStr = prefs.autoBackupFolderUri
+                if (folderUriStr.isNotEmpty()) {
+                    runCatching {
+                        syncToSafFolder(context, Uri.parse(folderUriStr), json)
+                    }
+                }
                 latest
             } else {
                 null

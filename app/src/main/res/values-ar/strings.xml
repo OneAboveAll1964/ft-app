@@ -564,4 +564,8 @@
     <string name="backup_auto_now">إنشاء نسخة الآن</string>
     <string name="backup_restore_confirm">استعادة جميع الإعدادات والسيارات من آخر نسخة احتياطية؟</string>
     <string name="backup_share">مشاركة النسخة الاحتياطية</string>
+    <string name="backup_saf_folder_title">مجلد النسخ الاحتياطي (Google Drive / SAF)</string>
+    <string name="backup_saf_folder_none">ذاكرة التطبيق فقط</string>
+    <string name="backup_saf_folder_about">سيتم نسخ النسخ الاحتياطية تلقائيًا إلى المجلد المحدد على Google Drive أو التخزين السحابي.</string>
+    <string name="backup_saf_folder_clear">إعادة تعيين المجلد (حفظ محلي فقط)</string>
 </resources>

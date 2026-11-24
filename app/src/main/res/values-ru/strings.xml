@@ -564,4 +564,8 @@
     <string name="backup_auto_now">Создать сейчас</string>
     <string name="backup_restore_confirm">Восстановить все настройки и автомобили из последней резервной копии?</string>
     <string name="backup_share">Поделиться бэкапом</string>
+    <string name="backup_saf_folder_title">Папка сохранения (Google Диск / SAF)</string>
+    <string name="backup_saf_folder_none">Локальное хранилище приложения</string>
+    <string name="backup_saf_folder_about">Копии будут автоматически дублироваться в выбранную папку на Google Диске, Яндекс Диске или телефоне.</string>
+    <string name="backup_saf_folder_clear">Сбросить папку (сохранять только локально)</string>
 </resources>

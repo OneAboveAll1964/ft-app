@@ -564,4 +564,8 @@
     <string name="backup_auto_now">ئێستا پاشەکەوت بکە</string>
     <string name="backup_restore_confirm">هەموو ڕێکخستن و ئۆتۆمبێلەکان لە دوایین پاشەکەوت بگێڕدرێنەوە؟</string>
     <string name="backup_share">هاوبەشکردنی پاشەکەوت</string>
+    <string name="backup_saf_folder_title">بوخچەی پاڵپشتی (Google Drive / SAF)</string>
+    <string name="backup_saf_folder_none">تەنها بیرگەی ئەپ</string>
+    <string name="backup_saf_folder_about">پاڵپشتییەکان بە شێوەیەکی ئۆتۆماتیکی لە بوخچەی هەڵبژێردراو لە Google Drive یان بیرگەی هەوریدا پاشەکەوت دەکرێن.</string>
+    <string name="backup_saf_folder_clear">ڕیسێتکردنی بوخچە (تەنها بە شێوەی ناوخۆیی)</string>
 </resources>

@@ -136,4 +136,16 @@ class BackupAllCarsTest {
             tmpDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun getFolderDisplayNameFallsBackGracefully() {
+        val context = mock(Context::class.java)
+        val uri = mock(android.net.Uri::class.java)
+        `when`(uri.lastPathSegment).thenReturn("Downloads")
+        val name = AutoBackup.getFolderDisplayName(context, uri)
+        assertNotNull(name)
+        assertEquals("Downloads", name)
+
+        assertEquals("Folder", AutoBackup.getFolderDisplayName(context, null))
+    }
 }

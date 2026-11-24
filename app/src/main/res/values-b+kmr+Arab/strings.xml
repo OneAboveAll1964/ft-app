@@ -564,4 +564,8 @@
     <string name="backup_auto_now">نوکە پاشکەفت بکە</string>
     <string name="backup_restore_confirm">هەمی رێکخستن و ترۆمبێل ژ دوماهیک پاشکەفتێ بهێنە ڤەگەراندن؟</string>
     <string name="backup_share">بەلاڤکرنا پاشکەفتێ</string>
+    <string name="backup_saf_folder_title">Pelgira پشتەڤانیێ (Google Drive / SAF)</string>
+    <string name="backup_saf_folder_none">تنێ بیرگەها ئەپێ</string>
+    <string name="backup_saf_folder_about">پشتەڤانی دێ ب ئۆتۆماتیکی د ناڤا پلگێرا دەستنیشانکری دا ل سەر Google Drive یان عەورێ دا هێنە پاراستن.</string>
+    <string name="backup_saf_folder_clear">زڤڕاندنا پلگێرێ (تنێ ب شێوێ ناڤخۆیی)</string>
 </resources>

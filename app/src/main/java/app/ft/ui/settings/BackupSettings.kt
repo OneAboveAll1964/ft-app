@@ -1,6 +1,7 @@
 package app.ft.ui.settings
 
 import android.content.Intent
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.widget.Toast
@@ -38,6 +39,7 @@ import app.ft.core.AutoBackup
 import app.ft.core.Backup
 import app.ft.core.CarConnection
 import app.ft.core.DiagLog
+import app.ft.ui.components.OptionRow
 import app.ft.core.Lang
 import app.ft.core.Language
 import app.ft.core.Looks
@@ -57,9 +59,26 @@ fun BackupSettings() {
     var autoBackupInterval by remember { mutableStateOf(prefs.autoBackupInterval) }
     var autoBackupInfo by remember { mutableStateOf(AutoBackup.info(context)) }
     var confirmRestoreAuto by remember { mutableStateOf(false) }
+    var safFolderName by remember { mutableStateOf(prefs.autoBackupFolderName) }
 
     fun refreshAutoBackup() {
         autoBackupInfo = AutoBackup.info(context)
+    }
+
+    val safFolderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            }
+            prefs.autoBackupFolderUri = uri.toString()
+            val name = AutoBackup.getFolderDisplayName(context, uri)
+            prefs.autoBackupFolderName = name
+            safFolderName = name
+            AutoBackup.performBackup(context, FTApp.instance.cars, prefs)
+            refreshAutoBackup()
+            Toast.makeText(context, R.string.backup_saved, Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun reloadEverything() {
@@ -141,6 +160,29 @@ fun BackupSettings() {
                 },
                 label = { Text(stringResource(labelRes)) }
             )
+        }
+    }
+
+    OptionRow(
+        title = stringResource(R.string.backup_saf_folder_title),
+        value = if (safFolderName.isNotBlank()) safFolderName else stringResource(R.string.backup_saf_folder_none),
+        detail = stringResource(R.string.backup_saf_folder_about),
+        onClick = { safFolderLauncher.launch(null) }
+    )
+    if (safFolderName.isNotBlank()) {
+        TextButton(onClick = {
+            val oldUri = prefs.autoBackupFolderUri
+            if (oldUri.isNotEmpty()) {
+                runCatching {
+                    val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    context.contentResolver.releasePersistableUriPermission(Uri.parse(oldUri), flags)
+                }
+            }
+            prefs.autoBackupFolderUri = ""
+            prefs.autoBackupFolderName = ""
+            safFolderName = ""
+        }) {
+            Text(stringResource(R.string.backup_saf_folder_clear))
         }
     }
 

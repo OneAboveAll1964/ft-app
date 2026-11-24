@@ -259,6 +259,8 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
 
     var autoBackupInterval: Int get() = int("autoBackupInterval", AUTO_BACKUP_AFTER_DRIVE); set(v) = set("autoBackupInterval", v)
     var lastAutoBackupTime: Long get() = lng("lastAutoBackupTime", 0L); set(v) = set("lastAutoBackupTime", v)
+    var autoBackupFolderUri: String get() = str("autoBackupFolderUri", ""); set(v) = set("autoBackupFolderUri", v)
+    var autoBackupFolderName: String get() = str("autoBackupFolderName", ""); set(v) = set("autoBackupFolderName", v)
 
     companion object {
         const val AUTO_BACKUP_OFF = 0
