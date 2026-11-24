@@ -77,6 +77,7 @@ class CarLifeSession(
     @Volatile private var streamStartedAt = 0L
     @Volatile var projecting = false; private set
     private var videoTimer: Job? = null
+    private var navWatchdog: Job? = null
     private var encryptProbe: Job? = null
     private var screenWatch: BroadcastReceiver? = null
     private val crypto = CarLifeCrypto()
@@ -137,6 +138,7 @@ class CarLifeSession(
 
     fun start() {
         refreshMusicPreference()
+        startNavWatchdog()
         DiagLog.i(tag, "session start via ${link.name}")
         link.start(scope, ::onMessage, { DiagLog.i(tag, it) }, ::linked, ::closed)
     }
@@ -156,6 +158,8 @@ class CarLifeSession(
         carSpeedPackets = 0L
         videoTimer?.cancel()
         videoTimer = null
+        navWatchdog?.cancel()
+        navWatchdog = null
         encryptProbe?.cancel()
         crypto.reset()
         matched = false
@@ -760,6 +764,16 @@ class CarLifeSession(
                     onNeedKeyframe?.invoke()
                 }
                 unaskedRate()
+            }
+        }
+    }
+
+    private fun startNavWatchdog() {
+        if (navWatchdog?.isActive == true) return
+        navWatchdog = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(1000L)
+                navigation.checkStale()
             }
         }
     }

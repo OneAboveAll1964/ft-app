@@ -26,14 +26,19 @@ class AaNavigation {
             }
             AaProtocol.NAV_STATE -> {
                 if (ended) return null
-                val step = r.messages(1).firstOrNull() ?: return null
-                val maneuver = step.message(1) ?: return null
-                val type = maneuver.int(1, -1)
+                val step = r.messages(1).firstOrNull()
+                if (step == null) {
+                    if (!modern || !info.active) return null
+                    setTurn(0, "", 0)
+                    return info
+                }
+                val maneuver = step.message(1)
+                val type = maneuver?.int(1, -1) ?: 0
                 if (type < 0) return null
                 modern = true
                 val road = step.message(2)?.string(1)
                     ?: step.message(4)?.string(1) ?: ""
-                setTurn(type, road, maneuver.int(2).coerceAtLeast(0))
+                setTurn(type, road, maneuver?.int(2)?.coerceAtLeast(0) ?: 0)
             }
             AaProtocol.NAV_CURRENT_POSITION -> {
                 if (ended) return null
