@@ -218,6 +218,11 @@ private fun MadeBy() {
         }) {
             Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
         }
+        Text(
+            stringResource(R.string.about_development_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (version.isNotBlank() && app.ft.BuildConfig.PLAY) {
             // Google Play builds update only through Play, so the version does not link to other downloads.
             Text("FT $version", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(8.dp))

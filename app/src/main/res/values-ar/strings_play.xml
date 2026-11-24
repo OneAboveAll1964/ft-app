@@ -21,6 +21,7 @@
     <string name="about_privacy">سياسة الخصوصية</string>
     <string name="about_source">الشيفرة المصدرية</string>
     <string name="about_license">الترخيص: Apache 2.0</string>
+    <string name="about_development_help">المساعدة في التطوير — @mykolaq</string>
     <string name="about_data">لا يوجد في FT حساب ولا إعلانات ولا تحليلات. تبقى إعداداتك وسجلاتك وملفات تعريف سياراتك على هاتفك. ترسل بطاقة الطقس موقعًا تقريبيًا إلى Open-Meteo للحصول على توقعات الطقس. ولا يخرج تقرير التشخيص من هاتفك إلا عندما تشاركه بنفسك.</string>
     <string name="about_permissions_title">الأذونات وسبب طلب FT لها</string>
     <string name="about_review_permissions">مراجعة الأذونات</string>
