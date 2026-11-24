@@ -175,6 +175,10 @@
     <string name="home_finish_setup">Finish setup</string>
     <string name="home_finish_setup_body">Needed to use phone apps on the car and to start with the car</string>
     <string name="check_touch">Touch control</string>
+    <string name="check_starter">Android Auto auto-start</string>
+    <string name="duplicate_app_title">Duplicate FT app detected</string>
+    <string name="duplicate_app_body">A second version of FT (%1$s) is installed. This causes duplicate accessibility services and connection conflicts. Please uninstall it.</string>
+    <string name="duplicate_app_uninstall">Uninstall conflicting version</string>
     <string name="check_overlay">Open apps from the car</string>
     <string name="check_background">Run in the background</string>
     <string name="home_aa_missing">Android Auto is not on this phone. Install it from the Play Store, or let FT install it in Settings, Android Auto.</string>

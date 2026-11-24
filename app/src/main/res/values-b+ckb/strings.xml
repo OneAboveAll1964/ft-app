@@ -163,6 +163,10 @@
     <string name="home_finish_setup">ڕێکخستن تەواو بکە</string>
     <string name="home_finish_setup_body">پێویستە بۆ بەکارهێنانی ئەپەکانی مۆبایل لەسەر ئۆتۆمبێل و بۆ ئەوەی لەگەڵ ئۆتۆمبێلەکە دەست بەکار ببێت</string>
     <string name="check_touch">کۆنترۆڵی دەستلێدان</string>
+    <string name="check_starter">دەستپێکردنی خۆکاری Android Auto</string>
+    <string name="duplicate_app_title">دووبارەی ئەپی FT دۆزرایەوە</string>
+    <string name="duplicate_app_body">وەشانێکی دووەمی FT (%1$s) دامەزراوە. ئەمە دەبێتە هۆی دووبارەبوونەوەی خزمەتگوزارییەکانی دەستپێگەیشتن و کێشەی پەیوەستبوون. تکایە لایببە.</string>
+    <string name="duplicate_app_uninstall">سڕینەوەی وەشانی ناکۆک</string>
     <string name="check_overlay">کردنەوەی ئەپەکان لە ئۆتۆمبێلەوە</string>
     <string name="check_background">کارکردن لە پشتەوە</string>
     <string name="home_aa_missing">Android Auto لەسەر ئەم مۆبایلە نییە. لە Play Store دایبمەزرێنە، یان با FT لە ڕێکخستنەکان، بەشی Android Auto دایبمەزرێنێت.</string>

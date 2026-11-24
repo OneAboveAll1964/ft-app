@@ -163,6 +163,10 @@
     <string name="home_finish_setup">رێکخستنێ ب دوماهی بینە</string>
     <string name="home_finish_setup_body">پێدڤی یە بۆ بکارئینانا ئەپێن مۆبایلی ل سەر ترومبێلێ و بۆ هندێ دگەل ترومبێلێ دەست ب کار ببیت</string>
     <string name="check_touch">کونترۆلا ب دەست لێدانێ</string>
+    <string name="check_starter">دەستپێکرنا خۆکار یا Android Auto</string>
+    <string name="duplicate_app_title">دووبارەیا بەرنامێ FT هاتە دیتن</string>
+    <string name="duplicate_app_body">وەشانەکا دی یا FT (%1$s) هاتیە دانان. ئەڤ چەندە دبیتە ئەگەرێ دووبارەبوونا خزمەتگۆزاریێن دەستپێگەهشتنێ و ناکۆکیێن گرێدانێ. هیڤیدارین لابدە.</string>
+    <string name="duplicate_app_uninstall">ژێبرنا وەشانا ناکۆک</string>
     <string name="check_overlay">ڤەکرنا ئەپان ژ ترومبێلێ</string>
     <string name="check_background">کارکرن ل پشتڤە</string>
     <string name="home_aa_missing">Android Auto ل سەر ڤی مۆبایلی نینە. ژ Play Store دابمەزرینە، یان بهێلە FT ژ رێکخستنان، پشکا Android Auto دابمەزرینیت.</string>

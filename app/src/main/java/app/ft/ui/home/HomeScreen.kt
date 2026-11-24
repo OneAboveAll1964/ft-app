@@ -1,5 +1,9 @@
 package app.ft.ui.home
 
+import android.content.ComponentName
+import android.content.Intent
+import app.ft.aa.AaSwitch
+import app.ft.core.DuplicateAppHelper
 import app.ft.ui.play.AccessibilityUse
 import app.ft.ui.play.rememberAccessibilityConsent
 import app.ft.core.LocalModernPhoneUi
@@ -152,9 +156,23 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     LaunchedEffect(Unit) { RootPrep.revision.collect { resumed++ } }
     val radios = rememberRadios(context, resumed)
     val touchOn = remember(resumed) { FTTouchService.enabled }
-    val openTouchSettings = rememberAccessibilityConsent(AccessibilityUse.TOUCH, onOpenAccessibility)
+    val openTouchSettings = rememberAccessibilityConsent(AccessibilityUse.TOUCH) {
+        val component = ComponentName(context, FTTouchService::class.java)
+        val detail = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, component.flattenToString())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(detail) }.isFailure) onOpenAccessibility()
+    }
+    val starterOn = remember(resumed) { AaSwitch.isStarterServiceEnabled(context) }
+    val rootGranted = rememberRootGranted()
+    val needsStarter = !rootGranted
+    val openStarterSettings = rememberAccessibilityConsent(AccessibilityUse.AA_STARTER) {
+        AaSwitch.openAccessibilitySettings(context)
+    }
+    val conflictingPackage = remember(resumed) { DuplicateAppHelper.findConflictingPackage(context) }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
     val backgroundOn = remember(resumed) { (context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) != false }
+    val hasMissingPermissions = !touchOn || (needsStarter && !starterOn) || !overlayOn || !backgroundOn
     val aaOwnCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
     val aaInstalled = remember(resumed) { AaInstaller.installed(context) }
 
@@ -225,6 +243,29 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 if (!want) CarConnection.switchOff(context)
                 else if (iccoaActions != null) iccoaActions.start(false)
                 else CarConnection.switchOn(context)
+            }
+        }
+
+        if (conflictingPackage != null) item {
+            DuplicateAppCard(conflictingPackage) {
+                DuplicateAppHelper.requestUninstall(context, conflictingPackage)
+            }
+        }
+
+        if (hasMissingPermissions) item {
+            Section(stringResource(R.string.home_finish_setup)) {
+                Text(
+                    stringResource(R.string.home_finish_setup_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                if (needsStarter) {
+                    Check(stringResource(R.string.check_starter), starterOn, openStarterSettings)
+                }
+                Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
+                Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
+                Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
             }
         }
 
@@ -353,18 +394,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             iccoaDevices(iccoaState, showAll = iccoaShowAll, wifiEnabled = radios.wifi)
         }
 
-        if (!modern && (!touchOn || !overlayOn || !backgroundOn)) {
-            item {
-                Section(stringResource(R.string.home_finish_setup)) {
-                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
-                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
-                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
-                }
-            }
-        }
-
         item {
             Section(stringResource(R.string.settings_aa_title)) {
                 if (!aaInstalled) {
@@ -414,18 +443,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                             textAlign = TextAlign.Center
                         )
                     }
-                }
-            }
-        }
-
-        if (modern && (!touchOn || !overlayOn || !backgroundOn)) {
-            item {
-                Section(stringResource(R.string.home_finish_setup)) {
-                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
-                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
-                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
             }
         }
@@ -653,6 +670,44 @@ private fun ClassicSection(title: String, content: @Composable ColumnScope.() ->
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
             content()
+        }
+    }
+}
+
+@Composable
+private fun DuplicateAppCard(packageName: String, onUninstall: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = scheme.errorContainer, contentColor = scheme.onErrorContainer),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Warning, contentDescription = null, tint = scheme.error, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.duplicate_app_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onErrorContainer
+                )
+            }
+            Text(
+                stringResource(R.string.duplicate_app_body, packageName),
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onErrorContainer
+            )
+            FilledTonalButton(
+                onClick = onUninstall,
+                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                    containerColor = scheme.error,
+                    contentColor = scheme.onError
+                ),
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text(stringResource(R.string.duplicate_app_uninstall))
+            }
         }
     }
 }

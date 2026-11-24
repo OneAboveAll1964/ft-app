@@ -163,6 +163,10 @@
     <string name="home_finish_setup">Завершите настройку</string>
     <string name="home_finish_setup_body">Нужно, чтобы приложения телефона работали в автомобиле, а FT запускался вместе с ним</string>
     <string name="check_touch">Управление касаниями</string>
+    <string name="check_starter">Автозапуск Android Auto</string>
+    <string name="duplicate_app_title">Обнаружен дубликат FT</string>
+    <string name="duplicate_app_body">Установлена вторая версия FT (%1$s). Это вызывает дубли в спецвозможностях и конфликты при подключении. Пожалуйста, удалите её.</string>
+    <string name="duplicate_app_uninstall">Удалить дубликат</string>
     <string name="check_overlay">Открытие приложений из автомобиля</string>
     <string name="check_background">Работа в фоне</string>
     <string name="home_aa_missing">На этом телефоне нет Android Auto. Установите его из Play Store или разрешите FT установить его в разделе «Настройки» → «Android Auto».</string>

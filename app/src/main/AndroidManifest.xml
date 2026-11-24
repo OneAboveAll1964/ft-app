@@ -45,6 +45,8 @@
         <package android:name="com.baidu.carlife" />
         <package android:name="com.huawei.hicar" />
         <package android:name="moe.shizuku.privileged.api" />
+        <package android:name="com.shkomaghdid.ft" />
+        <package android:name="app.ft" />
     </queries>
 
     <application

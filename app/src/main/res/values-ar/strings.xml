@@ -163,6 +163,10 @@
     <string name="home_finish_setup">أكمل الإعداد</string>
     <string name="home_finish_setup_body">مطلوب لاستخدام تطبيقات الهاتف على شاشة السيارة وللتشغيل مع السيارة</string>
     <string name="check_touch">التحكم باللمس</string>
+    <string name="check_starter">بدء التشغيل التلقائي لـ Android Auto</string>
+    <string name="duplicate_app_title">تم اكتشاف نسخة مكررة من تطبيق FT</string>
+    <string name="duplicate_app_body">تم تثبيت نسخة ثانية من FT (%1$s). يؤدي ذلك إلى تكرار خدمات إمكانية الوصول وتعارض الاتصال. يرجى إلغاء تثبيتها.</string>
+    <string name="duplicate_app_uninstall">إلغاء تثبيت النسخة المتعارضة</string>
     <string name="check_overlay">فتح التطبيقات من السيارة</string>
     <string name="check_background">العمل في الخلفية</string>
     <string name="home_aa_missing">Android Auto غير مثبّت على هذا الهاتف. ثبّته من متجر Play، أو دع FT يثبّته من الإعدادات، قسم Android Auto.</string>
