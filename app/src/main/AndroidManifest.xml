@@ -44,6 +44,7 @@
         <package android:name="com.google.android.projection.gearhead" />
         <package android:name="com.baidu.carlife" />
         <package android:name="com.huawei.hicar" />
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
 
     <application

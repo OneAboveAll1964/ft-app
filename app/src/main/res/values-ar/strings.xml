@@ -399,6 +399,14 @@
     <string name="supercast_way_wireless_body">وصّل الهاتف بكمبيوتر مع تفعيل تصحيح USB وشغّل السطر أدناه مرة واحدة. ثم اضغط «جهّزه الآن» واسمح لـ FT في نافذة الهاتف. بعدها يضبط FT نفسه دون كمبيوتر حتى إعادة تشغيل الهاتف.</string>
     <string name="supercast_way_computer">من كمبيوتر، مرة واحدة</string>
     <string name="supercast_way_computer_body">وصّل الهاتف بكمبيوتر مع تفعيل تصحيح أخطاء USB ونفّذ السطر أدناه. لا يحتاج أي ملفات ويضبط كل شيء. كرّره بعد إعادة تشغيل الهاتف.</string>
+    <string name="supercast_way_shizuku">عبر Shizuku (بدون كمبيوتر وبدون روت)</string>
+    <string name="supercast_way_shizuku_body">إذا كان Shizuku يعمل على هاتفك (عبر تصحيح أخطاء اللاسلكي)، فيمكن لـ FT تشغيل التطبيقات على شاشة السيارة تلقائيًا دون الاتصال بجهاز كمبيوتر.</string>
+    <string name="supercast_shizuku_not_running">خدمة Shizuku لا تعمل. قم بتشغيلها في تطبيق Shizuku.</string>
+    <string name="supercast_shizuku_need_permission">خدمة Shizuku نشطة، ولكن لم يتم منح الإذن لـ FT بعد.</string>
+    <string name="supercast_shizuku_grant">منح إذن Shizuku</string>
+    <string name="supercast_shizuku_granted">تم منح إذن Shizuku.</string>
+    <string name="supercast_shizuku_start">بدء التشغيل عبر Shizuku</string>
+    <string name="supercast_shizuku_open">فتح تطبيق Shizuku</string>
     <string name="supercast_copy_command">نسخ الأمر</string>
     <string name="supercast_stop">إيقاف</string>
     <string name="tile_looking">يبحث عن السيارة</string>

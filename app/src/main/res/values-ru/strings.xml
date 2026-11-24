@@ -399,6 +399,14 @@
     <string name="supercast_way_wireless_body">Подключите телефон к компьютеру с включённой отладкой по USB и один раз выполните строку ниже. Затем нажмите «Настроить сейчас» и разрешите FT в запросе на телефоне. После этого FT настраивается сам, без компьютера, до перезагрузки телефона.</string>
     <string name="supercast_way_computer">С компьютера, один раз</string>
     <string name="supercast_way_computer_body">Подключите телефон с включённой отладкой по USB к компьютеру и выполните одну команду ниже. Файлы не нужны, она всё настроит сама. После перезагрузки телефона выполните её снова.</string>
+    <string name="supercast_way_shizuku">Через Shizuku (без ПК и без root)</string>
+    <string name="supercast_way_shizuku_body">Если на телефоне запущен Shizuku (через беспроводную отладку Wi-Fi), FT может запускать приложения на экране автомобиля автоматически и без подключения к компьютеру.</string>
+    <string name="supercast_shizuku_not_running">Служба Shizuku не запущена. Запустите её в приложении Shizuku.</string>
+    <string name="supercast_shizuku_need_permission">Служба Shizuku активна, но приложению FT пока не предоставлен доступ.</string>
+    <string name="supercast_shizuku_grant">Предоставить доступ Shizuku</string>
+    <string name="supercast_shizuku_granted">Доступ Shizuku предоставлен.</string>
+    <string name="supercast_shizuku_start">Запустить через Shizuku</string>
+    <string name="supercast_shizuku_open">Открыть приложение Shizuku</string>
     <string name="supercast_copy_command">Скопировать команду</string>
     <string name="supercast_stop">Остановить</string>
     <string name="tile_looking">Поиск автомобиля</string>

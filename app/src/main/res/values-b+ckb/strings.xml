@@ -399,6 +399,14 @@
     <string name="supercast_way_wireless_body">مۆبایلەکە بە کۆمپیوتەرێک ببەستە کە دیباگی USB هەڵکراوە و دێڕەکەی خوارەوە جارێک لێبدە. پاشان «ئێستا ڕێکی بخە» دابگرە و لە پەیامی مۆبایلەکەدا ڕێگە بە FT بدە. دوای ئەوە FT بەبێ کۆمپیوتەر خۆی ڕێک دەخات تا مۆبایلەکە دادەگیرسێتەوە.</string>
     <string name="supercast_way_computer">لە کۆمپیوتەرێکەوە، یەک جار</string>
     <string name="supercast_way_computer_body">مۆبایلەکە بە کۆمپیوتەرێکەوە ببەستە کە USB debuggingی هەڵکرابێت و ئەم دێڕەی خوارەوە جێبەجێ بکە. پێویستی بە هیچ فایلێک نییە و هەموو شتێک ڕێک دەخات. دوای ڕیستارتی مۆبایل دووبارەی بکەرەوە.</string>
+    <string name="supercast_way_shizuku">لە ڕێگەی Shizuku (بێ کۆمپیوتەر و بێ ڕووت)</string>
+    <string name="supercast_way_shizuku_body">ئەگەر Shizuku لەسەر مۆبایلەکەت کار بکات (لە ڕێگەی دیباگی بێتەلەوە)، FT دەتوانێت ئەپەکان بە شێوەیەکی ئۆتۆماتیکی لەسەر شاشەی ئۆتۆمبێلەکە کارپێبکات بێ ئەوەی بە کۆمپیوتەرەوە ببەسترێتەوە.</string>
+    <string name="supercast_shizuku_not_running">خزمەتگوزاری Shizuku کار ناکات. لە ئەپی Shizukuدا دەستی پێبکە.</string>
+    <string name="supercast_shizuku_need_permission">خزمەتگوزاری Shizuku چالاکە، بەڵام هێشتا مۆڵەت بە FT نەدراوە.</string>
+    <string name="supercast_shizuku_grant">پێدانی مۆڵەتی Shizuku</string>
+    <string name="supercast_shizuku_granted">مۆڵەتی Shizuku درا.</string>
+    <string name="supercast_shizuku_start">دەستپێکردن لە ڕێگەی Shizuku</string>
+    <string name="supercast_shizuku_open">کردنەوەی ئەپی Shizuku</string>
     <string name="supercast_copy_command">کۆپیکردنی فەرمانەکە</string>
     <string name="supercast_stop">وەستاندن</string>
     <string name="tile_looking">بەدوای ئۆتۆمبێلەکەدا دەگەڕێت</string>

@@ -411,6 +411,14 @@
     <string name="supercast_way_wireless_body">Plug the phone into a computer with USB debugging on and run the line below once. Then tap Set it up now and allow FT on the phone\'s prompt. After that FT sets itself up with no computer until the phone restarts.</string>
     <string name="supercast_way_computer">From a computer, once</string>
     <string name="supercast_way_computer_body">Plug the phone into a computer with USB debugging on and run the one line below. It needs no files and sets everything up. Run it again after a phone restart.</string>
+    <string name="supercast_way_shizuku">With Shizuku (no PC or root needed)</string>
+    <string name="supercast_way_shizuku_body">If Shizuku is running on your phone (started via wireless debugging), FT can launch apps on the car screen automatically without connecting to a computer.</string>
+    <string name="supercast_shizuku_not_running">Shizuku service is not running. Start it in the Shizuku app.</string>
+    <string name="supercast_shizuku_need_permission">Shizuku is active, but FT has not been granted permission yet.</string>
+    <string name="supercast_shizuku_grant">Grant Shizuku permission</string>
+    <string name="supercast_shizuku_granted">Shizuku permission granted.</string>
+    <string name="supercast_shizuku_start">Start with Shizuku</string>
+    <string name="supercast_shizuku_open">Open Shizuku app</string>
     <string name="supercast_copy_command">Copy the command</string>
     <string name="supercast_stop">Stop</string>
     <string name="tile_looking">Looking for the car</string>
