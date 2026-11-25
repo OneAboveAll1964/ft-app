@@ -231,4 +231,40 @@ class WifiChannelLinkTest {
             scope.cancel()
         }
     }
+
+    @Test fun closingReadLoopRetiresWriterBeforeAdmissionRuns() = runBlocking {
+        val port = ServerSocket(0).use { it.localPort }
+        val bound = LinkedBlockingQueue<Int>()
+        val connected = LinkedBlockingQueue<Boolean>()
+        val closed = LinkedBlockingQueue<String>()
+        val blockAdmission = CountDownLatch(1)
+        val admission = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(mapOf(CarLifeProtocol.CH_CMD to port),
+            onBound = { bound.put(it) }, admissionDispatcher = admission)
+        var client: Socket? = null
+        try {
+            link.start(scope, { _, _, _ -> }, {}, {
+                connected.put(true)
+            }, { closed.put(it) })
+            assertNotNull(bound.poll(5, TimeUnit.SECONDS))
+            client = Socket("127.0.0.1", port)
+            assertEquals(true, connected.poll(5, TimeUnit.SECONDS))
+            assertTrue(link.send(CarLifeProtocol.CH_CMD, byteArrayOf(1)))
+            // Block admission so readLoop's withContext(admissionDispatcher) cannot run yet.
+            scope.launch(admission) { blockAdmission.await(5, TimeUnit.SECONDS) }
+            client.close()
+            withTimeout(5_000) {
+                while (link.send(CarLifeProtocol.CH_CMD, byteArrayOf(2))) delay(10)
+            }
+            blockAdmission.countDown()
+            assertEquals("head unit disconnected", closed.poll(5, TimeUnit.SECONDS))
+        } finally {
+            blockAdmission.countDown()
+            link.stop()
+            client?.close()
+            scope.cancel()
+            admission.close()
+        }
+    }
 }

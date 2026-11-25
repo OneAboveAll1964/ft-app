@@ -145,6 +145,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private val peerDetails = HashMap<String, String>()
     private val SERVICES_AFTER_MS = 8_000L
     private val NARROW_AFTER_MS = 2_000L
+    private val MAX_RECOVERY_WAIT_MS = 30_000L
     private val NARROW = listOf(5745, 5785, 5765, 5180, 5200, 5220, 5240, 5805, 5825)
     @Volatile private var namedAt = 0L
     private var notedMatch = ""
@@ -846,7 +847,10 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             createPhoneGroup(m, ch, p, life, id, maxOf(timeoutMs, JoinWatch.GIVE_UP_MS))
             return
         }
-        if (!prefs.carP2pAutoRole || !roleRetryAddress.equals(p.address, true)) resetRoleRetry()
+        if (!prefs.carP2pAutoRole || !roleRetryAddress.equals(p.address, true)) {
+            resetRoleRetry()
+            if (prefs.carP2pAutoRole && p.groupOwner) retryOwnerIntent = 0
+        }
         val ownerIntent = retryOwnerIntent
         joiningOwnerIntent = ownerIntent
         joiningRoleGeneration = if (prefs.carP2pAutoRole) bluetoothGeneration else null
@@ -1004,6 +1008,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         DiagLog.w(tag, "joining ${p.name}: $why; recovering before retry ${failures + 1}")
         onRetry?.invoke(p.name, failures + 1)
         recovery = scope.launch(Dispatchers.Main) {
+            val recoveryJob = coroutineContext[Job]
+            try {
             // A rejected connect (including BUSY) can also leave negotiation active.
             // Do not overlap discovery/new joins with an unfinished teardown.
             while (isActive && current(ch, life) && enabled && attempt == id) {
@@ -1019,12 +1025,19 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             // Keep recovery active during the exchange and backoff: Bluetooth replies
             // must not start a join against the peer snapshot from before teardown.
             awaitingRetryAnnouncement = onRetryReady != null
+            var waitedMs = 0L
             do {
                 val ready = onRetryReady?.invoke(false) ?: true
                 if (lifecycle != life || receiver == null || !enabled || attempt != id) return@launch
-                delay(JoinWatch.retryDelayMs(failures))
+                val stepMs = JoinWatch.retryDelayMs(failures)
+                delay(stepMs)
+                waitedMs += stepMs
                 if (lifecycle != life || receiver == null || !enabled || attempt != id) return@launch
                 if (ready || !awaitingRetryAnnouncement) break
+                if (waitedMs >= MAX_RECOVERY_WAIT_MS) {
+                    DiagLog.w(tag, "no current Bluetooth target info after ${MAX_RECOVERY_WAIT_MS / 1000}s; resuming WiFi Direct discovery")
+                    break
+                }
                 DiagLog.i(tag, "no current Bluetooth target info; repeating wireless preparation before a new join")
             } while (isActive)
             awaitingRetryAnnouncement = false
@@ -1055,6 +1068,9 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             DiagLog.i(tag, "recovery complete; waiting for the car in a fresh WiFi Direct peer list")
             refreshPeers()
             discover()
+            } finally {
+                if (recovery === recoveryJob) recovery = null
+            }
         }
     }
 

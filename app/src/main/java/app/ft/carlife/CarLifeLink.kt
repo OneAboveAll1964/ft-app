@@ -258,6 +258,11 @@ class WifiChannelLink(
             if (running.get()) DiagLog.d(tag, "WIFI ${CarLifeProtocol.channelName(channel)} read ended: ${t.message}")
         } finally {
             runCatching { s.close() }
+            var writer: CarLifeWriter<ByteArray>? = null
+            synchronized(sockets) {
+                if (sockets[channel] === s) writer = writers.remove(channel)
+            }
+            writer?.close()
         }
     }
 
@@ -276,6 +281,7 @@ class WifiChannelLink(
     }
 
     private fun write(channel: Int, s: Socket, inner: ByteArray): Boolean {
+        if (!running.get() || s.isClosed) return false
         return try {
             val o = s.getOutputStream()
             o.write(inner)
@@ -283,7 +289,11 @@ class WifiChannelLink(
             progressAt = android.os.SystemClock.elapsedRealtime()
             true
         } catch (t: Throwable) {
-            DiagLog.e(tag, "WIFI ${CarLifeProtocol.channelName(channel)} write failed", t)
+            if (!running.get() || s.isClosed) {
+                DiagLog.d(tag, "WIFI ${CarLifeProtocol.channelName(channel)} write ended: ${t.message}")
+            } else {
+                DiagLog.e(tag, "WIFI ${CarLifeProtocol.channelName(channel)} write failed", t)
+            }
             runCatching { s.close() }
             false
         }

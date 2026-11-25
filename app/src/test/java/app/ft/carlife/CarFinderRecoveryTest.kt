@@ -442,6 +442,49 @@ class CarFinderRecoveryTest {
     }
 
     @Test
+    fun missingTargetInfoResumesDiscoveryAfterBoundedWait() = check { h ->
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.visible = emptyList()
+            h.finder.onRetryReady = { false }
+            h.finder.retry()
+            runCurrent()
+            h.cancels.single().onSuccess()
+            runCurrent()
+            h.removals.single().onSuccess()
+            runCurrent()
+            h.groups.single().onGroupInfoAvailable(null)
+            runCurrent()
+            assertTrue(h.finder.preparingRetry)
+            advanceTimeBy(35_000)
+            runCurrent()
+            assertFalse(h.finder.preparingRetry)
+            h.visible = listOf(h.car.apply { status = WifiP2pDevice.AVAILABLE })
+            h.broadcastPeers()
+            runCurrent()
+            verify(h.manager).connect(any(), any(), any())
+        }
+    }
+
+    @Test
+    fun groupOwnerPeerUsesClientRoleOnFirstAttempt() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            h.broadcastEnabled(false)
+            val owner = mock(WifiP2pDevice::class.java).apply {
+                deviceName = "CarLife"
+                deviceAddress = h.car.deviceAddress
+                status = WifiP2pDevice.AVAILABLE
+                `when`(isGroupOwner).thenReturn(true)
+            }
+            h.visible = listOf(owner)
+            h.broadcastEnabled(true)
+            h.broadcastPeers()
+            h.finder.connectByName("CarLife")
+            assertEquals(0, lastOwnerIntent(h, 1))
+        }
+    }
+
+    @Test
     fun aPinnedCallerMustAnnounceItsNameBeforeSavedMacOrServiceCanConnect() = check { h ->
         h.broadcastEnabled(false)
         val address = "64:FE:15:28:C8:E4"
