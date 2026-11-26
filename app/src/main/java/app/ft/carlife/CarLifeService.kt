@@ -579,10 +579,11 @@ class CarLifeService : Service() {
     internal fun queueWirelessName(name: String) {
         val generation = wirelessBluetoothGeneration
         val exchange = wireless.exchange
+        val network = wireless.carWifiNetwork
         val f = finder
         scope.launch(Dispatchers.Main) {
             if (mode == 1 && finder === f && bt.connectionGeneration == generation &&
-                wireless.exchange == exchange) onCarRaisedWifiDirect(name)
+                wireless.exchange == exchange) onCarRaisedWifiDirect(name, network)
         }
     }
 
@@ -2001,7 +2002,7 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun onCarRaisedWifiDirect(name: String) {
+    private fun onCarRaisedWifiDirect(name: String, network: CarWirelessSetup.P2pNetworkInfo? = null) {
         if (mode != 1) return
         prefs.carP2pName = name
         _state.update { it.copy(carWifi = name) }
@@ -2014,7 +2015,7 @@ class CarLifeService : Service() {
         step("Joining the car's WiFi Direct '$name'")
         startFinder()
         finder?.search()
-        finder?.connectByName(name)
+        finder?.connectByName(name, network)
     }
 
     private fun keyName(code: Int) = when (code) {

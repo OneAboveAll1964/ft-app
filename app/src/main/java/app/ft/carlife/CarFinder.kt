@@ -80,6 +80,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private var lastSnapshot = ""
     private var lastGroupSnapshot = ""
     private var announcedName = ""
+    private var triedDirectSsid = ""
     private var awaitingRetryAnnouncement = false
     private var joiningAddress = ""
     private var bluetoothAddress = ""
@@ -123,6 +124,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         }
         bluetoothAddress = address
         announcedName = ""
+        triedDirectSsid = ""
         pendingServiceMatch = null
     }
 
@@ -783,7 +785,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     fun inSight(name: String): Boolean =
         _link.value != null || connecting != null || theCar(_peers.value, name) != null
 
-    fun connectByName(name: String) {
+    fun connectByName(name: String, directNetwork: CarWirelessSetup.P2pNetworkInfo? = null) {
         announcedName = name
         awaitingRetryAnnouncement = false
         prefs.carP2pName = name
@@ -793,8 +795,65 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             checkExisting()
             return
         }
+        if (directNetwork != null && !directNetwork.ssid.equals(triedDirectSsid, true) &&
+            connectDirect(name, directNetwork)) {
+            return
+        }
         val p = theCar(_peers.value, name) ?: return
         connect(p)
+    }
+
+    private fun connectDirect(name: String, net: CarWirelessSetup.P2pNetworkInfo): Boolean {
+        if (locked && !bluetoothAddress.equals(prefs.carLifeVehicleAddress, true)) return false
+        if (prefs.carP2pPhoneGroup || awaitingAnnouncement || awaitingRetryAnnouncement) return false
+        val m = manager ?: return false
+        val ch = channel ?: return false
+        if (!enabled || recovery != null || groupProbe != null || _link.value != null || connecting != null) return false
+        triedDirectSsid = net.ssid
+        val cfg = runCatching {
+            WifiP2pConfig.Builder()
+                .setNetworkName(net.ssid)
+                .setPassphrase(net.passphrase)
+                .apply {
+                    if (net.freqMhz != null && Build.VERSION.SDK_INT >= 33) setGroupOperatingFrequency(net.freqMhz)
+                }
+                .build()
+        }.onFailure {
+            DiagLog.d(tag, "direct P2P config failed (${it.javaClass.simpleName}); falling back to peer discovery")
+        }.getOrNull() ?: return false
+        cancelOwnerDiscovery()
+        val life = lifecycle
+        val id = ++attempt
+        connecting = name
+        joiningAddress = ""
+        joiningBluetoothAddress = bluetoothAddress
+        connectedPeerAddress = ""
+        joiningOwnerIntent = 0
+        joiningRoleGeneration = null
+        val timeoutMs = prefs.carJoinTimeoutSeconds * 1_000L
+        attemptAt = SystemClock.elapsedRealtime()
+        DiagLog.i(tag, "connecting directly to $name by SSID (freq=${net.freqMhz ?: "auto"})")
+        val fallbackPeer = Peer(name, "", WifiP2pDevice.AVAILABLE, true)
+        watch(fallbackPeer, timeoutMs, 0)
+        m.connect(ch, cfg, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                if (!current(ch, life) || attempt != id || connecting != name) return
+                DiagLog.d(tag, "direct join attempt=$id accepted by Android; waiting for group formation")
+            }
+
+            override fun onFailure(reason: Int) {
+                if (!current(ch, life) || attempt != id || connecting != name) return
+                DiagLog.w(tag, "direct connect to $name failed reason=$reason (${failureName(reason)}); falling back to peer discovery")
+                watchdog?.cancel()
+                watchdog = null
+                connecting = null
+                joiningAddress = ""
+                joiningBluetoothAddress = ""
+                refreshPeers()
+                discover()
+            }
+        })
+        return true
     }
 
     fun retry() {

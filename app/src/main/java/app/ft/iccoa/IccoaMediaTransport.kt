@@ -89,28 +89,35 @@ internal class IccoaMediaTransport(
     }
 
     private fun play(config: IccoaVideoConfig) {
+        if (closed.get()) return
         videoConfig = config
         if (muxer != null) { onPlay(config); onKeyframe(); return }
-        val socket = Socket()
-        synchronized(this) {
-            if (closed.get()) { socket.close(); return }
-            videoSocket = socket
-        }
+        var socket: Socket? = null
         try {
-            network.bindSocket(socket)
-            socket.tcpNoDelay = true
-            socket.sendBufferSize = 512 * 1024
-            socket.connect(InetSocketAddress(config.host, config.rtpPort), 4000)
-            val sender = IccoaTsMuxer(BufferedOutputStream(socket.getOutputStream(), 65536))
+            val pinned = network.socketFactory.createSocket()
+            socket = pinned
+            synchronized(this) {
+                if (closed.get()) { pinned.close(); return }
+                videoSocket = pinned
+            }
+            pinned.tcpNoDelay = true
+            pinned.sendBufferSize = 512 * 1024
+            pinned.connect(InetSocketAddress(config.host, config.rtpPort), 4000)
+            if (closed.get()) { pinned.close(); return }
+            val sender = IccoaTsMuxer(BufferedOutputStream(pinned.getOutputStream(), 65536))
             val encoder = IccoaAacEncoder(queue::audio, ::fail)
             synchronized(this) {
-                if (closed.get()) { encoder.close(); socket.close(); return }
+                if (closed.get()) { encoder.close(); pinned.close(); return }
                 aac = encoder
                 muxer = sender
             }
             DiagLog.i("ICCOA", "WFD PLAY ${config.width}x${config.height}@${config.fps}; RTP/TCP ${config.rtpPort}")
             onPlay(config)
-        } catch (e: Exception) { runCatching { socket.close() }; fail("RTP: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e)) }
+        } catch (e: Exception) {
+            runCatching { socket?.close() }
+            synchronized(this) { if (videoSocket === socket) videoSocket = null }
+            if (!closed.get()) fail("RTP: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e))
+        }
     }
 
     fun configure(bytes: ByteArray) {

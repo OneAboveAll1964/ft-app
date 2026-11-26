@@ -267,4 +267,50 @@ class WifiChannelLinkTest {
             admission.close()
         }
     }
+
+    @Test fun commandEofClearsAuxiliaryLanesAndAllowsReconnectWithoutRestart() {
+        val cmd = CarLifeProtocol.CH_CMD
+        val media = CarLifeProtocol.CH_MEDIA
+        val reservations = listOf(ServerSocket(0), ServerSocket(0))
+        val ports = mapOf(cmd to reservations[0].localPort, media to reservations[1].localPort)
+        reservations.forEach { it.close() }
+        val bound = LinkedBlockingQueue<Int>()
+        val events = LinkedBlockingQueue<String>()
+        val closed = LinkedBlockingQueue<String>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(ports, onBound = { bound.put(it) })
+        val clients = mutableListOf<Socket>()
+        fun connect(channel: Int): Socket = Socket("127.0.0.1", ports.getValue(channel)).also {
+            clients += it
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            var accepted = false
+            while (!accepted && System.nanoTime() < deadline) {
+                accepted = events.poll(100, TimeUnit.MILLISECONDS)
+                    ?.contains("${CarLifeProtocol.channelName(channel)} connected from") == true
+            }
+            assertTrue("channel accepted after session transition", accepted)
+        }
+        try {
+            link.start(scope, { _, _, _ -> }, { events.put(it) }, {}, { closed.put(it) })
+            repeat(2) { assertNotNull(bound.poll(5, TimeUnit.SECONDS)) }
+            val firstCommand = connect(cmd)
+            connect(media)
+            assertTrue(link.connected)
+            assertTrue(link.isOpen)
+            firstCommand.close()
+            assertEquals("head unit disconnected", closed.poll(5, TimeUnit.SECONDS))
+            assertFalse("CMD must be removed", link.connected)
+            assertFalse("media lane must not survive CMD EOF", link.isOpen)
+            assertFalse(link.send(media, byteArrayOf(9)))
+            val secondCommand = connect(cmd)
+            assertTrue(link.connected)
+            assertTrue(link.send(cmd, byteArrayOf(42)))
+            secondCommand.soTimeout = 5000
+            assertEquals(42, secondCommand.getInputStream().read())
+        } finally {
+            link.stop()
+            clients.forEach { runCatching { it.close() } }
+            scope.cancel()
+        }
+    }
 }

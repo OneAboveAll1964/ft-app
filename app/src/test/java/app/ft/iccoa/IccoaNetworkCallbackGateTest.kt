@@ -51,4 +51,13 @@ class IccoaNetworkCallbackGateTest {
         assertFalse(gate.onAvailable("A"))
         assertTrue(gate.isCurrent("A"))
     }
+
+    @Test fun createIfCurrentGuardsSocketCreationAgainstReplacement() {
+        val gate = IccoaNetworkCallbackGate<String>()
+        assertTrue(gate.onAvailable("A"))
+        assertEquals("sockA", gate.createIfCurrent("A") { "sockA" })
+        assertTrue(gate.onAvailable("B"))
+        assertNull(gate.createIfCurrent("A") { "stale" })
+        assertEquals("sockB", gate.createIfCurrent("B") { "sockB" })
+    }
 }

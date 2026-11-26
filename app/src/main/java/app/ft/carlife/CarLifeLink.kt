@@ -122,6 +122,14 @@ class WifiChannelLink(
                         scope.launch(Dispatchers.IO) {
                             readLoop(channel, s, onMessage)
                             withContext(admissionDispatcher) {
+                                if (channel == CarLifeProtocol.CH_CMD) {
+                                    // Command EOF ends the whole Baidu session, not just this lane.
+                                    if (dropAll(expectedCommand = s)) {
+                                        onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
+                                        onClosed("head unit disconnected")
+                                    }
+                                    return@withContext
+                                }
                                 var writer: CarLifeWriter<ByteArray>? = null
                                 val current = synchronized(sockets) {
                                     val mine = sockets[channel] === s
@@ -129,15 +137,11 @@ class WifiChannelLink(
                                         sockets.remove(channel)
                                         writer = writers.remove(channel)
                                     }
-                                    mine && (channel != CarLifeProtocol.CH_CMD || generation == cmdGeneration)
+                                    mine
                                 }
                                 writer?.close()
                                 if (!current) return@withContext
                                 onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
-                                if (channel == CarLifeProtocol.CH_CMD) {
-                                    watch?.cancel()
-                                    onClosed("head unit disconnected")
-                                }
                             }
                         }
                     }

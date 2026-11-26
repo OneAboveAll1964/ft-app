@@ -485,6 +485,30 @@ class CarFinderRecoveryTest {
     }
 
     @Test
+    fun directP2pJoinBySsidFallsBackToPeerDiscoveryOnFailure() = check { h ->
+        mockConstruction(WifiP2pConfig.Builder::class.java, withSettings().defaultAnswer(RETURNS_SELF)) { builder, _ ->
+            val config = mock(WifiP2pConfig::class.java).apply { wps = WpsInfo() }
+            `when`(builder.build()).thenReturn(config)
+        }.use {
+            val actions = mutableListOf<WifiP2pManager.ActionListener>()
+            doAnswer { actions += it.getArgument<WifiP2pManager.ActionListener>(2); null }
+                .`when`(h.manager).connect(any(), any(), any())
+            h.broadcastEnabled(false)
+            h.visible = emptyList()
+            h.broadcastEnabled(true)
+            h.broadcastPeers()
+            val net = CarWirelessSetup.P2pNetworkInfo("DIRECT-ec-CarLife", "pass12345", 5745)
+            h.finder.connectByName("CarLife", net)
+            assertEquals(1, actions.size)
+            // Direct join failed: falls back to peer discovery and joins via peer when available.
+            h.visible = listOf(h.car.apply { status = WifiP2pDevice.AVAILABLE })
+            actions.single().onFailure(WifiP2pManager.ERROR)
+            runCurrent()
+            assertEquals(2, actions.size)
+        }
+    }
+
+    @Test
     fun aPinnedCallerMustAnnounceItsNameBeforeSavedMacOrServiceCanConnect() = check { h ->
         h.broadcastEnabled(false)
         val address = "64:FE:15:28:C8:E4"
