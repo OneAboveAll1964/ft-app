@@ -218,6 +218,11 @@ private fun MadeBy() {
         }) {
             Text(stringResource(R.string.made_by, "OneAboveAll1964"), style = MaterialTheme.typography.titleSmall)
         }
+        Text(
+            stringResource(R.string.about_development_help),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (version.isNotBlank() && app.ft.BuildConfig.PLAY) {
             // Google Play builds update only through Play, so the version does not link to other downloads.
             Text("FT $version", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(8.dp))
@@ -277,6 +282,10 @@ private fun PageContent(page: SettingsPage) {
                 TextSetting(stringResource(R.string.car_bt_label), p.carBtName) { p.carBtName = it }
                 TextSetting(stringResource(R.string.car_pin_label), p.carWpsPin) { p.carWpsPin = it }
                 CarJoinTimeoutSetting(p.carJoinTimeoutSeconds) { p.carJoinTimeoutSeconds = it }
+                BoolSetting(stringResource(R.string.car_p2p_auto_role), p.carP2pAutoRole,
+                    detail = stringResource(R.string.car_p2p_auto_role_about)) { p.carP2pAutoRole = it }
+                BoolSetting(stringResource(R.string.car_p2p_phone_group), p.carP2pPhoneGroup,
+                    detail = stringResource(R.string.car_p2p_phone_group_about)) { p.carP2pPhoneGroup = it }
                 BoolSetting(stringResource(R.string.car_swap_keys), p.swapTrackKeys) { p.swapTrackKeys = it }
                 Text(stringResource(R.string.wheel_title), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                 Text(
@@ -302,6 +311,8 @@ private fun PageContent(page: SettingsPage) {
             AaPhoneScreenSetting(p)
             BoolSetting(stringResource(R.string.aa_cluster_navigation), p.aaClusterNavigation,
                 detail = stringResource(R.string.aa_cluster_navigation_body)) { p.aaClusterNavigation = it }
+            BoolSetting(stringResource(R.string.aa_driving_restrictions), p.aaDrivingRestrictions,
+                detail = stringResource(R.string.aa_driving_restrictions_body)) { p.aaDrivingRestrictions = it }
             BoolSetting(stringResource(R.string.aa_show_return_button), p.aaShowReturnButton) {
                 p.aaShowReturnButton = it
                 CarStyles.reload()

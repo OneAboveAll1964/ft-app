@@ -2,7 +2,7 @@ package app.ft.carlife
 
 /** Bounded recovery for an announced car which never appears in peer discovery. */
 internal class WirelessPeerWatch {
-    enum class Action { ASK_NAME, RECONNECT_BLUETOOTH }
+    enum class Action { ASK_NAME, REARM_WIFI, RECONNECT_BLUETOOTH }
 
     private var target: Pair<Long, String>? = null
     private var since = 0L
@@ -24,13 +24,23 @@ internal class WirelessPeerWatch {
             since = now
             attempt = 0
         }
-        if (attempt >= DELAYS.size || now - since < DELAYS[attempt]) return null
+        val (delay, action) = STEPS.getOrNull(attempt) ?: return null
+        if (now - since < delay) return null
         since = now
         attempt++
-        return if (attempt == DELAYS.size) Action.RECONNECT_BLUETOOTH else Action.ASK_NAME
+        return action
     }
 
     private companion object {
-        val DELAYS = longArrayOf(2_000, 5_000, 10_000, 10_000, 10_000)
+        // Give full-band and channel-constrained P2P discovery enough time (~62s total)
+        // before tearing down an active Bluetooth SPP session; premature BT disconnects
+        // can leave some head units (e.g. DesaySV) silent until BT is toggled on the car.
+        val STEPS = listOf(
+            2_000L to Action.ASK_NAME,
+            5_000L to Action.ASK_NAME,
+            10_000L to Action.REARM_WIFI,
+            15_000L to Action.ASK_NAME,
+            30_000L to Action.RECONNECT_BLUETOOTH
+        )
     }
 }

@@ -225,8 +225,13 @@ object DiagSnapshot {
             val caps = runCatching { info.getCapabilitiesForType(type) }.getOrNull()
             val v = caps?.videoCapabilities
             fun rate(w: Int, h: Int) = runCatching { v?.getSupportedFrameRatesFor(w, h)?.upper?.toInt()?.toString() }.getOrNull() ?: "no"
+            fun mode(value: Int) = if (info.isEncoder) runCatching {
+                caps?.encoderCapabilities?.isBitrateModeSupported(value)?.toString()
+            }.getOrNull() ?: "unknown" else "n/a"
+            val alignment = runCatching { "${v?.widthAlignment}x${v?.heightAlignment}" }.getOrDefault("unknown")
             "${if (info.isEncoder) "encoder" else "decoder"} ${info.name} $type hw=${if (Build.VERSION.SDK_INT >= 29) info.isHardwareAccelerated else "?"} " +
                 "w=${v?.supportedWidths} h=${v?.supportedHeights} bitrate=${v?.bitrateRange} fps1920x720=${rate(1920, 720)} fps1920x1080=${rate(1920, 1080)} fps1280x720=${rate(1280, 720)} " +
+                "alignment=$alignment CBR=${mode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)} VBR=${mode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)} CQ=${mode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CQ)} " +
                 "profiles=${caps?.profileLevels?.joinToString(",") { "${it.profile}/${it.level}" }} surface=${caps?.colorFormats?.contains(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)}"
         }
     }.getOrElse { listOf("codecs: error ${it.message}") }

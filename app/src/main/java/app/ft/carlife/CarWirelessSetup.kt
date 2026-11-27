@@ -15,9 +15,24 @@ class CarWirelessSetup(
     private val now: () -> Long = { System.nanoTime() / 1_000_000 },
     private val onIpRequestWithoutAddress: () -> Unit = {}
 ) {
+    data class P2pNetworkInfo(val ssid: String, val passphrase: String, val freqMhz: Int? = null) {
+        companion object {
+            fun parse(raw: String?): P2pNetworkInfo? {
+                val parts = raw?.split(',') ?: return null
+                val ssid = parts.getOrNull(0)?.trim().orEmpty()
+                val pass = parts.getOrNull(1)?.trim().orEmpty()
+                if (!ssid.startsWith("DIRECT-") || ssid.length < 9 || pass.length !in 8..63) return null
+                val freq = parts.getOrNull(2)?.trim()?.toIntOrNull()?.takeIf { it in 2400..5900 }
+                return P2pNetworkInfo(ssid, pass, freq)
+            }
+        }
+    }
+
     private val tag = "CarBT"
     private val buffer = ArrayList<Byte>(1024)
     @Volatile var carWifiName: String? = null
+        private set
+    @Volatile var carWifiNetwork: P2pNetworkInfo? = null
         private set
     private var ipWanted = false
     private var ipSent = false
@@ -36,6 +51,7 @@ class CarWirelessSetup(
         nameReply = CompletableDeferred()
         buffer.clear()
         carWifiName = null
+        carWifiNetwork = null
         ipWanted = false
         waitingForAddress = false
         ipSent = false
@@ -78,6 +94,7 @@ class CarWirelessSetup(
     @Synchronized
     fun askName(): Boolean {
         carWifiName = null
+        carWifiNetwork = null
         val ok = send(CarLifeFraming.cmd(MD_TARGET_INFO_REQUEST))
         if (ok) progress("Asking the car for its WiFi Direct name again")
         return ok
@@ -140,12 +157,15 @@ class CarWirelessSetup(
                 }
                 val r = ProtoReader(body)
                 val name = r.string(1).orEmpty().trim()
-                DiagLog.i(tag, "car WiFi Direct: name '$name', info '${r.string(2).orEmpty()}', network '${r.string(4).orEmpty()}'")
+                val rawNet = r.string(4).orEmpty()
+                val net = P2pNetworkInfo.parse(rawNet)
+                DiagLog.i(tag, "car WiFi Direct: name '$name', info '${r.string(2).orEmpty()}', network '${if (net != null) "<ssid len=${net.ssid.length}, freq=${net.freqMhz ?: "auto"}>" else rawNet}'")
                 if (name.isBlank()) {
                     DiagLog.w(tag, "the car sent no WiFi Direct name")
                     return
                 }
                 carWifiName = name
+                carWifiNetwork = net
                 progress("The car is on WiFi Direct as '$name'")
                 val reply = nameReply
                 onCarWifiName(name)

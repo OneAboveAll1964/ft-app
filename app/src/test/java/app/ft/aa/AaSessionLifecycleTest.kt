@@ -66,4 +66,46 @@ class AaSessionLifecycleTest {
             executor.shutdownNow()
         }
     }
+
+    @Test fun failingInterruptStillReleasesMediaExactlyOnce() {
+        val events = mutableListOf<String>()
+        val lifecycle = AaSessionLifecycle(
+            { events += "interrupt"; throw IllegalStateException("I/O close failed") },
+            { events += "cleanup:$it" }
+        )
+        assertTrue(lifecycle.start())
+        try {
+            lifecycle.close("socket failed")
+            fail("expected failing interrupt hook")
+        } catch (e: IllegalStateException) {
+            assertEquals("I/O close failed", e.message)
+        }
+        assertEquals(listOf("interrupt", "cleanup:socket failed"), events)
+        assertFalse(lifecycle.running)
+        lifecycle.close("late EOF")
+        lifecycle.dispatch { fail("stale dispatch after failed close") }
+        assertEquals(2, events.size)
+    }
+
+    @Test fun failingInterruptInsideDispatchStillDefersCleanupUntilHandlerExit() {
+        val events = mutableListOf<String>()
+        val lifecycle = AaSessionLifecycle(
+            { events += "interrupt"; throw IllegalStateException("interrupted") },
+            { events += "cleanup:$it" }
+        )
+        assertTrue(lifecycle.start())
+        try {
+            lifecycle.dispatch {
+                events += "begin"
+                lifecycle.close("inner error")
+                events += "unreachable"
+            }
+            fail("expected close hook exception")
+        } catch (e: IllegalStateException) {
+            assertEquals("interrupted", e.message)
+        }
+        assertEquals(listOf("begin", "interrupt", "cleanup:inner error"), events)
+        lifecycle.dispatch { fail("dispatched after cleanup") }
+        assertFalse(lifecycle.running)
+    }
 }

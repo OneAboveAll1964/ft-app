@@ -231,4 +231,86 @@ class WifiChannelLinkTest {
             scope.cancel()
         }
     }
+
+    @Test fun closingReadLoopRetiresWriterBeforeAdmissionRuns() = runBlocking {
+        val port = ServerSocket(0).use { it.localPort }
+        val bound = LinkedBlockingQueue<Int>()
+        val connected = LinkedBlockingQueue<Boolean>()
+        val closed = LinkedBlockingQueue<String>()
+        val blockAdmission = CountDownLatch(1)
+        val admission = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(mapOf(CarLifeProtocol.CH_CMD to port),
+            onBound = { bound.put(it) }, admissionDispatcher = admission)
+        var client: Socket? = null
+        try {
+            link.start(scope, { _, _, _ -> }, {}, {
+                connected.put(true)
+            }, { closed.put(it) })
+            assertNotNull(bound.poll(5, TimeUnit.SECONDS))
+            client = Socket("127.0.0.1", port)
+            assertEquals(true, connected.poll(5, TimeUnit.SECONDS))
+            assertTrue(link.send(CarLifeProtocol.CH_CMD, byteArrayOf(1)))
+            // Block admission so readLoop's withContext(admissionDispatcher) cannot run yet.
+            scope.launch(admission) { blockAdmission.await(5, TimeUnit.SECONDS) }
+            client.close()
+            withTimeout(5_000) {
+                while (link.send(CarLifeProtocol.CH_CMD, byteArrayOf(2))) delay(10)
+            }
+            blockAdmission.countDown()
+            assertEquals("head unit disconnected", closed.poll(5, TimeUnit.SECONDS))
+        } finally {
+            blockAdmission.countDown()
+            link.stop()
+            client?.close()
+            scope.cancel()
+            admission.close()
+        }
+    }
+
+    @Test fun commandEofClearsAuxiliaryLanesAndAllowsReconnectWithoutRestart() {
+        val cmd = CarLifeProtocol.CH_CMD
+        val media = CarLifeProtocol.CH_MEDIA
+        val reservations = listOf(ServerSocket(0), ServerSocket(0))
+        val ports = mapOf(cmd to reservations[0].localPort, media to reservations[1].localPort)
+        reservations.forEach { it.close() }
+        val bound = LinkedBlockingQueue<Int>()
+        val events = LinkedBlockingQueue<String>()
+        val closed = LinkedBlockingQueue<String>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val link = WifiChannelLink(ports, onBound = { bound.put(it) })
+        val clients = mutableListOf<Socket>()
+        fun connect(channel: Int): Socket = Socket("127.0.0.1", ports.getValue(channel)).also {
+            clients += it
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            var accepted = false
+            while (!accepted && System.nanoTime() < deadline) {
+                accepted = events.poll(100, TimeUnit.MILLISECONDS)
+                    ?.contains("${CarLifeProtocol.channelName(channel)} connected from") == true
+            }
+            assertTrue("channel accepted after session transition", accepted)
+        }
+        try {
+            link.start(scope, { _, _, _ -> }, { events.put(it) }, {}, { closed.put(it) })
+            repeat(2) { assertNotNull(bound.poll(5, TimeUnit.SECONDS)) }
+            val firstCommand = connect(cmd)
+            connect(media)
+            assertTrue(link.connected)
+            assertTrue(link.isOpen)
+            firstCommand.close()
+            assertEquals("head unit disconnected", closed.poll(5, TimeUnit.SECONDS))
+            assertFalse("CMD must be removed", link.connected)
+            assertFalse("media lane must not survive CMD EOF", link.isOpen)
+            assertFalse(link.send(media, byteArrayOf(9)))
+            val secondCommand = connect(cmd)
+            assertTrue(link.connected)
+            assertTrue(link.send(cmd, byteArrayOf(42)))
+            secondCommand.soTimeout = 5000
+            assertEquals(42, secondCommand.getInputStream().read())
+        } finally {
+            link.stop()
+            clients.forEach { runCatching { it.close() } }
+            scope.cancel()
+        }
+    }
 }

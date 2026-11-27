@@ -13,6 +13,7 @@
     <string name="iccoa_inspecting">Проверка служб устройства — до 15 секунд</string>
     <string name="iccoa_inspect_complete">Службы устройства проверены</string>
     <string name="iccoa_bluetooth_off">Включите Bluetooth и нажмите «Повторить поиск»</string>
+    <string name="iccoa_wifi_enabling">Дождитесь включения Wi-Fi и повторите подключение</string>
     <string name="iccoa_permission">Разрешите FT доступ к устройствам поблизости и точному местоположению, затем нажмите «Повторить поиск».</string>
     <string name="iccoa_location_off">Включите геолокацию и нажмите «Повторить поиск»</string>
     <string name="iccoa_failed">Не удалось проверить подключение — отправьте отчёт разработчику</string>

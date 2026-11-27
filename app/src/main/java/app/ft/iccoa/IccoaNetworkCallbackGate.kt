@@ -24,6 +24,9 @@ internal class IccoaNetworkCallbackGate<T : Any> {
         return true
     }
 
+    @Synchronized fun <R> createIfCurrent(network: T, create: () -> R): R? =
+        if (selected == network) create() else null
+
     @Synchronized fun onLost(network: T): Boolean {
         if (selected != network) return false
         selected = null

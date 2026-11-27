@@ -28,8 +28,11 @@ internal class AaSessionLifecycle(
     }
 
     fun close(why: String) {
-        if (reason.compareAndSet(null, why)) interrupt()
-        if (!Thread.holdsLock(gate)) synchronized(gate) { finishLocked() }
+        try {
+            if (reason.compareAndSet(null, why)) interrupt()
+        } finally {
+            if (!Thread.holdsLock(gate)) synchronized(gate) { finishLocked() }
+        }
     }
 
     private fun finishLocked() {

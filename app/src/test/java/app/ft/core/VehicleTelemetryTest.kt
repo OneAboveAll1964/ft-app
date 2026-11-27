@@ -23,11 +23,29 @@ class VehicleTelemetryTest {
             assertEquals(120f, result.headingDegrees!!, 0f)
             assertEquals(stalePosition, result.positionAtMs)
             assertEquals(6L, result.gearSpeedRaw)
+            assertEquals(VehicleSpeedSample(6L, result.receivedAtMs), result.drivingSpeed)
             assertEquals(2L, result.gearRaw)
             assertTrue(result.fresh())
             assertFalse(result.positionFresh())
         } finally {
             VehicleTelemetry.clear("ICCOA")
+        }
+    }
+
+    @Test fun baiduGpsUpdateRetainsSeparateSpeedWithItsOriginalTimestamp() {
+        try {
+            VehicleTelemetry.updateBaiduSpeed(12)
+            val speed = VehicleTelemetry.current.value!!.drivingSpeed!!
+            val positionAt = speed.receivedAtMs + 2_000L
+            VehicleTelemetry.publish(VehicleLocation(source = "BAIDU", receivedAtMs = positionAt, speedRaw = 98))
+
+            val result = VehicleTelemetry.current.value!!
+            assertEquals(speed, result.drivingSpeed)
+            assertEquals(98L, result.speedRaw)
+            assertFalse(result.drivingSpeed!!.fresh(speed.receivedAtMs + 3_001L))
+            assertTrue(result.positionFresh(speed.receivedAtMs + 3_001L))
+        } finally {
+            VehicleTelemetry.clear("BAIDU")
         }
     }
 }

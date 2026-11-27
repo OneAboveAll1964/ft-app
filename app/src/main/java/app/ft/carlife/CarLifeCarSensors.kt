@@ -3,6 +3,7 @@ package app.ft.carlife
 import app.ft.core.ProtoReader
 import app.ft.core.VehicleLocation
 import app.ft.core.VehicleTelemetry
+import app.ft.core.readVarintPair
 
 /** Original Baidu CarlifeCarGpsProto / CarlifeCarSpeedProto field layout.
  * CarLife's coordinates are int32, not ICCOA's double. Their multiplier and
@@ -39,11 +40,9 @@ internal object CarLifeCarSensors {
 
     fun onSpeed(payload: ByteArray): Boolean {
         if (payload.isEmpty() || payload.size > 64) return false
-        val fields = ProtoReader(payload)
-        if (!fields.has(1)) return false
-        val speed = fields.int(1).toLong()
-        if (speed !in 0..100_000L) return false
-        VehicleTelemetry.updateBaiduSpeed(speed, fields.long(2).takeIf { it > 0L })
+        val (speed, timestamp) = readVarintPair(payload) ?: return false
+        if (speed == null || speed !in 0L..100_000L) return false
+        VehicleTelemetry.updateBaiduSpeed(speed, timestamp?.takeIf { it > 0L })
         return true
     }
 }

@@ -21,6 +21,7 @@
     <string name="about_privacy">Privacy policy</string>
     <string name="about_source">Source code</string>
     <string name="about_license">Licence: Apache 2.0</string>
+    <string name="about_development_help">Development assistance — @mykolaq</string>
     <string name="about_data">FT has no account, no ads and no analytics. Your settings, logs and car profiles stay on your phone. The weather widget sends a rounded location to Open-Meteo to get the forecast. A diagnostic report leaves your phone only when you share it yourself.</string>
     <string name="about_permissions_title">Permissions and why FT asks for them</string>
     <string name="about_review_permissions">Review permissions</string>

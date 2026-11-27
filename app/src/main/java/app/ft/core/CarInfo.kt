@@ -159,7 +159,7 @@ object CarInfo {
     }
 
     private suspend fun refreshWeather(context: Context) {
-        val point = point(context) ?: return
+        val point = lastKnownPosition(context) ?: return
         val fetched = withContext(Dispatchers.IO) { fetchWeather(point.first, point.second) } ?: return
         val prefs = FTApp.instance.prefs
         prefs.weatherCelsius = fetched.celsius.toFloat()
@@ -168,7 +168,7 @@ object CarInfo {
         _weather.value = fetched
     }
 
-    private fun point(context: Context): Pair<Double, Double>? {
+    internal fun lastKnownPosition(context: Context): Pair<Double, Double>? {
         val prefs = FTApp.instance.prefs
         if (!needsLocation(context)) {
             val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager

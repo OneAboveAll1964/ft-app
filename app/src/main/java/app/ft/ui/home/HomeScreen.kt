@@ -1,5 +1,9 @@
 package app.ft.ui.home
 
+import android.content.ComponentName
+import android.content.Intent
+import app.ft.aa.AaSwitch
+import app.ft.core.DuplicateAppHelper
 import app.ft.ui.play.AccessibilityUse
 import app.ft.ui.play.rememberAccessibilityConsent
 import app.ft.core.LocalModernPhoneUi
@@ -100,6 +104,9 @@ import app.ft.core.CarProtocol
 import app.ft.iccoa.IccoaService
 import app.ft.projection.CarTouchCalibration
 import app.ft.projection.CarControls
+import app.ft.media.CarPlayer
+import app.ft.core.CarAssistantPanel
+import app.ft.ui.car.CarStyles
 import app.ft.ui.components.rememberCarProtocol
 import app.ft.ui.components.CarProtocolSetting
 import app.ft.ui.components.BluetoothCallsSetting
@@ -115,6 +122,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val modern = LocalModernPhoneUi.current
     val context = LocalContext.current
     val app = FTApp.instance
+    val prefs = app.prefs
     val profiles by app.cars.state.collectAsState()
     val activeCar = profiles.profiles.firstOrNull { it.id == profiles.activeId }
     val iccoa = rememberCarProtocol() == CarProtocol.ICCOA
@@ -127,16 +135,19 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     val disconnectHelp by AaHeadUnitService.disconnectHelpPending.collectAsState()
     var systemHelp by rememberSaveable { mutableStateOf(false) }
     if (systemHelp) SystemReportHelp(onDismiss = { systemHelp = false })
-    var autoConnect by remember { mutableStateOf(app.prefs.autoConnect) }
-    DisposableEffect(app.prefs) {
+    var autoConnect by remember(prefs) { mutableStateOf(prefs.autoConnect) }
+    var aaAuto by remember(prefs) { mutableStateOf(prefs.aaAutoStart) }
+    var aaOnly by remember(prefs) { mutableStateOf(prefs.aaOnly) }
+    DisposableEffect(prefs) {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == null || key == "autoConnect") autoConnect = app.prefs.autoConnect
+            if (key == null || key == "autoConnect") autoConnect = prefs.autoConnect
+            if (key == null || key == "aaAutoStart") aaAuto = prefs.aaAutoStart
+            if (key == null || key == "aaOnly") aaOnly = prefs.aaOnly
         }
-        app.prefs.registerListener(listener)
-        onDispose { app.prefs.unregisterListener(listener) }
+        prefs.registerListener(listener)
+        onDispose { prefs.unregisterListener(listener) }
     }
     var linkMode by remember { mutableIntStateOf(app.prefs.linkMode) }
-    var aaAuto by remember { mutableStateOf(app.prefs.aaAutoStart) }
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         resumed++
@@ -145,9 +156,23 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
     LaunchedEffect(Unit) { RootPrep.revision.collect { resumed++ } }
     val radios = rememberRadios(context, resumed)
     val touchOn = remember(resumed) { FTTouchService.enabled }
-    val openTouchSettings = rememberAccessibilityConsent(AccessibilityUse.TOUCH, onOpenAccessibility)
+    val openTouchSettings = rememberAccessibilityConsent(AccessibilityUse.TOUCH) {
+        val component = ComponentName(context, FTTouchService::class.java)
+        val detail = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, component.flattenToString())
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (runCatching { context.startActivity(detail) }.isFailure) onOpenAccessibility()
+    }
+    val starterOn = remember(resumed) { AaSwitch.isStarterServiceEnabled(context) }
+    val rootGranted = rememberRootGranted()
+    val needsStarter = !rootGranted
+    val openStarterSettings = rememberAccessibilityConsent(AccessibilityUse.AA_STARTER) {
+        AaSwitch.openAccessibilitySettings(context)
+    }
+    val conflictingPackage = remember(resumed) { DuplicateAppHelper.findConflictingPackage(context) }
     val overlayOn = remember(resumed) { Settings.canDrawOverlays(context) }
     val backgroundOn = remember(resumed) { (context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)?.isIgnoringBatteryOptimizations(context.packageName) != false }
+    val hasMissingPermissions = !touchOn || (needsStarter && !starterOn) || !overlayOn || !backgroundOn
     val aaOwnCopy = remember(resumed) { AaInstaller.weInstalledIt(context) }
     val aaInstalled = remember(resumed) { AaInstaller.installed(context) }
 
@@ -221,6 +246,29 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
             }
         }
 
+        if (conflictingPackage != null) item {
+            DuplicateAppCard(conflictingPackage) {
+                DuplicateAppHelper.requestUninstall(context, conflictingPackage)
+            }
+        }
+
+        if (hasMissingPermissions) item {
+            Section(stringResource(R.string.home_finish_setup)) {
+                Text(
+                    stringResource(R.string.home_finish_setup_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                if (needsStarter) {
+                    Check(stringResource(R.string.check_starter), starterOn, openStarterSettings)
+                }
+                Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
+                Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
+                Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
+            }
+        }
+
         if (on && aaPreparation != null) item {
             Text(stringResource(aaPreparation.message), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
@@ -268,7 +316,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                 CarProtocolSetting()
                 if (iccoa) {
                     Spacer(Modifier.height(12.dp))
-                    IccoaConnectionControls(iccoaState, checkNotNull(iccoaActions))
+                    IccoaConnectionControls(iccoaState, checkNotNull(iccoaActions), wifiEnabled = radios.wifi)
                 } else {
                     key(LocalLayoutDirection.current) {
                         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -279,6 +327,11 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                                     shape = SegmentedButtonDefaults.itemShape(i, 3)
                                 ) { FitText(label) }
                             }
+                        }
+                    }
+                    if (direct && !radios.wifi && !connected) {
+                        Notice(stringResource(R.string.connection_wifi_off), stringResource(R.string.connection_wifi_settings)) {
+                            Fixes.open(context, Fixes.wifi())
                         }
                     }
                     Spacer(Modifier.height(16.dp))
@@ -338,19 +391,7 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                     Text(stringResource(if (iccoaShowAll) R.string.iccoa_msg_carlink_only else R.string.iccoa_msg_show_all))
                 }
             }
-            iccoaDevices(iccoaState, showAll = iccoaShowAll)
-        }
-
-        if (!modern && (!touchOn || !overlayOn || !backgroundOn)) {
-            item {
-                Section(stringResource(R.string.home_finish_setup)) {
-                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
-                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
-                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
-                }
-            }
+            iccoaDevices(iccoaState, showAll = iccoaShowAll, wifiEnabled = radios.wifi)
         }
 
         item {
@@ -368,10 +409,26 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                         AaStart(rememberAaServerOn(), aaOwnCopy)
                         Spacer(Modifier.height(8.dp))
                     }
-                    SwitchRow(stringResource(R.string.home_aa_start_with_car), aaAuto) {
-                        aaAuto = it
-                        app.prefs.aaAutoStart = it
+                    SwitchRow(stringResource(R.string.home_aa_start_with_car), aaOnly || aaAuto, enabled = !aaOnly) {
+                        prefs.aaAutoStart = it
                     }
+                }
+                SwitchRow(
+                    title = stringResource(R.string.home_aa_only),
+                    checked = aaOnly,
+                    description = stringResource(R.string.home_aa_only_description)
+                ) { enabled ->
+                    prefs.aaOnly = enabled
+                    if (enabled) {
+                        CarPlayer.stop()
+                        CarAssistantPanel.state.value?.let(CarAssistantPanel::dismiss)
+                        if (screenState.waitingForShare && !screenState.shareForSound) CarControls.cancelShareWait()
+                        if (screenState.mirroring) CarControls.stopMirror()
+                        if (projecting && !screenState.aaOverlay) CarControls.startAa()
+                    }
+                    CarStyles.reload()
+                }
+                if (aaInstalled) {
                     FilledTonalButton(
                         onClick = { CarControls.startAa() },
                         enabled = projecting,
@@ -386,18 +443,6 @@ fun HomeScreen(pad: PaddingValues, onOpenAccessibility: () -> Unit, onOpenOverla
                             textAlign = TextAlign.Center
                         )
                     }
-                }
-            }
-        }
-
-        if (modern && (!touchOn || !overlayOn || !backgroundOn)) {
-            item {
-                Section(stringResource(R.string.home_finish_setup)) {
-                    Text(stringResource(R.string.home_finish_setup_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(4.dp))
-                    Check(stringResource(R.string.check_touch), touchOn, openTouchSettings)
-                    Check(stringResource(R.string.check_overlay), overlayOn, onOpenOverlay)
-                    Check(stringResource(R.string.check_background), backgroundOn) { Fixes.open(context, Fixes.background(context)) }
                 }
             }
         }
@@ -446,7 +491,7 @@ private fun directSteps(
         else -> StepItem(stringResource(R.string.step_bluetooth_on), radios.bluetooth, action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.bluetooth(context)) })
     }
     val wifi = when {
-        !radios.wifi -> StepItem(stringResource(R.string.step_wifi_on), false, action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.wifi()) })
+        !radios.wifi -> StepItem(stringResource(R.string.step_wifi_on), false)
         !radios.wifiAllowed -> StepItem(stringResource(R.string.step_wifi_on), false, hint = stringResource(R.string.step_allow_nearby), action = stringResource(R.string.action_allow), onAction = { Fixes.open(context, Fixes.appSettings(context)) })
         !radios.location -> StepItem(stringResource(R.string.step_wifi_on), false, hint = stringResource(R.string.step_wifi_needs_location), action = stringResource(R.string.action_turn_on), onAction = { Fixes.open(context, Fixes.location()) })
         else -> StepItem(stringResource(R.string.step_wifi_on), true)
@@ -552,11 +597,27 @@ private fun Check(title: String, granted: Boolean, onGrant: () -> Unit) {
 }
 
 @Composable
-private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
+private fun SwitchRow(
+    title: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    description: String? = null,
+    onChange: (Boolean) -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        }
+        if (description != null) {
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
     }
 }
 
@@ -609,6 +670,44 @@ private fun ClassicSection(title: String, content: @Composable ColumnScope.() ->
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
             content()
+        }
+    }
+}
+
+@Composable
+private fun DuplicateAppCard(packageName: String, onUninstall: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = scheme.errorContainer, contentColor = scheme.onErrorContainer),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Warning, contentDescription = null, tint = scheme.error, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.duplicate_app_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onErrorContainer
+                )
+            }
+            Text(
+                stringResource(R.string.duplicate_app_body, packageName),
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onErrorContainer
+            )
+            FilledTonalButton(
+                onClick = onUninstall,
+                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                    containerColor = scheme.error,
+                    contentColor = scheme.onError
+                ),
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text(stringResource(R.string.duplicate_app_uninstall))
+            }
         }
     }
 }

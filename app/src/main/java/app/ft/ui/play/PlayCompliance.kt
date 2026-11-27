@@ -142,6 +142,11 @@ fun AboutSettings() {
     FilledTonalButton(onClick = { open(PlayLinks.PRIVACY) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.about_privacy)) }
     OutlinedButton(onClick = { open(PlayLinks.SOURCE) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.about_source)) }
     OutlinedButton(onClick = { open(PlayLinks.LICENSE) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.about_license)) }
+    Text(
+        stringResource(R.string.about_development_help),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
     Text(stringResource(R.string.about_permissions_title), style = MaterialTheme.typography.labelLarge)
     allExplained.forEach { (title, why) -> Reason(title, why) }

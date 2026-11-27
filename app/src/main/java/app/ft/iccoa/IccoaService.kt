@@ -33,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import app.ft.core.CarProtocol
 import app.ft.core.DiagLog
+import app.ft.core.Lang
 import app.ft.core.ProtoWriter
 import app.ft.core.VehicleTelemetry
 import app.ft.core.VehicleLocation
@@ -188,7 +189,7 @@ class IccoaService : Service() {
         }
     }
     private val connectionTimeout = Runnable {
-        if (_state.value.connecting) connectionFailed(getString(app.ft.R.string.iccoa_msg_timeout))
+        if (_state.value.connecting) connectionFailed(Lang.str(R.string.iccoa_msg_timeout))
     }
 
     private var bluetoothCalls: app.ft.core.BluetoothCalls? = null
@@ -437,7 +438,7 @@ class IccoaService : Service() {
                         onPlay = { config -> current { play(config) } },
                         onPause = { current { pauseProjection() } },
                         onKeyframe = { current { projection?.requestKeyFrame() } },
-                        onTouch = { touch -> current { projection?.touch(touch) } },
+                        onTouch = { touch, config -> current { projection?.touch(touch, config) } },
                         onKey = { code -> current { projection?.key(code) } },
                         onClosed = { reason, cause -> current {
                             connectionFailed(reason, retryableTransportFailure = cause == IccoaCloseReason.TRANSPORT_FAILURE)
@@ -493,8 +494,9 @@ class IccoaService : Service() {
         lastVideoConfig = config
         val plan = IccoaVideoPlan.from(config)
         val output = media ?: return
-        DiagLog.i("ICCOA", "video profile ${plan.streamWidth}x${plan.streamHeight}@${plan.fps} CBR ${plan.bitrate / 1000} kbps; receiver asked ${config.fps} fps")
-        projection?.start(plan, output::configure, output::frame)
+        val projection = projection ?: return
+        DiagLog.i("ICCOA", "video profile ${plan.streamWidth}x${plan.streamHeight}@${plan.fps} ${plan.bitrate / 1000} kbps; CBR preferred, VBR fallback allowed; receiver asked ${config.fps} fps")
+        projection.start(plan, output::configure, output::frame)
         if (media !== output) return // A synchronous projection failure has already ended this connection.
         if (!ftProjectionSensorAssist) {
             ftProjectionSensorAssist = true
@@ -516,8 +518,9 @@ class IccoaService : Service() {
         }
         cancelRecoveryScan()
         dropRecovery.onConnected()
+        val screen = projection.state.value
         _state.update { it.copy(connecting = false, connected = true, pinRequired = false,
-            status = getString(app.ft.R.string.iccoa_msg_linked, plan.streamWidth, plan.streamHeight, plan.fps)) }
+            status = Lang.str(R.string.iccoa_msg_linked, screen.width, screen.height, screen.fps)) }
     }
 
     /** Reference 7.62 phone state: no experimental call-state field is advertised. */
@@ -578,11 +581,11 @@ class IccoaService : Service() {
         if (number != null) {
             // A new scan is mandatory: Toyota can rotate its BLE address.
             autoConnectAttempted = false
-            _state.update { it.copy(status = getString(R.string.iccoa_msg_reconnecting, reason, number, IccoaDropRecovery.MAX_ATTEMPTS)) }
+            _state.update { it.copy(status = Lang.str(R.string.iccoa_msg_reconnecting, reason, number, IccoaDropRecovery.MAX_ATTEMPTS)) }
             scheduleRecoveryScan(number)
         } else {
             autoConnectAttempted = true
-            _state.update { it.copy(status = getString(R.string.iccoa_msg_retries_stopped, reason)) }
+            _state.update { it.copy(status = Lang.str(R.string.iccoa_msg_retries_stopped, reason)) }
             // A manual receiver selection is still possible after any failure.
             if (_state.value.running) discovery?.start()
         }
@@ -628,7 +631,7 @@ class IccoaService : Service() {
         val launch = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val note = NotificationCompat.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_tile_ft)
-            .setContentTitle(getString(R.string.iccoa_msg_notification_title)).setContentText(getString(R.string.iccoa_msg_notification_text))
+            .setContentTitle(Lang.str(R.string.iccoa_msg_notification_title)).setContentText(Lang.str(R.string.iccoa_msg_notification_text))
             .setContentIntent(launch).setOngoing(true).build()
         val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
             (if (withProjection) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)

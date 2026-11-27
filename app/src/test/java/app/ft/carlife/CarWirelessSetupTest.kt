@@ -395,4 +395,20 @@ class CarWirelessSetupTest {
         w.feed(target("DIRECT-zz-CAR"))
         assertEquals(listOf("DIRECT-zz-CAR"), names)
     }
+
+    @Test
+    fun parsesDirectP2pNetworkInfoFromTargetInfoAndClearsOnReset() {
+        var seen: CarWirelessSetup.P2pNetworkInfo? = null
+        lateinit var w: CarWirelessSetup
+        w = CarWirelessSetup(send = { sent.add(it) }, onCarWifiName = { seen = w.carWifiNetwork })
+        w.feed(frame(CarWirelessSetup.HU_TARGET_INFO, ProtoWriter()
+            .string(1, "Android_2e61")
+            .string(4, "DIRECT-ec-Android_2e61,pass12345,5745")
+            .toByteArray()))
+        assertEquals(CarWirelessSetup.P2pNetworkInfo("DIRECT-ec-Android_2e61", "pass12345", 5745), seen)
+        assertNull(CarWirelessSetup.P2pNetworkInfo.parse("invalid,short"))
+        assertNull(CarWirelessSetup.P2pNetworkInfo.parse("NOT_DIRECT-ab,pass12345"))
+        w.reset()
+        assertNull(w.carWifiNetwork)
+    }
 }

@@ -22,12 +22,12 @@ object Helper {
     private val pkg: String get() = app.ft.BuildConfig.APPLICATION_ID
 
     // The helper looks for app.ft unless told otherwise; only the Play build has another package.
-    private val pkgArg: String get() = if (app.ft.BuildConfig.PLAY) " pkg=$pkg" else ""
+    internal val pkgArg: String get() = if (app.ft.BuildConfig.PLAY) " pkg=$pkg" else ""
 
     fun run(apk: String, token: String): String =
         "CLASSPATH=$apk app_process / $MAIN token=$token$pkgArg"
 
-    private fun viaEnv(apk: String, token: String): String =
+    internal fun viaEnv(apk: String, token: String): String =
         "env CLASSPATH=$apk app_process / $MAIN token=$token$pkgArg"
 
     fun computerCommand(context: Context, token: String): String {

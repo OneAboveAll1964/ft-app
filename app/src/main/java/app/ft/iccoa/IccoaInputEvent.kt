@@ -29,4 +29,13 @@ internal object IccoaInputEvent {
             if (count > 1) coordinate("x1", width, video.width) ?: return null else -1,
             if (count > 1) coordinate("y1", height, video.height) ?: return null else -1, index)
     }
+
+    fun toStream(touch: CarTouch, video: IccoaVideoConfig, width: Int, height: Int): CarTouch {
+        fun scale(value: Int, source: Int, target: Int) =
+            if (value < 0) -1 else (value.toLong() * target / source).toInt()
+        return touch.copy(
+            x = scale(touch.x, video.width, width), y = scale(touch.y, video.height, height),
+            x2 = scale(touch.x2, video.width, width), y2 = scale(touch.y2, video.height, height)
+        )
+    }
 }

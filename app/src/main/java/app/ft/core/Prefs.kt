@@ -9,7 +9,7 @@ import app.ft.projection.VideoProfile
 /** A preference handle stays bound to its vehicle, even after the selected vehicle changes. */
 class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(context)) {
     val profileId: String = vehicleProfileId.also { require(CarProfiles.isProfileId(it)) }
-    private val global: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
+    internal val global: SharedPreferences = context.getSharedPreferences("ft", Context.MODE_PRIVATE)
     private val sp: SharedPreferences = if (profileId == LEGACY_ID) global else
         context.getSharedPreferences(profileStoreName(profileId), Context.MODE_PRIVATE)
 
@@ -38,15 +38,32 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     }
     fun put(key: String, value: Any?) {
         val e = storeFor(key).edit()
-        when (value) {
-            is Boolean -> e.putBoolean(key, value)
-            is Int -> e.putInt(key, value)
-            is Long -> e.putLong(key, value)
-            is Float -> e.putFloat(key, value)
-            is String -> e.putString(key, value)
-            null -> e.remove(key)
-        }
+        e.putValue(key, value)
         e.apply()
+    }
+
+    internal fun restoreBackup(values: Map<String, Any>) = synchronized(videoProfileLock) {
+        values.entries.groupBy { storeFor(it.key) }.forEach { (store, entries) ->
+            val previous = store.all
+            val editor = store.edit()
+            val changed = entries.filter { (key, value) -> previous[key] != value }
+            changed.forEach { (key, value) -> editor.putValue(key, value) }
+            if (changed.any { (key) -> key in VIDEO_PROFILE_INPUTS }) {
+                editor.remove("savedVideoProfile").putInt("videoProfileGeneration", videoProfileGeneration + 1)
+            }
+            editor.apply()
+        }
+    }
+
+    private fun SharedPreferences.Editor.putValue(key: String, value: Any?) {
+        when (value) {
+            is Boolean -> putBoolean(key, value)
+            is Int -> putInt(key, value)
+            is Long -> putLong(key, value)
+            is Float -> putFloat(key, value)
+            is String -> putString(key, value)
+            null -> remove(key)
+        }
     }
 
     var cmdPort: Int get() = int("cmdPort", 7240); set(v) = set("cmdPort", v)
@@ -83,6 +100,7 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var aaPhoneScreenOff: Boolean get() = bool("aaPhoneScreenOff", true); set(v) = set("aaPhoneScreenOff", v)
     var aaControlsLeft: Boolean get() = bool("aaControlsLeft", true); set(v) = set("aaControlsLeft", v)
     var aaClusterNavigation: Boolean get() = bool("aaClusterNavigation", true); set(v) = set("aaClusterNavigation", v)
+    var aaDrivingRestrictions: Boolean get() = bool(AA_DRIVING_RESTRICTIONS, false); set(v) = set(AA_DRIVING_RESTRICTIONS, v)
     var aaMatchCar: Boolean get() = bool("aaMatchCar", true); set(v) = set("aaMatchCar", v)
 
     var videoSize: Int get() = int("pictureSize", VideoPlans.SIZE_CAR); set(v) = setVideo("pictureSize", v)
@@ -127,6 +145,8 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var aaPackage: String get() = str("aaPackage", "com.google.android.projection.gearhead"); set(v) = set("aaPackage", v)
     var aaServerPackage: String get() = str("aaServerPackage", ""); set(v) = set("aaServerPackage", v)
     var aaAutoStart: Boolean get() = bool("aaAutoStart", false); set(v) = set("aaAutoStart", v)
+    var aaOnly: Boolean get() = bool("aaOnly", false); set(v) = set("aaOnly", v)
+    val shouldAutoStartAa: Boolean get() = aaOnly || aaAutoStart
     var aaPrepareBeforeConnect: Boolean get() = bool("aaPrepareBeforeConnect", false); set(v) = set("aaPrepareBeforeConnect", v)
     var aaShowReturnButton: Boolean get() = bool("aaShowReturnButton", true); set(v) = set("aaShowReturnButton", v)
     var aaCorner: Int get() = int("aaCorner", 0); set(v) = set("aaCorner", v)
@@ -181,6 +201,8 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var swapTrackKeys: Boolean get() = bool("swapTrackKeys", false); set(v) = set("swapTrackKeys", v)
     var guidanceMode: Int get() = int("directions", CarAudioBus.GUIDANCE_UNTOUCHED); set(v) = set("directions", v)
     var linkMode: Int get() = int("linkMode", 0); set(v) = set("linkMode", v)
+    var carP2pAutoRole: Boolean get() = bool("carP2pAutoRole", false); set(v) = set("carP2pAutoRole", v)
+    var carP2pPhoneGroup: Boolean get() = bool("carP2pPhoneGroup", false); set(v) = set("carP2pPhoneGroup", v)
     var carWpsPin: String get() = str("carWpsPin", ""); set(v) = set("carWpsPin", v)
     var carJoinTimeoutSeconds: Int
         get() = JoinWatch.timeoutSeconds(int("carJoinTimeoutSeconds", JoinWatch.DEFAULT_TIMEOUT_SECONDS))
@@ -235,22 +257,37 @@ class Prefs(context: Context, vehicleProfileId: String = CarProfiles.selectedId(
     var supercastDockHidden: Boolean get() = bool("supercastDockHidden", false); set(v) = set("supercastDockHidden", v)
     var supercastSplit: Float get() = flt("supercastSplit", 0.5f); set(v) = set("supercastSplit", v)
 
+    var autoBackupInterval: Int get() = int("autoBackupInterval", AUTO_BACKUP_AFTER_DRIVE); set(v) = set("autoBackupInterval", v)
+    var lastAutoBackupTime: Long get() = lng("lastAutoBackupTime", 0L); set(v) = set("lastAutoBackupTime", v)
+    var autoBackupFolderUri: String get() = str("autoBackupFolderUri", ""); set(v) = set("autoBackupFolderUri", v)
+    var autoBackupFolderName: String get() = str("autoBackupFolderName", ""); set(v) = set("autoBackupFolderName", v)
+
     companion object {
+        const val AUTO_BACKUP_OFF = 0
+        const val AUTO_BACKUP_AFTER_DRIVE = 1
+        const val AUTO_BACKUP_DAILY = 2
+        const val AUTO_BACKUP_WEEKLY = 3
+
         const val LEGACY_ID = "legacy"
+        internal const val AA_DRIVING_RESTRICTIONS = "aaDrivingRestrictions"
         internal fun profileStoreName(id: String) = "ft-car-$id"
+        private val VIDEO_PROFILE_INPUTS = setOf(
+            "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps",
+            "pictureBitrate", "videoQpFloor", "encoderSavePower"
+        )
 
         // Opt in explicitly: new installation/runtime settings remain shared by all vehicles.
         internal val PROFILE_KEYS = setOf(
             "cmdPort", "videoPort", "mediaPort", "ttsPort", "vrPort", "touchPort",
             "aaPort", "aaSelfPort", "aaWidth", "aaHeight", "aaFps", "aaDensity", "aaDensityBoost167",
-            "aaControlsLeft", "aaClusterNavigation", "aaMatchCar", "aaBluetooth", "aaPackage", "aaServerPackage",
-            "aaPhoneScreenOff", "aaAutoStart", "aaPrepareBeforeConnect", "aaShowReturnButton", "aaCorner",
+            "aaControlsLeft", "aaClusterNavigation", AA_DRIVING_RESTRICTIONS, "aaMatchCar", "aaBluetooth", "aaPackage", "aaServerPackage",
+            "aaPhoneScreenOff", "aaAutoStart", "aaOnly", "aaPrepareBeforeConnect", "aaShowReturnButton", "aaCorner",
             "pictureSize", "videoWidth", "videoHeight", "videoFps", "videoMinFps", "pictureBitrate", "videoQpFloor",
             "carDensity", "encoderSavePower", "savedVideoProfile", "videoProfileGeneration", "carSizedApps",
             "muteWhileProjecting", "soundOverBluetooth", "hideChatAudio", "iccoaMicGain", "directions",
             "carName", "autoConnect", "carProtocol", "linkMode", "carP2pName", "carBtName", "carBtAddress",
             "carBtReconnect", "carLifeVehicleAddress", "carLifeVehicleName", "carLifeWifiAddress", "carLifeVehicleRevision",
-            "carWpsPin", "carJoinTimeoutSeconds", "swapTrackKeys", "wheelLongNext", "wheelLongPrev", "voiceAssistant",
+            "carWpsPin", "carJoinTimeoutSeconds", "carP2pAutoRole", "carP2pPhoneGroup", "swapTrackKeys", "wheelLongNext", "wheelLongPrev", "voiceAssistant",
             "gearReverse", "gearPark", "gearReverseSound", "gearParkSound", "gearReverseLevel", "gearParkLevel",
             "pkgMaps", "pkgMusic", "pkgVideo", "pkgPhone", "openOnConnect", "openOnConnectSecond",
             "carBackground", "carAccent", "carTiles", "carClock24", "carShowLink", "carSongInfo",

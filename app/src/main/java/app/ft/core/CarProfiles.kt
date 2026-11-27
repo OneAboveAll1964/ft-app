@@ -70,6 +70,29 @@ class CarProfiles(
         id
     }
 
+    /** Creates or updates a profile with a fixed ID (e.g. during backup restore). */
+    fun createWithId(id: String, name: String, model: CarModel, protocol: CarProtocol, linkMode: Int, autoSelect: Boolean = false): String? = synchronized(lock) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || switching || !canSwitch()) return@synchronized null
+        if (id in ids) {
+            metadata.edit().putString(nameKey(id), trimmed).putString(modelKey(id), model.name).apply()
+            publish()
+            return@synchronized id
+        }
+        val prefs = Prefs(context, id)
+        prefs.carProtocol = protocol
+        prefs.linkMode = linkMode
+        metadata.edit().putString(nameKey(id), trimmed).putString(modelKey(id), model.name).apply()
+        ids.add(id)
+        boundPrefs[id] = prefs
+        observe(prefs)
+        if (autoSelect) activate(id, prefs) else {
+            persistIds()
+            publish()
+        }
+        id
+    }
+
     fun select(id: String): Boolean = synchronized(lock) {
         val prefs = boundPrefs[id] ?: return@synchronized false
         if (switching || !canSwitch()) return@synchronized false

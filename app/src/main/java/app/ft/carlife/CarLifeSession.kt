@@ -50,6 +50,7 @@ class CarLifeSession(
     var onFrameRate: ((fps: Int) -> Unit)? = null
     var onNeedKeyframe: (() -> Unit)? = null
     var onVideoBack: (() -> Unit)? = null
+    var onProjectionShown: (() -> Unit)? = null
     var onGear: ((gear: Int) -> Unit)? = null
     var onTouch: ((CarTouch) -> Unit)? = null
     var onHardKey: ((keyCode: Int) -> Unit)? = null
@@ -76,6 +77,7 @@ class CarLifeSession(
     @Volatile private var streamStartedAt = 0L
     @Volatile var projecting = false; private set
     private var videoTimer: Job? = null
+    private var navWatchdog: Job? = null
     private var encryptProbe: Job? = null
     private var screenWatch: BroadcastReceiver? = null
     private val crypto = CarLifeCrypto()
@@ -136,6 +138,7 @@ class CarLifeSession(
 
     fun start() {
         refreshMusicPreference()
+        startNavWatchdog()
         DiagLog.i(tag, "session start via ${link.name}")
         link.start(scope, ::onMessage, { DiagLog.i(tag, it) }, ::linked, ::closed)
     }
@@ -155,6 +158,8 @@ class CarLifeSession(
         carSpeedPackets = 0L
         videoTimer?.cancel()
         videoTimer = null
+        navWatchdog?.cancel()
+        navWatchdog = null
         encryptProbe?.cancel()
         crypto.reset()
         matched = false
@@ -245,9 +250,7 @@ class CarLifeSession(
         }
     }
 
-    fun requestForeground() {
-        if (matched) cmd(CarLifeProtocol.CMD_REQUEST_GO_TO_FOREGROUND)
-    }
+    fun requestForeground(): Boolean = matched && cmd(CarLifeProtocol.CMD_REQUEST_GO_TO_FOREGROUND)
 
     fun goodbye() {
         if (matched) cmd(CarLifeProtocol.CMD_MD_MANUAL_DISCONNECT)
@@ -271,9 +274,10 @@ class CarLifeSession(
         DiagLog.i(tag, "told the car the song: '$title'${if (artist.isNotBlank()) " by $artist" else ""}${if (art != null) ", with cover art (${art.size} bytes)" else ""}")
     }
 
-    fun goToCarHome() {
-        cmd(CarLifeProtocol.CMD_GO_TO_DESKTOP)
+    fun goToCarHome(): Boolean {
+        if (!matched || !cmd(CarLifeProtocol.CMD_GO_TO_DESKTOP)) return false
         DiagLog.i(tag, "asked the car to show its own screen, FT stays connected")
+        return true
     }
 
     fun sendSongPosition(ms: Long) {
@@ -433,6 +437,7 @@ class CarLifeSession(
                     VideoFeed.Mode.RESUMING -> "projection back, the car gets the next full picture"
                     else -> "projection started again while already running"
                 })
+                onProjectionShown?.invoke()
             }
             CarLifeProtocol.CMD_VIDEO_ENCODER_PAUSE -> {
                 feed.pause()
@@ -472,7 +477,23 @@ class CarLifeSession(
             CarLifeProtocol.CMD_HU_AUTHEN_RESULT -> {
                 DiagLog.i(tag, "HU authen result ${ProtoReader(c.payload).bool(1)}")
             }
-            CarLifeProtocol.CMD_GO_TO_FOREGROUND -> DiagLog.i(tag, "head unit asked FT to come forward, it already draws on the car")
+            CarLifeProtocol.CMD_GO_TO_FOREGROUND -> {
+                val mode = feed.start()
+                if (mode == VideoFeed.Mode.OFF) {
+                    DiagLog.i(tag, "head unit asked for foreground before video encoder init")
+                    return
+                }
+                projecting = true
+                aaMusic.ready(true)
+                if (streamStartedAt == 0L) streamStartedAt = android.os.SystemClock.elapsedRealtime()
+                _state.value = State.Projecting(link.name, width, height, fps, streamWidth, streamHeight)
+                startVideoTimer()
+                if (mode == VideoFeed.Mode.RESUMING) onVideoBack?.invoke()
+                onNeedKeyframe?.invoke()
+                cmd(CarLifeProtocol.CMD_FOREGROUND)
+                DiagLog.i(tag, "head unit brought CarLife forward, resumed projection ($mode)")
+                onProjectionShown?.invoke()
+            }
             CarLifeProtocol.CMD_LAUNCH_MODE_NORMAL -> {
                 media.launchedAgain()
             }
@@ -508,7 +529,19 @@ class CarLifeSession(
                     onGear?.invoke(g)
                 }
             }
-            CarLifeProtocol.CMD_VEHICLE_FOREGROUND -> DiagLog.i(tag, "the car shows CarLife")
+            CarLifeProtocol.CMD_VEHICLE_FOREGROUND -> {
+                DiagLog.i(tag, "the car shows CarLife")
+                if (feed.mode == VideoFeed.Mode.PAUSED) {
+                    val mode = feed.start()
+                    projecting = true
+                    aaMusic.ready(true)
+                    _state.value = State.Projecting(link.name, width, height, fps, streamWidth, streamHeight)
+                    startVideoTimer()
+                    if (mode == VideoFeed.Mode.RESUMING) onVideoBack?.invoke()
+                    onNeedKeyframe?.invoke()
+                }
+                onProjectionShown?.invoke()
+            }
             CarLifeProtocol.CMD_VEHICLE_BACKGROUND -> DiagLog.i(tag, "the car moved CarLife to the background")
             CarLifeProtocol.CMD_CAR_VELOCITY -> {
                 val ok = CarLifeCarSensors.onSpeed(c.payload)
@@ -731,6 +764,16 @@ class CarLifeSession(
                     onNeedKeyframe?.invoke()
                 }
                 unaskedRate()
+            }
+        }
+    }
+
+    private fun startNavWatchdog() {
+        if (navWatchdog?.isActive == true) return
+        navWatchdog = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(1000L)
+                navigation.checkStale()
             }
         }
     }

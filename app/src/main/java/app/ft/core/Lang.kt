@@ -50,9 +50,9 @@ object Lang {
         Language.SYSTEM -> TextUtils.getLayoutDirectionFromLocale(locale(language)) == View.LAYOUT_DIRECTION_RTL
     }
 
-    fun wrap(base: Context, language: Language = current.value, config: Configuration = base.resources.configuration): Context {
+    fun wrap(base: Context, language: Language = current.value, config: Configuration? = null): Context {
         if (language == Language.SYSTEM) return base
-        val c = Configuration(config)
+        val c = Configuration(config ?: base.resources.configuration)
         val loc = locale(language)
         c.setLocales(LocaleList(loc))
         c.setLayoutDirection(if (rtl(language)) Locale("ar") else Locale.ENGLISH)

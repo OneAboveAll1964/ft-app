@@ -39,4 +39,18 @@ class CarLifeCarSensorsTest {
         assertFalse(CarLifeCarSensors.onSpeed(ProtoWriter().int32(1, -4).toByteArray()))
         assertFalse(CarLifeCarSensors.onGps(ByteArray(513)))
     }
+
+    @Test fun malformedSpeedNeverReplacesTheLastValidSpeedWithZero() {
+        try {
+            assertTrue(CarLifeCarSensors.onSpeed(ProtoWriter().int32(1, 51).toByteArray()))
+            val speed = VehicleTelemetry.current.value!!.drivingSpeed
+            assertFalse(CarLifeCarSensors.onSpeed(byteArrayOf(0x0A, 0x00)))
+            assertFalse(CarLifeCarSensors.onSpeed(ProtoWriter().uint64(1, 1L shl 32).toByteArray()))
+            assertFalse(CarLifeCarSensors.onSpeed(byteArrayOf(0x08, 0x00, 0x10, 0x80.toByte())))
+            assertFalse(CarLifeCarSensors.onSpeed(ProtoWriter().int32(1, 0).int32(1, 51).toByteArray()))
+            assertEquals(speed, VehicleTelemetry.current.value!!.drivingSpeed)
+        } finally {
+            VehicleTelemetry.clear("BAIDU")
+        }
+    }
 }

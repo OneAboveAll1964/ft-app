@@ -71,6 +71,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -177,6 +178,8 @@ class CarLifeService : Service() {
         private const val BESIDE_SLOP = 24f
         private const val GEAR_SETTLE_MS = 1_500L
         private const val GEAR_HOLD_MS = 700L
+        private const val GEAR_RETURN_RETRY_MS = 1_000L
+        private const val GEAR_RETURN_ATTEMPTS = 3
         private const val GEAR_LOOK_MS = 1_500L
         private const val GEAR_VOLUME_HOLD_MS = 4_000L
 
@@ -511,7 +514,8 @@ class CarLifeService : Service() {
     @Volatile private var quietShareAt = 0L
     @Volatile private var resumedMedia = false
     private var aaReturn: Job? = null
-    @Volatile private var pendingLaunch: Pair<Intent, String>? = null
+    private data class PendingLaunch(val intent: Intent, val pkg: String, val phone: Boolean, val ticket: Int)
+    @Volatile private var pendingLaunch: PendingLaunch? = null
     @Volatile private var soundDeclined = false
     @Volatile private var blockedSoundNoticed = false
     @Volatile private var songInfoAt = 0L
@@ -575,10 +579,11 @@ class CarLifeService : Service() {
     internal fun queueWirelessName(name: String) {
         val generation = wirelessBluetoothGeneration
         val exchange = wireless.exchange
+        val network = wireless.carWifiNetwork
         val f = finder
         scope.launch(Dispatchers.Main) {
             if (mode == 1 && finder === f && bt.connectionGeneration == generation &&
-                wireless.exchange == exchange) onCarRaisedWifiDirect(name)
+                wireless.exchange == exchange) onCarRaisedWifiDirect(name, network)
         }
     }
 
@@ -671,12 +676,11 @@ class CarLifeService : Service() {
                 val pending = pendingLaunch
                 pendingLaunch = null
                 if (pending == null) _state.update { it.copy(waitingForShare = false, shareForSound = false) }
-                val ticket = launchTicket.get()
                 soundLater {
                     audio.stop()
                     startAudioToCar()
                     if (pending != null) {
-                        launchIntent(pending.first, pending.second, ticket = ticket)
+                        launchIntent(pending.intent, pending.pkg, pending.phone, pending.ticket)
                         if (pendingLaunch == null) _state.update { it.copy(waitingForShare = false, shareForSound = false) }
                     }
                 }
@@ -686,8 +690,8 @@ class CarLifeService : Service() {
                     quietShareFailed = true
                     DiagLog.i(tag, "this phone still asks before sharing, FT will ask on the phone from now on")
                     val pending = pendingLaunch
-                    if (pending != null) {
-                        val pkg = pending.second
+                    if (pending != null && pending.ticket == launchTicket.get()) {
+                        val pkg = pending.pkg
                         _state.update { it.copy(mirroring = false, mirrorPackage = pkg, waitingForShare = true, shareForSound = false) }
                         askForScreenShare()
                     } else {
@@ -1220,21 +1224,21 @@ class CarLifeService : Service() {
             session?.projecting != true
 
     internal suspend fun askCarAgain(now: Long = android.os.SystemClock.elapsedRealtime()) {
-        val request = withContext(Dispatchers.Main) {
+        withContext(Dispatchers.Main) {
             val f = finder
             val name = _state.value.carWifi
             val generation = wirelessBluetoothGeneration
             if (f == null || name == null) {
                 peerWatch.reset()
-                return@withContext null
+                return@withContext
             }
             val action = peerWatch.next(generation, name, canRecoverMissingPeer(f, name, generation),
-                now) ?: return@withContext null
+                now) ?: return@withContext
             if (action == WirelessPeerWatch.Action.RECONNECT_BLUETOOTH) {
                 // Main also admits peers/groups/CMD. No working transport can
                 // be admitted between this last check and retiring the socket.
                 if (canRecoverMissingPeer(f, name, generation)) {
-                    DiagLog.w(tag, "WiFi + BL: '$name' is still absent after four name requests; reopening the Bluetooth conversation")
+                    DiagLog.w(tag, "WiFi + BL: '$name' is still absent after wireless recovery; reopening the Bluetooth conversation")
                     if (wireless.waitingForAddress) {
                         DiagLog.w(tag, "WiFi + BL: the car requested an IP but no local group or peer appeared; " +
                             "reopen CarLife on the car and check whether another projection is active")
@@ -1242,16 +1246,20 @@ class CarLifeService : Service() {
                     }
                     bt.disconnect(generation)
                 }
-                null
-            } else Triple(f, name, generation)
-        } ?: return
-        withContext(Dispatchers.IO) {
-            val job = currentCoroutineContext()
-            synchronized(wireless) {
-                job.ensureActive()
-                if (canRecoverMissingPeer(request.first, request.second, request.third)) {
-                    DiagLog.i(tag, "WiFi + BL: '${request.second}' is absent, asking for a fresh name over bluetooth")
-                    wireless.askName()
+                return@withContext
+            }
+            withContext(Dispatchers.IO) {
+                val job = currentCoroutineContext()
+                synchronized(wireless) {
+                    job.ensureActive()
+                    if (!canRecoverMissingPeer(f, name, generation)) return@synchronized
+                    if (action == WirelessPeerWatch.Action.REARM_WIFI) {
+                        DiagLog.i(tag, "WiFi + BL: '$name' is still absent, asking the car to enable WiFi Direct again")
+                        wireless.begin()
+                    } else {
+                        DiagLog.i(tag, "WiFi + BL: '$name' is absent, asking for a fresh name over bluetooth")
+                        wireless.askName()
+                    }
                 }
             }
         }
@@ -1511,7 +1519,10 @@ class CarLifeService : Service() {
         session?.stop()
         val s = CarLifeSession(this, l, prefs, scope)
         s.fullRateStart = mode != 1
-        session = s
+        synchronized(gearSound) {
+            if (session != null) gearForget()
+            session = s
+        }
         sessionLink = l
         songInfoAt = 0L
         s.allowSongInfo(!songInfoSuspended)
@@ -1519,14 +1530,18 @@ class CarLifeService : Service() {
         s.onFrameRate = { fps -> carDisplay.setFrameRate(VideoPlans.withinCap(fps, thermalCap)) }
         s.onNeedKeyframe = { carDisplay.requestKeyframe() }
         s.onVideoBack = { carDisplay.wake() }
-        s.onGear = { g -> onGear(g) }
+        s.onProjectionShown = { onGearProjectionShown(s) }
+        s.onGear = { g -> onGear(s, g) }
         s.onStopVideo = { onStopVideo() }
         s.onTouch = { t -> routeTouch(t) }
         s.onHardKey = { k -> onHardKey(k) }
         s.onVoiceAudio = { pcm -> AaHeadUnitService.current?.feedCarMicrophone(pcm) }
         AaHeadUnitService.onCarMicWanted = { on -> runCatching { s.carMicrophone(on) } }
         AaHeadUnitService.onNavigation = { info -> s.sendNavigation(info) }
-        s.onPauseMedia = { carMusic(false) }
+        s.onPauseMedia = {
+            carMusic(false)
+            AaHeadUnitService.current?.pauseMediaForCar()
+        }
         s.onMusicControl = { play -> carMusic(play) }
         s.onSongInfo = { songInfoAt = android.os.SystemClock.elapsedRealtime() }
         s.onClosed = { reason ->
@@ -1543,7 +1558,9 @@ class CarLifeService : Service() {
             }
             songInfoAt = 0
             carPaused = false
-            gearForget()
+            synchronized(gearSound) {
+                if (session === s) gearForget()
+            }
             stopAndroidAuto("the car disconnected")
             mediaReady = false
             routePlayer()
@@ -1574,7 +1591,7 @@ class CarLifeService : Service() {
                     routePlayer()
                     stopSoundWatch()
                 }
-                if (st is CarLifeSession.State.Projecting && prefs.aaAutoStart && !aaAutoLaunched) {
+                if (st is CarLifeSession.State.Projecting && prefs.shouldAutoStartAa && !aaAutoLaunched) {
                     aaAutoLaunched = true
                     DiagLog.i(tag, "auto-starting Android Auto after connection")
                     startAndroidAuto()
@@ -1582,10 +1599,11 @@ class CarLifeService : Service() {
                 if (st is CarLifeSession.State.Projecting && !autoOpened) {
                     autoOpened = true
                     openOnConnect()
-                    if (prefs.supercastOn && !SuperCast.ready.value) {
+                    if (!prefs.aaOnly && prefs.supercastOn && !SuperCast.ready.value) {
                         val request = SuperCast.prepareStart(prefs = prefs)
                         try {
                             scope.launch(Dispatchers.IO) {
+                                if (prefs.aaOnly) return@launch
                                 DiagLog.i(tag, "starting the apps-on-the-car helper after connection")
                                 request.start(applicationContext)
                             }.invokeOnCompletion { request.close() }
@@ -1702,7 +1720,7 @@ class CarLifeService : Service() {
         }
         if (!carPaused) return
         carPaused = false
-        if (CarPlayer.hasTrack && !CarPlayer.playing) {
+        if (!prefs.aaOnly && CarPlayer.hasTrack && !CarPlayer.playing) {
             CarPlayer.resume()
             DiagLog.i(tag, "FT's music playing again for the car")
         }
@@ -1795,6 +1813,7 @@ class CarLifeService : Service() {
     }
 
     private fun startAndroidAuto() {
+        if (prefs.aaOnly && _state.value.session is CarLifeSession.State.Projecting) aaAutoLaunched = true
         val pkg = prefs.aaPackage
         if (runCatching { packageManager.getPackageInfo(pkg, 0) }.isFailure) {
             DiagLog.w(tag, "Android Auto ($pkg) is not installed on this phone")
@@ -1983,7 +2002,7 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun onCarRaisedWifiDirect(name: String) {
+    private fun onCarRaisedWifiDirect(name: String, network: CarWirelessSetup.P2pNetworkInfo? = null) {
         if (mode != 1) return
         prefs.carP2pName = name
         _state.update { it.copy(carWifi = name) }
@@ -1996,7 +2015,7 @@ class CarLifeService : Service() {
         step("Joining the car's WiFi Direct '$name'")
         startFinder()
         finder?.search()
-        finder?.connectByName(name)
+        finder?.connectByName(name, network)
     }
 
     private fun keyName(code: Int) = when (code) {
@@ -2051,11 +2070,13 @@ class CarLifeService : Service() {
     }
 
     private fun openOnConnect() {
+        if (prefs.aaOnly) return
         val wanted = prefs.openOnConnect.trim()
         if (wanted.isEmpty()) return
         if (prefs.aaAutoStart && wanted == "aa") return
         scope.launch {
             delay(1500)
+            if (prefs.aaOnly) return@launch
             DiagLog.i(tag, "opening $wanted because the car connected")
             when {
                 wanted == "aa" -> startAndroidAuto()
@@ -2067,35 +2088,46 @@ class CarLifeService : Service() {
         }
     }
 
-    @Volatile private var gearHidProjection = false
     private val gearSound = GearSound()
+    private var gearHidProjection = false
+    private var gearReturn: Job? = null
     private var gearSettle: Job? = null
     private var gearHeld: Job? = null
     private var gearLook: Job? = null
     private var gearVolumeHold: Job? = null
-    @Volatile private var gearShown = -1
+    private var gearShown = -1
     private var gearPausedFt = false
     private var gearVolumeBefore = -1
     private var gearVolumeSet = -1
 
-    private fun onGear(gear: Int) {
+    private fun onGear(s: CarLifeSession, gear: Int): Unit = synchronized(gearSound) {
+        if (session !== s) return
         if (gear !in 1..5) DiagLog.w(tag, "the car sent gear $gear, which is not a gear FT knows, so it counts only if it lasts")
         gearHeld?.cancel()
         gearHeld = null
+        if (gear == GearAction.GEAR_REVERSE) {
+            cancelGearReturn()
+            gearHidProjection = true
+        }
         val stopped = gearShown == GearAction.GEAR_REVERSE || gearShown == GearAction.GEAR_PARK
         val stopping = gear == GearAction.GEAR_REVERSE || gear == GearAction.GEAR_PARK
         if (stopped && !stopping) {
             gearHeld = scope.launch {
                 delay(GEAR_HOLD_MS)
-                applyGear(gear)
+                synchronized(gearSound) {
+                    if (!isActive || session !== s) return@launch
+                    gearHeld = null
+                    applyGear(s, gear)
+                }
             }
             return
         }
-        applyGear(gear)
+        applyGear(s, gear)
     }
 
-    private fun applyGear(gear: Int) {
+    private fun applyGear(s: CarLifeSession, gear: Int) {
         if (gear == gearShown) return
+        val wasReverse = gearShown == GearAction.GEAR_REVERSE
         gearShown = gear
         val p = prefs
         val action = when (gear) {
@@ -2108,17 +2140,52 @@ class CarLifeService : Service() {
             GearAction.GEAR_PARK -> gearSoundFor(gear, p.gearParkSound, p.gearParkLevel)
             else -> gearSoundFor(gear, GearAction.SOUND_KEEP, 100)
         }
-        if (action == GearAction.NONE) {
-            if (gearHidProjection) {
-                gearHidProjection = false
-                DiagLog.i(tag, "car left the gear, bringing FT back to the car")
-                session?.requestForeground()
-            }
-            return
+        if (GearAction.restores(action)) {
+            cancelGearReturn()
+            carHome(gear)
+        } else if (gear != GearAction.GEAR_REVERSE && gearHidProjection && gearReturn == null) {
+            // Park acts immediately for sound, but the camera still needs time to close.
+            val firstDelay = if (wasReverse && gear == GearAction.GEAR_PARK) GEAR_HOLD_MS else 0L
+            requestGearProjectionReturn(s, firstDelay)
         }
-        DiagLog.i(tag, "car shifted to ${gearName(gear)}, running the chosen action")
-        if (GearAction.restores(action)) gearHidProjection = true
-        runGearAction(action)
+        if (action != GearAction.NONE) {
+            DiagLog.i(tag, "car shifted to ${gearName(gear)}, running the chosen action")
+            runGearAction(action)
+        }
+    }
+
+    private fun requestGearProjectionReturn(s: CarLifeSession, firstDelay: Long) {
+        gearHidProjection = true
+        gearReturn = scope.launch(Dispatchers.Main) {
+            delay(firstDelay)
+            repeat(GEAR_RETURN_ATTEMPTS) { attempt ->
+                synchronized(gearSound) {
+                    if (!isActive || session !== s) return@launch
+                    val queued = s.requestForeground()
+                    DiagLog.i(tag, "gear projection return attempt ${attempt + 1}/$GEAR_RETURN_ATTEMPTS queued=$queued")
+                }
+                delay(GEAR_RETURN_RETRY_MS)
+            }
+            synchronized(gearSound) {
+                if (!isActive || session !== s) return@launch
+                gearHidProjection = false
+                gearReturn = null
+                DiagLog.w(tag, "the car did not confirm projection return after leaving the gear")
+            }
+        }
+    }
+
+    private fun onGearProjectionShown(s: CarLifeSession): Unit = synchronized(gearSound) {
+        if (session !== s || !gearHidProjection) return
+        if (gearReturn == null && gearHeld?.isActive != true) return
+        gearHidProjection = false
+        cancelGearReturn()
+        DiagLog.i(tag, "the car confirmed projection return after leaving the gear")
+    }
+
+    private fun cancelGearReturn() {
+        gearReturn?.cancel()
+        gearReturn = null
     }
 
     private fun gearSoundFor(gear: Int, sound: Int, lowerTo: Int) = synchronized(gearSound) {
@@ -2162,7 +2229,7 @@ class CarLifeService : Service() {
         }
         if (move.resume) {
             if (gearPausedFt) {
-                if (CarPlayer.hasTrack && !CarPlayer.playing) CarPlayer.resume()
+                if (!prefs.aaOnly && CarPlayer.hasTrack && !CarPlayer.playing) CarPlayer.resume()
             } else {
                 phoneMediaKey(am, android.view.KeyEvent.KEYCODE_MEDIA_PLAY)
             }
@@ -2243,6 +2310,7 @@ class CarLifeService : Service() {
         gearSettle = null
         gearHeld?.cancel()
         gearHeld = null
+        cancelGearReturn()
         gearLook?.cancel()
         gearLook = null
         gearVolumeHold?.cancel()
@@ -2263,7 +2331,6 @@ class CarLifeService : Service() {
 
     private fun runGearAction(action: Int) {
         when (action) {
-            GearAction.CAR_SCREEN -> carHome()
             GearAction.FT_HOME -> _screenKeys.tryEmit(3)
             GearAction.MAPS -> launch(prefs.mapsPackage)
             GearAction.ANDROID_AUTO -> startAndroidAuto()
@@ -2276,7 +2343,7 @@ class CarLifeService : Service() {
             WheelAction.CAR_HOME -> _screenKeys.tryEmit(3)
             WheelAction.MAPS -> launch(prefs.mapsPackage)
             WheelAction.PHONE_SCREEN -> phoneScreen()
-            WheelAction.PLAY_PAUSE -> mediaKey(85)
+            WheelAction.PLAY_PAUSE -> if (prefs.aaOnly) AaHeadUnitService.current?.sendKey(85) else mediaKey(85)
             WheelAction.VOICE -> voiceAssistant.press()
         }
     }
@@ -2307,6 +2374,7 @@ class CarLifeService : Service() {
                 in MEDIA_KEYS -> mediaKey(mapped)
                 else -> DiagLog.i(tag, "steering wheel key $key ignored while mirroring")
             }
+            prefs.aaOnly -> Unit
             else -> when (mapped) {
                 in MEDIA_KEYS -> mediaKey(mapped)
                 3, 4 -> _screenKeys.tryEmit(mapped)
@@ -2317,7 +2385,7 @@ class CarLifeService : Service() {
 
     private fun mediaKey(key: Int) {
         val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        if (CarPlayer.playing || (CarPlayer.hasTrack && !am.isMusicActive)) {
+        if (!prefs.aaOnly && (CarPlayer.playing || (CarPlayer.hasTrack && !am.isMusicActive))) {
             when (key) {
                 85 -> CarPlayer.toggle()
                 126 -> CarPlayer.resume()
@@ -2340,6 +2408,7 @@ class CarLifeService : Service() {
     }
 
     private fun launch(pkg: String) {
+        if (prefs.aaOnly) return
         val ticket = launchTicket.incrementAndGet()
         soundLater {
             val intent = packageManager.getLaunchIntentForPackage(pkg)
@@ -2351,16 +2420,31 @@ class CarLifeService : Service() {
         }
     }
 
-    private fun carHome() {
+    private fun carHome(gear: Int? = null) {
         val s = session
         if (s == null || !mediaReady) {
             DiagLog.i(tag, "no car connected to send to its own screen")
             return
         }
-        scope.launch { s.goToCarHome() }
+        scope.launch(Dispatchers.Main) {
+            synchronized(gearSound) {
+                if (session !== s || !mediaReady) return@launch
+                if (gear == null) {
+                    gearHidProjection = false
+                    cancelGearReturn()
+                } else if (gear != gearShown) {
+                    return@launch
+                }
+                val sent = s.goToCarHome()
+                if (gear != null && sent) {
+                    gearHidProjection = true
+                }
+            }
+        }
     }
 
     private fun phoneScreen() {
+        if (prefs.aaOnly) return
         val ticket = launchTicket.incrementAndGet()
         soundLater {
             val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
@@ -2370,13 +2454,18 @@ class CarLifeService : Service() {
     }
 
     private fun launchIntent(intent: Intent, pkg: String, phone: Boolean = intent.hasCategory(Intent.CATEGORY_HOME), ticket: Int = launchTicket.get()) {
+        if (prefs.aaOnly) return
         if (ticket != launchTicket.get()) {
             DiagLog.i(tag, "$pkg was not opened because something else was chosen on the car first")
             return
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        if (phone && mirror.ready && mirror.ownDisplay) {
+            if (Build.VERSION.SDK_INT >= 34) releaseProjection()
+            else mirror.close()
+        }
         if (!mirror.ready && projection == null && (app.mirrorResultCode == 0 || app.mirrorData == null)) {
-            pendingLaunch = intent to pkg
+            pendingLaunch = PendingLaunch(intent, pkg, phone, ticket)
             if (canShareQuietly()) {
                 _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
                 shareQuietly()
@@ -2386,7 +2475,6 @@ class CarLifeService : Service() {
             askForScreenShare()
             return
         }
-        if (phone && mirror.ready && mirror.ownDisplay) mirror.close()
         if (!mirror.ready && !mirrorOpen(pkg, ownDisplay = !phone)) {
             _state.update { it.copy(mirroring = false, mirrorPackage = pkg) }
             return
@@ -2559,21 +2647,14 @@ class CarLifeService : Service() {
         if (now - quietShareAt < 10_000) return
         quietShareAt = now
         runCatching {
-            startActivity(
-                Intent(this, ShareActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-            )
+            ShareActivity.request(this, quiet = true)
         }.onFailure { DiagLog.w(tag, "could not start screen sharing quietly: ${it.message}") }
     }
 
     private fun askForScreenShare() {
         DiagLog.i(tag, "asking on the phone for screen sharing, the car is waiting")
         runCatching {
-            startActivity(
-                Intent(this, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("mirror", true)
-            )
+            ShareActivity.request(this)
         }.onFailure { DiagLog.w(tag, "could not open FT to ask for screen sharing: ${it.message}") }
     }
 
@@ -2609,9 +2690,11 @@ class CarLifeService : Service() {
             val d = if (useCar) prefs.carDensity else resources.displayMetrics.densityDpi
             val ok = mirror.open(mp, w, h, d, useCar, carDisplay.width, carDisplay.height)
             if (ok && !audio.active) soundToCar()
+            if (!ok && Build.VERSION.SDK_INT >= 34) releaseProjection()
             ok
         } catch (t: Throwable) {
             DiagLog.e(tag, "mirror start failed", t)
+            if (Build.VERSION.SDK_INT >= 34) releaseProjection()
             false
         }
     }
@@ -2631,16 +2714,23 @@ class CarLifeService : Service() {
         stopWatchingTurning()
         restoreRotation()
         soundLater {
-            audio.stop()
-            restorePhone()
-            mirror.close()
-            val released = synchronized(projectionLock) { projection.also { projection = null } }
-            if (released != null) {
-                runCatching { released.stop() }
-                app.mirrorGranted.value = false
+            if (releaseProjection()) {
                 DiagLog.i(tag, "screen sharing released, allow it again on the phone for the next drive")
             }
         }
+    }
+
+    private fun releaseProjection(): Boolean {
+        val released = synchronized(projectionLock) { projection.also { projection = null } }
+        mirrorJob?.cancel()
+        mirrorJob = null
+        audio.stop()
+        restorePhone()
+        mirror.close()
+        if (released == null) return false
+        app.mirrorGranted.value = app.mirrorData != null
+        runCatching { released.stop() }
+        return true
     }
 
     private fun home() {

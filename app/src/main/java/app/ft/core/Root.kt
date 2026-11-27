@@ -1,7 +1,8 @@
 package app.ft.core
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,17 +54,11 @@ object Root {
         if (app.ft.BuildConfig.PLAY) return null
         val su = binary ?: findBinary() ?: return null
         return try {
-            val p = ProcessBuilder(su).redirectErrorStream(false).start()
-            p.outputStream.bufferedWriter().use { w ->
-                for (c in commands) {
-                    w.write(c); w.write("\n")
-                }
-                w.write("exit\n"); w.flush()
-            }
-            val out = read(p.inputStream)
-            val err = read(p.errorStream)
-            Out(p.waitFor(), out, err)
-        } catch (t: Throwable) {
+            collect(ProcessBuilder(su).start(), 15_000, commands.toList())
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            null
+        } catch (t: Exception) {
             DiagLog.d("Root", "su run failed: ${t.message}")
             if (binary == su) binary = null
             null
@@ -160,9 +155,12 @@ object Root {
         binary?.let { return it }
         for (c in candidates) {
             val found = try {
-                val p = ProcessBuilder(c, "-c", "id").redirectErrorStream(true).start()
-                val text = read(p.inputStream); p.waitFor(); text.contains("uid=")
-            } catch (_: Throwable) { false }
+                collect(ProcessBuilder(c, "-c", "id").redirectErrorStream(true).start(), 3_000)
+                    .stdout.contains("uid=")
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return null
+            } catch (_: Exception) { false }
             if (found) { binary = c; return c }
         }
         return null
@@ -180,6 +178,29 @@ object Root {
 
     private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
-    private fun read(stream: java.io.InputStream): String =
-        runCatching { BufferedReader(InputStreamReader(stream)).use { it.readText() } }.getOrDefault("")
+    internal fun collect(process: Process, timeoutMs: Long, commands: List<String>? = null): Out {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        fun remaining() = (deadline - System.nanoTime()).coerceAtLeast(0)
+        fun <T> worker(name: String, task: () -> T): FutureTask<T> =
+            FutureTask(task).also { Thread(it, name).apply { isDaemon = true; start() } }
+
+        val output = worker("su-stdout") { process.inputStream.bufferedReader().use { it.readText() } }
+        val errors = worker("su-stderr") { process.errorStream.bufferedReader().use { it.readText() } }
+        val input = worker("su-stdin") {
+            process.outputStream.bufferedWriter().use { writer ->
+                if (commands != null) {
+                    commands.forEach { writer.appendLine(it) }
+                    writer.appendLine("exit")
+                }
+            }
+        }
+        try {
+            if (!process.waitFor(remaining(), TimeUnit.NANOSECONDS)) throw TimeoutException("su timed out")
+            input.get(remaining(), TimeUnit.NANOSECONDS)
+            return Out(process.exitValue(), output.get(remaining(), TimeUnit.NANOSECONDS), errors.get(remaining(), TimeUnit.NANOSECONDS))
+        } finally {
+            if (process.isAlive) process.destroyForcibly()
+            listOf(input, output, errors).forEach { it.cancel(true) }
+        }
+    }
 }

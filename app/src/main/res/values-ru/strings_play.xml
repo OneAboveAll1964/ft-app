@@ -21,6 +21,7 @@
     <string name="about_privacy">Политика конфиденциальности</string>
     <string name="about_source">Исходный код</string>
     <string name="about_license">Лицензия: Apache 2.0</string>
+    <string name="about_development_help">Помощь в разработке — @mykolaq</string>
     <string name="about_data">В FT нет аккаунта, рекламы и аналитики. Ваши настройки, журналы и профили автомобилей остаются на телефоне. Виджет погоды отправляет в Open-Meteo округлённые координаты, чтобы получить прогноз. Диагностический отчёт покидает телефон, только если вы сами им поделитесь.</string>
     <string name="about_permissions_title">Разрешения и зачем они нужны FT</string>
     <string name="about_review_permissions">Проверить разрешения</string>

@@ -122,6 +122,14 @@ class WifiChannelLink(
                         scope.launch(Dispatchers.IO) {
                             readLoop(channel, s, onMessage)
                             withContext(admissionDispatcher) {
+                                if (channel == CarLifeProtocol.CH_CMD) {
+                                    // Command EOF ends the whole Baidu session, not just this lane.
+                                    if (dropAll(expectedCommand = s)) {
+                                        onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
+                                        onClosed("head unit disconnected")
+                                    }
+                                    return@withContext
+                                }
                                 var writer: CarLifeWriter<ByteArray>? = null
                                 val current = synchronized(sockets) {
                                     val mine = sockets[channel] === s
@@ -129,15 +137,11 @@ class WifiChannelLink(
                                         sockets.remove(channel)
                                         writer = writers.remove(channel)
                                     }
-                                    mine && (channel != CarLifeProtocol.CH_CMD || generation == cmdGeneration)
+                                    mine
                                 }
                                 writer?.close()
                                 if (!current) return@withContext
                                 onEvent("WIFI ${CarLifeProtocol.channelName(channel)} disconnected")
-                                if (channel == CarLifeProtocol.CH_CMD) {
-                                    watch?.cancel()
-                                    onClosed("head unit disconnected")
-                                }
                             }
                         }
                     }
@@ -258,6 +262,11 @@ class WifiChannelLink(
             if (running.get()) DiagLog.d(tag, "WIFI ${CarLifeProtocol.channelName(channel)} read ended: ${t.message}")
         } finally {
             runCatching { s.close() }
+            var writer: CarLifeWriter<ByteArray>? = null
+            synchronized(sockets) {
+                if (sockets[channel] === s) writer = writers.remove(channel)
+            }
+            writer?.close()
         }
     }
 
@@ -276,6 +285,7 @@ class WifiChannelLink(
     }
 
     private fun write(channel: Int, s: Socket, inner: ByteArray): Boolean {
+        if (!running.get() || s.isClosed) return false
         return try {
             val o = s.getOutputStream()
             o.write(inner)
@@ -283,7 +293,11 @@ class WifiChannelLink(
             progressAt = android.os.SystemClock.elapsedRealtime()
             true
         } catch (t: Throwable) {
-            DiagLog.e(tag, "WIFI ${CarLifeProtocol.channelName(channel)} write failed", t)
+            if (!running.get() || s.isClosed) {
+                DiagLog.d(tag, "WIFI ${CarLifeProtocol.channelName(channel)} write ended: ${t.message}")
+            } else {
+                DiagLog.e(tag, "WIFI ${CarLifeProtocol.channelName(channel)} write failed", t)
+            }
             runCatching { s.close() }
             false
         }

@@ -9,7 +9,8 @@ class NavigationRelay(
     private val module: (Boolean) -> Unit,
     private val dispatch: (() -> Unit) -> Unit,
     private var enabled: Boolean = true,
-    private val onError: (Exception) -> Unit = {}
+    private val onError: (Exception) -> Unit = {},
+    private val clock: () -> Long = { System.currentTimeMillis() }
 ) {
     private val lock = Any()
     private val pending = ArrayDeque<() -> Unit>()
@@ -20,10 +21,15 @@ class NavigationRelay(
     private var voice = false
     private var shown: NavigationInfo? = null
     private var total = 0
+    private var lastUpdateAt = 0L
     @Volatile var active = false
         private set
 
-    fun update(info: NavigationInfo) = change { latest = info; publish() }
+    fun update(info: NavigationInfo) = change {
+        lastUpdateAt = clock()
+        latest = info
+        publish()
+    }
     fun subscribe(on: Boolean) = change { subscribed = on; publish() }
     fun enable(on: Boolean) = change { enabled = on; publish() }
     fun voice(on: Boolean) = change { voice = on; updateModule() }
@@ -51,12 +57,26 @@ class NavigationRelay(
         }
     }
 
+    fun checkStale(now: Long = clock()) = change {
+        if (shown == null) return@change
+        val isZeroDistance = (latest.distanceMeters ?: Int.MAX_VALUE) <= 10
+        val zeroTimeout = isZeroDistance && (now - lastUpdateAt >= ZERO_DISTANCE_STALE_MS)
+        val generalTimeout = (now - lastUpdateAt >= GENERAL_STALE_MS)
+        if (zeroTimeout || generalTimeout) {
+            pending.addLast { send(3, NavigationInfo(maneuver = 39), 0) }
+            shown = null
+            total = 0
+            latest = latest.copy(maneuver = 0, distanceMeters = null)
+        }
+    }
+
     fun reset() = synchronized(lock) {
         pending.clear()
         voiceWaiters.forEach { it.countDown() }
         voiceWaiters.clear()
         latest = NavigationInfo(); subscribed = false; voice = false
         shown = null; total = 0; active = false
+        lastUpdateAt = 0L
     }
 
     private fun change(block: () -> Unit) {
@@ -110,6 +130,9 @@ class NavigationRelay(
     }
 
     companion object {
+        const val ZERO_DISTANCE_STALE_MS = 5_000L
+        const val GENERAL_STALE_MS = 25_000L
+
         fun turnCode(maneuver: Int): Int = when (maneuver) {
             1 -> 23
             3, 5, 13, 21, 25, 27 -> 8

@@ -19,13 +19,13 @@ class CarVoiceAssistant(
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val button = VoiceButton(
-        selected = { prefs().voiceAssistant },
+        selected = { if (prefs().aaOnly) VoiceAssistant.DEFAULT else prefs().voiceAssistant },
         aaVisible = aaVisible,
         sendAa = {
             DiagLog.i("VoiceButton", "routing voice key to Android Auto")
             sendAa()
         },
-        openPhone = { assistant -> main.post { openPhone(assistant) } },
+        openPhone = { assistant -> main.post { if (!prefs().aaOnly) openPhone(assistant) } },
         now = SystemClock::elapsedRealtime
     )
 

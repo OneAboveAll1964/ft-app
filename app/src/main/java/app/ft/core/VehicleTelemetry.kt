@@ -5,6 +5,10 @@ import app.ft.FTApp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+data class VehicleSpeedSample(val raw: Long, val receivedAtMs: Long) {
+    fun fresh(nowMs: Long) = nowMs - receivedAtMs in 0L..3_000L
+}
+
 /** Shared, protocol-neutral vehicle sensors for FT widgets and later AA location forwarding.
  * No coordinate datum, speed multiplier or heading unit is guessed.
  */
@@ -29,7 +33,8 @@ data class VehicleLocation(
     val deviceTimestampRaw: Long? = null,
     val coordinatesUnit: String = "UNKNOWN",
     val speedUnit: String = "UNKNOWN",
-    val headingUnit: String = "UNKNOWN"
+    val headingUnit: String = "UNKNOWN",
+    val drivingSpeed: VehicleSpeedSample? = null
 ) {
     fun fresh(nowMs: Long = System.currentTimeMillis()) =
         nowMs >= receivedAtMs && nowMs - receivedAtMs <= 3_000L
@@ -69,19 +74,24 @@ object VehicleTelemetry {
         val previous = _current.value?.takeIf {
             it.source == location.source && it.fresh(location.receivedAtMs)
         }
-        // A new GPS frame must not erase a recent, separately sourced GearInfo frame.
-        val preserved = if (location.source == "ICCOA" && previous != null)
-            location.copy(gearSpeedRaw = previous.gearSpeedRaw,
-                gearRaw = previous.gearRaw, gearAtMs = previous.gearAtMs) else location
+        // Keep separate speed and gear samples with their original timestamps when GPS arrives.
+        val preserved = if (previous != null) location.copy(
+            gearSpeedRaw = previous.gearSpeedRaw,
+            gearRaw = previous.gearRaw,
+            gearAtMs = previous.gearAtMs,
+            drivingSpeed = previous.drivingSpeed
+        ) else location
         _current.value = preserved
         note(preserved)
     }
 
     @Synchronized fun updateBaiduSpeed(rawSpeed: Long, deviceTimestamp: Long? = null) {
         if (rawSpeed < 0L || rawSpeed > 100_000L) return
-        val old = _current.value?.takeIf { it.source == "BAIDU" && it.fresh() }
-        _current.value = (old ?: VehicleLocation("BAIDU", System.currentTimeMillis(), positionAtMs = 0L)).copy(
-            receivedAtMs = System.currentTimeMillis(), speedRaw = rawSpeed,
+        val now = System.currentTimeMillis()
+        val old = _current.value?.takeIf { it.source == "BAIDU" && it.fresh(now) }
+        _current.value = (old ?: VehicleLocation("BAIDU", now, positionAtMs = 0L)).copy(
+            receivedAtMs = now, speedRaw = rawSpeed,
+            drivingSpeed = VehicleSpeedSample(rawSpeed, now),
             deviceTimestampRaw = deviceTimestamp ?: old?.deviceTimestampRaw
         )
         _current.value?.let(::note)
@@ -96,6 +106,7 @@ object VehicleTelemetry {
         _current.value = (old ?: VehicleLocation("ICCOA", now, positionAtMs = 0L)).copy(
             receivedAtMs = now,
             gearSpeedRaw = rawSpeed,
+            drivingSpeed = VehicleSpeedSample(rawSpeed, now),
             gearRaw = gearRaw ?: old?.gearRaw,
             gearAtMs = if (gearRaw != null) now else old?.gearAtMs ?: 0L,
             // Keep unknown GPS raw speed distinct from the received GearInfo integer.

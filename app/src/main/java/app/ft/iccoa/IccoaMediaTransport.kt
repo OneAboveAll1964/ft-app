@@ -22,7 +22,7 @@ internal class IccoaMediaTransport(
     private val onPlay: (IccoaVideoConfig) -> Unit,
     private val onPause: () -> Unit,
     private val onKeyframe: () -> Unit,
-    private val onTouch: (CarTouch) -> Unit,
+    private val onTouch: (CarTouch, IccoaVideoConfig) -> Unit,
     private val onKey: (Int) -> Unit,
     private val onClosed: (String, IccoaCloseReason) -> Unit
 ) : AutoCloseable {
@@ -89,28 +89,35 @@ internal class IccoaMediaTransport(
     }
 
     private fun play(config: IccoaVideoConfig) {
+        if (closed.get()) return
         videoConfig = config
         if (muxer != null) { onPlay(config); onKeyframe(); return }
-        val socket = Socket()
-        synchronized(this) {
-            if (closed.get()) { socket.close(); return }
-            videoSocket = socket
-        }
+        var socket: Socket? = null
         try {
-            network.bindSocket(socket)
-            socket.tcpNoDelay = true
-            socket.sendBufferSize = 512 * 1024
-            socket.connect(InetSocketAddress(config.host, config.rtpPort), 4000)
-            val sender = IccoaTsMuxer(BufferedOutputStream(socket.getOutputStream(), 65536))
+            val pinned = network.socketFactory.createSocket()
+            socket = pinned
+            synchronized(this) {
+                if (closed.get()) { pinned.close(); return }
+                videoSocket = pinned
+            }
+            pinned.tcpNoDelay = true
+            pinned.sendBufferSize = 512 * 1024
+            pinned.connect(InetSocketAddress(config.host, config.rtpPort), 4000)
+            if (closed.get()) { pinned.close(); return }
+            val sender = IccoaTsMuxer(BufferedOutputStream(pinned.getOutputStream(), 65536))
             val encoder = IccoaAacEncoder(queue::audio, ::fail)
             synchronized(this) {
-                if (closed.get()) { encoder.close(); socket.close(); return }
+                if (closed.get()) { encoder.close(); pinned.close(); return }
                 aac = encoder
                 muxer = sender
             }
             DiagLog.i("ICCOA", "WFD PLAY ${config.width}x${config.height}@${config.fps}; RTP/TCP ${config.rtpPort}")
             onPlay(config)
-        } catch (e: Exception) { runCatching { socket.close() }; fail("RTP: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e)) }
+        } catch (e: Exception) {
+            runCatching { socket?.close() }
+            synchronized(this) { if (videoSocket === socket) videoSocket = null }
+            if (!closed.get()) fail("RTP: ${e.javaClass.simpleName}", IccoaFailurePolicy.channel(e))
+        }
     }
 
     fun configure(bytes: ByteArray) {
@@ -204,26 +211,21 @@ internal class IccoaMediaTransport(
 
     private fun input(socket: Socket) {
         socket.soTimeout = 0
-        var lastTouch: CarTouch? = null
+        var lastTouch: Pair<CarTouch, IccoaVideoConfig>? = null
         val gesture = IccoaInputGesture {
-            lastTouch?.let { onTouch(it.copy(action = CarTouch.UP)) }
+            lastTouch?.let { (touch, video) -> onTouch(touch.copy(action = CarTouch.UP), video) }
             DiagLog.i("ICCOA", "UIBC clean-eof; released active gesture")
         }
         val json = IccoaInputJson { event ->
             if (event.optInt("type") == 1) {
                 val video = videoConfig ?: return@IccoaInputJson
-                val nativeTouch = IccoaInputEvent.touch(event, video) ?: return@IccoaInputJson
-                val plan = IccoaVideoPlan.from(video)
-                fun sx(x: Int) = if (x < 0) -1 else (x.toLong() * plan.streamWidth / video.width).toInt()
-                fun sy(y: Int) = if (y < 0) -1 else (y.toLong() * plan.streamHeight / video.height).toInt()
-                val touch = nativeTouch.copy(x = sx(nativeTouch.x), y = sy(nativeTouch.y),
-                    x2 = sx(nativeTouch.x2), y2 = sy(nativeTouch.y2))
+                val touch = IccoaInputEvent.touch(event, video) ?: return@IccoaInputJson
                 if (touch.action != CarTouch.MOVE) DiagLog.i("ICCOA",
                     "UIBC touch action=${touch.action} x=${touch.x} y=${touch.y} dst=${video.width}x${video.height}" +
                         " source=${event.optInt("width")}x${event.optInt("height")} raw=${event.optDouble("x0")},${event.optDouble("y0")}")
                 gesture.accept(touch.action)
-                lastTouch = touch
-                onTouch(touch)
+                lastTouch = touch to video
+                onTouch(touch, video)
             } else if (event.optInt("keycode") > 0 && event.optInt("action") == 0) {
                 onKey(event.optInt("keycode"))
             }

@@ -15,7 +15,7 @@ import android.view.Display
 import android.view.Surface
 import app.ft.FTApp
 import app.ft.FTTouchService
-import app.ft.MainActivity
+import app.ft.ShareActivity
 import app.ft.aa.AaHeadUnitService
 import app.ft.aa.AaSession
 import app.ft.aa.AaTouchViewport
@@ -72,7 +72,7 @@ class IccoaProjection(
         }) { AaHeadUnitService.current?.sendKey(84) }
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val display = CarDisplay(context)
+    private val display = CarDisplay(context, allowFormatCapabilityProbe = true)
     private val mirror = PhoneMirror()
     private val audio = AudioCapture { CarAudioBus.write(CarAudioBus.LANE_PHONE, it) }
     private val mutableState = MutableStateFlow(CarControls.ScreenState())
@@ -137,14 +137,15 @@ class IccoaProjection(
             // Reconfigure only our encoded display. Keep the single-use projection grant,
             // its audio/mirror capture and the Android Auto session across PLAY/resume.
             display.start(plan, onConfig, { _, _ -> }, onTimedFrame,
-                onFailure = { projectionFailed(it) }) { CarScreen() }
+                onFailure = { projectionFailed(it) },
+                alignedStreamLimit = IccoaVideoPlan.streamLimit) { CarScreen() }
             displayPlan = plan
             mutableState.update { it.copy(
                 phase = CarControls.Phase.PROJECTING, via = "ICCOA",
-                width = plan.streamWidth, height = plan.streamHeight, fps = plan.fps
+                width = display.streamWidth, height = display.streamHeight, fps = plan.fps
             ) }
             startCapturedAudio()
-            if (firstStart && prefs.aaAutoStart) startAa()
+            if (firstStart && prefs.shouldAutoStartAa) startAa()
         } catch (t: Throwable) {
             projectionFailed(t)
         }
@@ -171,9 +172,9 @@ class IccoaProjection(
         if (!active) return@onMain
         CarTouchCalibration.reset(context, display.width, display.height, prefs.profileId)
     }
-    fun touch(action: Int, x: Int, y: Int) = touch(CarTouch(action, x, y))
-    fun touch(raw: CarTouch) = onMain {
+    internal fun touch(nativeTouch: CarTouch, video: IccoaVideoConfig) = onMain {
         if (!active) return@onMain
+        val raw = IccoaInputEvent.toStream(nativeTouch, video, display.streamWidth, display.streamHeight)
         val (initialX, y) = display.toContent(raw.x, raw.y)
         val second = if (raw.x2 >= 0 && raw.y2 >= 0) display.toContent(raw.x2, raw.y2) else -1 to -1
         // FT owns its UI hit testing. AA and phone mirror have independent touch mapping.
@@ -248,7 +249,7 @@ class IccoaProjection(
             voiceAssistant.press()
         } else if (state.value.aaOverlay) {
             AaHeadUnitService.current?.sendKey(code)
-        } else when (code) {
+        } else if (!prefs.aaOnly) when (code) {
             3 -> { goHome(); keys.tryEmit(code) }
             4 -> if (state.value.mirroring) navBack() else keys.tryEmit(code)
             85 -> CarPlayer.toggle()
@@ -331,8 +332,7 @@ class IccoaProjection(
     private fun askShare(forSound: Boolean) {
         mutableState.update { it.copy(waitingForShare = true, shareForSound = forSound) }
         runCatching {
-            context.startActivity(Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("mirror", true))
+            ShareActivity.request(context)
         }.onFailure { DiagLog.w("ICCOA", "open FT on the phone to allow screen sharing: ${it.message}") }
     }
 
@@ -347,7 +347,7 @@ class IccoaProjection(
     }
 
     private fun launchMirror(intent: Intent, pkg: String) {
-        if (!active) return
+        if (!active || prefs.aaOnly) return
         stopAa()
         val mp = ensureProjection()
         if (mp == null) {

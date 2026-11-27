@@ -280,6 +280,24 @@ object SuperCast {
         val fresh = beginStart()
         CarConnection.lifecycleChanged()
         try {
+            if (prefs.supercastWay == WAY_ROOT && Root.ensure()) {
+                if (Helper.startWithRoot(context, fresh) { _ready.value }) {
+                    DiagLog.i(TAG, "apps on the car are ready, set up with root")
+                    return true
+                }
+            }
+            if (ShizukuSupport.hasPermission()) {
+                if (ShizukuSupport.startHelper(context, fresh)) {
+                    val up = waitForHandshake()
+                    if (up) {
+                        prefs.supercastWay = WAY_SHIZUKU
+                        DiagLog.i(TAG, "apps on the car are ready, set up through Shizuku")
+                        return true
+                    } else {
+                        DiagLog.w(TAG, "helper started via Shizuku but did not come back to FT")
+                    }
+                }
+            }
             if (Root.ensure()) {
                 if (Helper.startWithRoot(context, fresh) { _ready.value }) {
                     prefs.supercastWay = WAY_ROOT
@@ -350,4 +368,5 @@ object SuperCast {
     const val WAY_NONE = 0
     const val WAY_ROOT = 1
     const val WAY_BRIDGE = 2
+    const val WAY_SHIZUKU = 3
 }

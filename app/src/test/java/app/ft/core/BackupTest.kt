@@ -53,6 +53,19 @@ class BackupTest {
     }
 
     @Test
+    fun restoreUsesTheSamePortableSchemaOnAnEmptyInstall() {
+        val legacyBackup = Backup.parse("""
+            {"ft":1,"values":{"aaPort":5288,"carClock24":"false","carAccent":1.25,
+            "aaWidth":4294968576,"aaHeight":"720","supercastSplit":0.25,
+            "supercastToken":"local-token","carWpsPin":"12345670","savedVideoProfile":"cached",
+            "futureOption":true}}
+        """.trimIndent())!!
+        val portable = Backup.portableValues(legacyBackup)
+        assertEquals(mapOf("aaPort" to 5288, "carClock24" to false, "supercastSplit" to 0.25f), portable)
+        assertEquals(mapOf("carClock24" to false), Backup.portableValues(portable, Backup.LOOK_KEYS))
+    }
+
+    @Test
     fun theLookCodeStaysSmallEnoughForAQrCode() {
         val everyLookKey = Backup.LOOK_KEYS.associateWith { "midnight-and-a-fairly-long-value" }
         assertTrue(Backup.encode(Backup.write(everyLookKey)).length < 2000)

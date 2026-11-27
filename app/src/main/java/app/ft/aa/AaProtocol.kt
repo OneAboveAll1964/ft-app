@@ -87,7 +87,12 @@ object AaProtocol {
     const val VIDEO_FOCUS_PROJECTED = 1
     const val VIDEO_FOCUS_NATIVE = 2
     const val AUDIO_FOCUS_GAIN = 1
+    const val AUDIO_FOCUS_GAIN_TRANSIENT = 2
     const val AUDIO_FOCUS_LOSS = 3
+    const val AUDIO_FOCUS_LOSS_TRANSIENT = 5
+    const val AUDIO_REQUEST_GAIN = 1
+    const val AUDIO_REQUEST_GAIN_TRANSIENT = 2
+    const val AUDIO_REQUEST_GAIN_TRANSIENT_MAY_DUCK = 3
     const val AUDIO_REQUEST_RELEASE = 4
     const val NAV_FOCUS_PROJECTED = 2
     const val SENSOR_LOCATION = 1

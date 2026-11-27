@@ -13,6 +13,7 @@
     <string name="iccoa_inspecting">Checking device services — up to 15 seconds</string>
     <string name="iccoa_inspect_complete">Device services checked</string>
     <string name="iccoa_bluetooth_off">Turn on Bluetooth, then tap Scan again</string>
+    <string name="iccoa_wifi_enabling">Wait for Wi-Fi to turn on, then try connecting again</string>
     <string name="iccoa_permission">Allow Nearby devices and precise Location for FT, then tap Scan again.</string>
     <string name="iccoa_location_off">Turn on Location, then tap Scan again</string>
     <string name="iccoa_failed">Connection check failed — send a report to the developer</string>

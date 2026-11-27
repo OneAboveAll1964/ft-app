@@ -40,6 +40,14 @@ class IccoaNetworkReplacementTest {
             val gate = attemptType.getDeclaredField("networkGate").apply { isAccessible = true }
                 .get(attempt) as IccoaNetworkCallbackGate<Network>
             val oldNetwork = mock(Network::class.java)
+            val factory = object : javax.net.SocketFactory() {
+                override fun createSocket() = Socket()
+                override fun createSocket(host: String?, port: Int) = Socket()
+                override fun createSocket(host: String?, port: Int, localHost: java.net.InetAddress?, localPort: Int) = Socket()
+                override fun createSocket(host: java.net.InetAddress?, port: Int) = Socket()
+                override fun createSocket(address: java.net.InetAddress?, port: Int, localAddress: java.net.InetAddress?, localPort: Int) = Socket()
+            }
+            `when`(oldNetwork.socketFactory).thenReturn(factory)
             val replacementNetwork = mock(Network::class.java)
             gate.onAvailable(oldNetwork)
             try {

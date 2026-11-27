@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import app.ft.FTApp
 import app.ft.R
 import app.ft.supercast.Helper
+import app.ft.supercast.ShizukuSupport
 import app.ft.supercast.SuperCast
 import app.ft.ui.components.AppChecklist
 import app.ft.ui.components.Option
@@ -54,6 +56,7 @@ import app.ft.ui.components.rememberRootGranted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import rikka.shizuku.Shizuku
 
 @Composable
 fun SuperCastSettings() {
@@ -66,6 +69,8 @@ fun SuperCastSettings() {
     var busy by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var open by remember { mutableIntStateOf(-1) }
+    var shizukuRunning by remember { mutableStateOf(ShizukuSupport.isRunning()) }
+    var shizukuGranted by remember { mutableStateOf(ShizukuSupport.hasPermission()) }
 
     fun setUp() {
         failed = false
@@ -84,6 +89,42 @@ fun SuperCastSettings() {
         } catch (error: Throwable) {
             request.close()
             throw error
+        }
+    }
+
+    LifecycleResumeEffect(Unit) {
+        shizukuRunning = ShizukuSupport.isRunning()
+        shizukuGranted = ShizukuSupport.hasPermission()
+        onPauseOrDispose { }
+    }
+    DisposableEffect(Unit) {
+        val permListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode == ShizukuSupport.REQUEST_CODE) {
+                shizukuGranted = (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED)
+                if (grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED && !ready) {
+                    setUp()
+                }
+            }
+        }
+        val binderListener = Shizuku.OnBinderReceivedListener {
+            shizukuRunning = ShizukuSupport.isRunning()
+            shizukuGranted = ShizukuSupport.hasPermission()
+        }
+        val deadListener = Shizuku.OnBinderDeadListener {
+            shizukuRunning = false
+            shizukuGranted = false
+        }
+        runCatching {
+            Shizuku.addRequestPermissionResultListener(permListener)
+            Shizuku.addBinderReceivedListener(binderListener)
+            Shizuku.addBinderDeadListener(deadListener)
+        }
+        onDispose {
+            runCatching {
+                Shizuku.removeRequestPermissionResultListener(permListener)
+                Shizuku.removeBinderReceivedListener(binderListener)
+                Shizuku.removeBinderDeadListener(deadListener)
+            }
         }
     }
 
@@ -147,16 +188,61 @@ fun SuperCastSettings() {
         index = 1,
         open = open,
         onOpen = { open = if (open == 1) -1 else 1 },
-        title = stringResource(R.string.supercast_way_wireless),
-        body = stringResource(R.string.supercast_way_wireless_body),
-        best = !root
+        title = stringResource(R.string.supercast_way_shizuku),
+        body = stringResource(R.string.supercast_way_shizuku_body),
+        best = !root && (shizukuRunning || ShizukuSupport.isInstalled(context))
     ) {
-        CopyLine(Helper.OPEN_BRIDGE)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when {
+                !shizukuRunning -> {
+                    Text(
+                        stringResource(R.string.supercast_shizuku_not_running),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = { ShizukuSupport.openShizukuApp(context) }) {
+                        Text(stringResource(R.string.supercast_shizuku_open))
+                    }
+                }
+                !shizukuGranted -> {
+                    Text(
+                        stringResource(R.string.supercast_shizuku_need_permission),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    FilledTonalButton(onClick = { ShizukuSupport.requestPermission() }) {
+                        Text(stringResource(R.string.supercast_shizuku_grant))
+                    }
+                }
+                else -> {
+                    Text(
+                        stringResource(R.string.supercast_shizuku_granted),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (!ready && !busy) {
+                        FilledTonalButton(onClick = { setUp() }) {
+                            Text(stringResource(R.string.supercast_shizuku_start))
+                        }
+                    }
+                }
+            }
+        }
     }
     Way(
         index = 2,
         open = open,
         onOpen = { open = if (open == 2) -1 else 2 },
+        title = stringResource(R.string.supercast_way_wireless),
+        body = stringResource(R.string.supercast_way_wireless_body),
+        best = !root && !shizukuRunning && !ShizukuSupport.isInstalled(context)
+    ) {
+        CopyLine(Helper.OPEN_BRIDGE)
+    }
+    Way(
+        index = 3,
+        open = open,
+        onOpen = { open = if (open == 3) -1 else 3 },
         title = stringResource(R.string.supercast_way_computer),
         body = stringResource(R.string.supercast_way_computer_body)
     ) {

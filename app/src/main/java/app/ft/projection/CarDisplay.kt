@@ -16,7 +16,7 @@ import app.ft.core.Sizing
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-class CarDisplay(private val context: Context) {
+class CarDisplay(private val context: Context, private val allowFormatCapabilityProbe: Boolean = false) {
     private val tag = "Display"
     private val main = Handler(Looper.getMainLooper())
     private var encoder: SurfaceEncoder? = null
@@ -64,6 +64,7 @@ class CarDisplay(private val context: Context) {
         onTimedFrame: ((ByteArray, Boolean, Long) -> Unit)? = null,
         onFailure: ((Throwable) -> Unit)? = null,
         codecAttempt: Int = 0,
+        alignedStreamLimit: Pair<Int, Int>? = null,
         content: @Composable () -> Unit
     ) {
         stop()
@@ -79,10 +80,11 @@ class CarDisplay(private val context: Context) {
                     if (error is MediaCodec.CodecException && failed != null &&
                         next in 1 until failed.candidateCount
                     ) {
-                        DiagLog.w(tag, "H264 ASYNC_RETRY candidate=${next + 1}/${failed.candidateCount} format=${plan.streamWidth}x${plan.streamHeight}@${plan.fps}")
+                        val retryPlan = video ?: plan
+                        DiagLog.w(tag, "H264 ASYNC_RETRY candidate=${next + 1}/${failed.candidateCount} format=${retryPlan.streamWidth}x${retryPlan.streamHeight}@${retryPlan.fps}")
                         runCatching {
                             // Preserve a rate reduced by the car or thermal protection.
-                            start(plan.copy(fps = requestedFrameRate), onConfig, onFrame, onTimedFrame, onFailure, next, content)
+                            start(retryPlan.copy(fps = requestedFrameRate), onConfig, onFrame, onTimedFrame, onFailure, next, content = content)
                         }.onFailure { retryError ->
                             stop()
                             DiagLog.e(tag, "H264 retry display rebind failed", retryError)
@@ -103,31 +105,38 @@ class CarDisplay(private val context: Context) {
         streamWidth = plan.streamWidth
         streamHeight = plan.streamHeight
         frameIntervalMs = (1000L / fps.coerceIn(1, 120)).coerceAtLeast(8L)
-        var enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, gated = true, onTimedFrame = onTimedFrame, savePower = savePower, constantBitrate = plan.constantBitrate, onFailure = codecFailure, startCandidateIndex = codecAttempt)
-        encoder = enc
-        enc.start()
-        val g = FrameGate(width, height, streamWidth, streamHeight, enc.surface ?: throw IllegalStateException("no encoder surface"), preserveAspect = plan.preserveAspect, onFailure = codecFailure)
+        fun startEncoder(gated: Boolean, sizeLimit: Pair<Int, Int>? = null): SurfaceEncoder = SurfaceEncoder(
+            streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame,
+            gated = gated, onTimedFrame = onTimedFrame, savePower = savePower,
+            constantBitrate = plan.constantBitrate, onFailure = codecFailure,
+            startCandidateIndex = codecAttempt, allowFormatCapabilityProbe = allowFormatCapabilityProbe,
+            allowVbrFallback = plan.allowVbrFallback, alignedStreamLimit = sizeLimit
+        ).also {
+            encoder = it
+            it.start()
+        }
+        val enc = startEncoder(gated = true, sizeLimit = alignedStreamLimit)
+        streamWidth = enc.width
+        streamHeight = enc.height
+        val preserveAspect = plan.preserveAspect || streamWidth != plan.streamWidth || streamHeight != plan.streamHeight
+        val g = FrameGate(width, height, streamWidth, streamHeight, enc.surface ?: throw IllegalStateException("no encoder surface"), preserveAspect = preserveAspect, onFailure = codecFailure)
         val surface = if (g.start(fps)) {
             gate = g
             g.input ?: throw IllegalStateException("no frame gate surface")
         } else {
             enc.stop()
-            if (plan.preserveAspect) throw IllegalStateException("Aspect-preserving frame gate required")
+            if (preserveAspect) throw IllegalStateException("Aspect-preserving frame gate required")
             width = streamWidth
             height = streamHeight
             DiagLog.w(tag, "drawing straight at ${streamWidth}x$streamHeight, the car stretches it to fill its screen")
-            enc = SurfaceEncoder(streamWidth, streamHeight, fps, plan.bitrate, plan.qpFloor, onConfig, onFrame, onTimedFrame = onTimedFrame, savePower = savePower, constantBitrate = plan.constantBitrate, onFailure = codecFailure, startCandidateIndex = codecAttempt)
-            encoder = enc
-            enc.start()
-            enc.surface ?: throw IllegalStateException("no encoder surface")
+            startEncoder(gated = false).surface ?: throw IllegalStateException("no encoder surface")
         }
-        encoder = enc
         val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val density = Sizing.carDpi(height)
         val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
         val vd = dm.createVirtualDisplay("FT", width, height, density, surface, flags)
         virtualDisplay = vd
-        video = plan.copy(fps = fps)
+        video = plan.copy(streamWidth = streamWidth, streamHeight = streamHeight, fps = fps, preserveAspect = preserveAspect)
         onVideoChanged?.invoke(video)
         DiagLog.i(tag, "virtual display ${width}x${height} dpi=$density id=${vd.display.displayId}")
         main.post {

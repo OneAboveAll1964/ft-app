@@ -21,6 +21,7 @@
     <string name="about_privacy">سیاسەتی تایبەتمەندی</string>
     <string name="about_source">کۆدی سەرچاوە</string>
     <string name="about_license">مۆڵەتنامە: Apache 2.0</string>
+    <string name="about_development_help">یارمەتی لە گەشەپێدان — @mykolaq</string>
     <string name="about_data">FT نە ئەکاونتی هەیە، نە ڕیکلام و نە شیکاری. ڕێکخستنەکان، تۆمارەکان و پرۆفایلی ئۆتۆمبێلەکانت لەسەر مۆبایلەکەت دەمێننەوە. ویجێتی کەشوهەوا شوێنێکی نزیکەیی دەنێرێت بۆ Open-Meteo بۆ وەرگرتنی پێشبینیی کەشوهەوا. ڕاپۆرتی دەستنیشانکردنی کێشە تەنها کاتێک لە مۆبایلەکەت دەچێتە دەرەوە کە خۆت هاوبەشی بکەیت.</string>
     <string name="about_permissions_title">مۆڵەتەکان و هۆکاری داواکردنیان لەلایەن FT</string>
     <string name="about_review_permissions">پێداچوونەوەی مۆڵەتەکان</string>

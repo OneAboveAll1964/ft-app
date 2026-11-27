@@ -17,6 +17,17 @@ object SunTimes {
     private const val D2R = Math.PI / 180.0
     private const val R2D = 180.0 / Math.PI
 
+    fun nightAt(
+        position: Pair<Double, Double>?,
+        millis: Long = System.currentTimeMillis(),
+        zone: TimeZone = TimeZone.getDefault()
+    ): Boolean {
+        val local = Calendar.getInstance(zone).apply { timeInMillis = millis }
+        val minute = local.get(Calendar.HOUR_OF_DAY) * 60 + local.get(Calendar.MINUTE)
+        val day = position?.let { (latitude, longitude) -> of(latitude, longitude, millis, zone) }
+        return night(minute, day)
+    }
+
     fun of(latitude: Double, longitude: Double, millis: Long, zone: TimeZone): Day? {
         if (latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) return null
         val julian = millis / 86_400_000.0 + 2440587.5

@@ -39,6 +39,8 @@ See the [tester notes (Russian)](docs/ICCOA-TESTER-RU.md) and [development notes
 
 ## Troubleshooting
 
+## Troubleshooting
+
 - Wireless connection drops when the phone unlocks? Set **Developer options → Default USB configuration** to **No data transfer**.
 - The Log tab shows every message and has **Android Auto disconnects? What to check**. The share button saves a report zip.
 
@@ -48,6 +50,6 @@ There are two flavors. `./gradlew assembleGithubRelease` builds the GitHub APK (
 
 ## Credit and license
 
-FT is made by [OneAboveAll1964](https://github.com/OneAboveAll1964).
+FT is made by [OneAboveAll1964](https://github.com/OneAboveAll1964). Development assistance — [@mykolaq](https://github.com/mykolaq).
 
 It is released under the [Apache License, Version 2.0](LICENSE). You may use, change and share it, including in your own apps, as long as you keep the [NOTICE](NOTICE) file and credit OneAboveAll1964 with a link to https://github.com/OneAboveAll1964 in any fork, copy or app built from it, and say what you changed.

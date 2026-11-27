@@ -1,11 +1,14 @@
 package app.ft.aa
 
 import app.ft.core.Bytes
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.net.ProtocolException
 
 object AaFraming {
-    class Frame(val channel: Int, val flags: Int, val payload: ByteArray) {
+    private const val MAX_MESSAGE_SIZE = 8 * 1024 * 1024
+    private const val MAX_PENDING_BYTES = 16 * 1024 * 1024
+
+    class Frame(val channel: Int, val flags: Int, val payload: ByteArray, val totalSize: Int? = null) {
         val frameType get() = flags and 3
         val encrypted get() = flags and AaProtocol.FLAG_ENCRYPTED != 0
         val control get() = flags and AaProtocol.FLAG_CONTROL != 0
@@ -19,7 +22,7 @@ object AaFraming {
     fun encode(channel: Int, payload: ByteArray, encrypted: Boolean, control: Boolean, transform: (ByteArray) -> ByteArray): List<ByteArray> {
         val base = (if (encrypted) AaProtocol.FLAG_ENCRYPTED else 0) or (if (control) AaProtocol.FLAG_CONTROL else 0)
         val out = ArrayList<ByteArray>()
-        if (payload.size < AaProtocol.MAX_FRAME_PAYLOAD) {
+        if (payload.size <= AaProtocol.MAX_FRAME_PAYLOAD) {
             out += frame(channel, base or AaProtocol.FRAME_BULK, transform(payload), -1)
             return out
         }
@@ -60,33 +63,69 @@ object AaFraming {
         val sz = ByteArray(2)
         Bytes.readFully(input, sz)
         val size = Bytes.u16(sz, 0)
-        if (flags and 3 == AaProtocol.FRAME_FIRST) {
+        val totalSize = if (flags and 3 == AaProtocol.FRAME_FIRST) {
             val t = ByteArray(4)
             Bytes.readFully(input, t)
-        }
+            Bytes.u32(t, 0)
+        } else null
         val payload = ByteArray(size)
         Bytes.readFully(input, payload)
-        return Frame(channel, flags, payload)
+        return Frame(channel, flags, payload, totalSize)
     }
 
     class Assembler(private val decrypt: (ByteArray) -> ByteArray) {
-        private val buffers = HashMap<Int, ByteArrayOutputStream>()
+        private class Pending(val bytes: ByteArray, val encrypted: Boolean, val control: Boolean) {
+            var written = 0
+        }
+
+        private val buffers = HashMap<Int, Pending>()
+        private var reserved = 0
+
+        fun clear() {
+            buffers.clear()
+            reserved = 0
+        }
 
         fun feed(f: Frame): Message? {
-            val chunk = if (f.encrypted) decrypt(f.payload) else f.payload
             val type = f.frameType
+            val current = buffers[f.channel]
             if (type == AaProtocol.FRAME_BULK) {
-                buffers.remove(f.channel)
-                return Message(f.channel, f.control, f.encrypted, chunk)
+                if (current != null) throw ProtocolException("bulk frame during fragmented AA message")
+                return Message(f.channel, f.control, f.encrypted, decode(f))
             }
-            val buf = if (type == AaProtocol.FRAME_FIRST) ByteArrayOutputStream().also { buffers[f.channel] = it }
-            else buffers.getOrPut(f.channel) { ByteArrayOutputStream() }
-            buf.write(chunk)
+            val pending = if (type == AaProtocol.FRAME_FIRST) {
+                if (current != null) throw ProtocolException("duplicate first AA fragment")
+                val size = f.totalSize ?: throw ProtocolException("missing AA message length")
+                if (size !in 2..MAX_MESSAGE_SIZE || size > MAX_PENDING_BYTES - reserved) {
+                    throw ProtocolException("AA message exceeds reassembly budget")
+                }
+                Pending(ByteArray(size), f.encrypted, f.control).also {
+                    buffers[f.channel] = it
+                    reserved += size
+                }
+            } else {
+                current ?: throw ProtocolException("AA fragment without a first frame")
+            }
+            if (f.encrypted != pending.encrypted || f.control != pending.control) {
+                throw ProtocolException("AA fragment changes message flags")
+            }
+            val chunk = decode(f)
+            if (chunk.size > pending.bytes.size - pending.written ||
+                (chunk.isEmpty() && type == AaProtocol.FRAME_MIDDLE)) {
+                throw ProtocolException("invalid AA fragment length")
+            }
+            chunk.copyInto(pending.bytes, pending.written)
+            pending.written += chunk.size
             if (type == AaProtocol.FRAME_LAST) {
+                if (pending.written != pending.bytes.size) throw ProtocolException("incomplete AA message")
                 buffers.remove(f.channel)
-                return Message(f.channel, f.control, f.encrypted, buf.toByteArray())
+                reserved -= pending.bytes.size
+                return Message(f.channel, pending.control, pending.encrypted, pending.bytes)
             }
             return null
         }
+
+        private fun decode(frame: Frame): ByteArray =
+            if (frame.encrypted) decrypt(frame.payload) else frame.payload
     }
 }

@@ -313,4 +313,44 @@ class NavigationRelayTest {
         assertEquals(9, NavigationRelay.turnCode(34))
         assertEquals(24, NavigationRelay.turnCode(42))
     }
+
+    @Test fun checkStaleClearsTurnAtZeroDistanceAfterTimeout() {
+        var now = 1000L
+        val timedRelay = NavigationRelay({ action, info, total -> turns += Triple(action, info, total) },
+            { modules += it }, dispatch = { it() }, clock = { now })
+        timedRelay.subscribe(true)
+        timedRelay.update(turn.copy(distanceMeters = 0))
+        assertEquals(1, turns.last().first)
+
+        now += NavigationRelay.ZERO_DISTANCE_STALE_MS - 1
+        timedRelay.checkStale(now)
+        assertEquals(1, turns.size)
+
+        now += 2
+        timedRelay.checkStale(now)
+        assertEquals(2, turns.size)
+        assertEquals(3, turns.last().first)
+    }
+
+    @Test fun checkStaleClearsTurnAtAnyDistanceAfterGeneralTimeout() {
+        var now = 1000L
+        val timedRelay = NavigationRelay({ action, info, total -> turns += Triple(action, info, total) },
+            { modules += it }, dispatch = { it() }, clock = { now })
+        timedRelay.subscribe(true)
+        timedRelay.update(turn.copy(distanceMeters = 250))
+        assertEquals(1, turns.last().first)
+
+        now += NavigationRelay.GENERAL_STALE_MS - 1
+        timedRelay.checkStale(now)
+        assertEquals(1, turns.size)
+
+        now += 2
+        timedRelay.checkStale(now)
+        assertEquals(2, turns.size)
+        assertEquals(3, turns.last().first)
+
+        timedRelay.update(turn.copy(distanceMeters = 500, maneuver = 7))
+        assertEquals(3, turns.size)
+        assertEquals(1, turns.last().first)
+    }
 }

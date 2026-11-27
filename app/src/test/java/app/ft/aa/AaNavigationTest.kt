@@ -81,4 +81,27 @@ class AaNavigationTest {
         assertNull(nav.accept(AaProtocol.NAV_CURRENT_POSITION, position(-1)))
         assertNull(nav.accept(AaProtocol.NAV_NEXT_TURN, byteArrayOf()))
     }
+
+    @Test fun emptyStepsInActiveModernRouteClearsManeuver() {
+        val nav = AaNavigation()
+        nav.accept(AaProtocol.NAV_STATE, state(8))
+        assertTrue(nav.accept(AaProtocol.NAV_CURRENT_POSITION, position(300))!!.active)
+        val cleared = nav.accept(AaProtocol.NAV_STATE, ProtoWriter().toByteArray())!!
+        assertTrue(cleared.active)
+        assertEquals(0, cleared.maneuver)
+        assertEquals("", cleared.road)
+        assertNull(cleared.distanceMeters)
+    }
+
+    @Test fun stepWithoutManeuverClearsManeuverKeepingRoad() {
+        val nav = AaNavigation()
+        nav.accept(AaProtocol.NAV_STATE, state(8, "Old road"))
+        assertTrue(nav.accept(AaProtocol.NAV_CURRENT_POSITION, position(300))!!.active)
+        val stepOnlyRoad = ProtoWriter().message(1, ProtoWriter().message(2, ProtoWriter().string(1, "New road"))).toByteArray()
+        val updated = nav.accept(AaProtocol.NAV_STATE, stepOnlyRoad)!!
+        assertTrue(updated.active)
+        assertEquals(0, updated.maneuver)
+        assertEquals("New road", updated.road)
+        assertNull(updated.distanceMeters)
+    }
 }
