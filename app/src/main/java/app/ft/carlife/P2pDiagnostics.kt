@@ -9,7 +9,12 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import app.ft.core.DiagLog
 
+/**
+ * Hooks Android 15+ (SDK 35+) [WifiP2pManager.WifiP2pListener] events for diagnostics
+ * and fast-fail recovery when the system aborts group formation before the join watchdog fires.
+ */
 internal object P2pDiagnostics {
+    /** Maps Android's WifiP2pListener failure reason codes to human-readable text. */
     fun failureReasonName(reason: Int): String = when (reason) {
         0 -> "cancelled"
         1 -> "timed out"

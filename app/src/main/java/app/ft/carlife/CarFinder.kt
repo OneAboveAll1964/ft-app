@@ -146,6 +146,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private val servicesSeen = HashSet<String>()
     private val peerDetails = HashMap<String, String>()
     private val SERVICES_AFTER_MS = 8_000L
+    // Allow ~2 full-band discoverPeers() cycles before interleaving single-channel 5 GHz probes,
+    // because discoverPeersOnSpecificFrequency() interrupts ongoing full-band P2P discovery.
     private val NARROW_AFTER_MS = 12_000L
     private val MAX_RECOVERY_WAIT_MS = 30_000L
     private val NARROW = listOf(5745, 5785, 5765, 5180, 5200, 5220, 5240, 5805, 5825)
@@ -250,15 +252,23 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private fun current(ch: WifiP2pManager.Channel, life: Long) =
         lifecycle == life && receiver != null && channel === ch
 
+    // Always defer Group Owner role to the car on the first attempt: head units like
+    // Toyota/DesaySV stall in INVITED or fail provision discovery if the phone forces
+    // ownerIntent=15 upfront. When carP2pAutoRole is enabled, retries alternate to 15.
     private fun defaultOwnerIntent() = 0
 
+    /**
+     * Fails fast when Android 15+ reports an asynchronous P2P group creation failure
+     * (e.g., provision discovery failed) instead of waiting for the full join timeout.
+     */
     internal fun onGroupCreationFailed(reason: Int) {
+        // Reason 0 (cancelled) is emitted by our own cancelConnect()/teardown; ignore it here.
         if (reason == 0) return
         if (receiver == null || channel == null || !enabled || recovery != null || groupProbe != null || _link.value != null) return
         if (phoneGroup != null) return
         val name = connecting ?: return
         val p = theCar(_peers.value) ?: Peer(name, joiningAddress, WifiP2pDevice.FAILED, false)
-        val why = "Wi-Fi Direct group creation failed (${P2pDiagnostics.failureReasonName(reason)})"
+        val why = "Wi-Fi Direct group creation failed (reason=$reason: ${P2pDiagnostics.failureReasonName(reason)})"
         joiningRoleGeneration?.let { planRoleRetry(joiningAddress, joiningOwnerIntent, it, why) }
         restart(p, why)
     }
@@ -272,7 +282,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (prefs.carP2pAutoRole && address.isNotBlank() && generation == bluetoothGeneration) {
             roleRetryAddress = address
             retryOwnerIntent = if (ownerIntent == 0) 15 else 0
-            DiagLog.i(tag, "role retry: ownerIntent=$ownerIntent -> $retryOwnerIntent after $reason; actual role will be negotiated")
+            val roleHint = if (retryOwnerIntent == 15) "will try phone as group owner" else "will let car be group owner"
+            DiagLog.i(tag, "role retry: ownerIntent=$ownerIntent -> $retryOwnerIntent ($roleHint) after $reason")
         } else resetRoleRetry()
     }
 
@@ -927,7 +938,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         val ownerIntent = retryOwnerIntent
         joiningOwnerIntent = ownerIntent
         joiningRoleGeneration = if (prefs.carP2pAutoRole) bluetoothGeneration else null
-        DiagLog.i(tag, "connecting to ${p.name} (${p.address}), join timeout ${timeoutMs / 1000}s ownerIntent=$ownerIntent autoRole=${prefs.carP2pAutoRole}")
+        val roleHint = if (ownerIntent == 0) "car preferred as owner" else "phone preferred as owner"
+        DiagLog.i(tag, "connecting to ${p.name} (${p.address}), join timeout ${timeoutMs / 1000}s ownerIntent=$ownerIntent ($roleHint) autoRole=${prefs.carP2pAutoRole}")
         val cfg = peerConfig(p, ownerIntent, id)
         // Android can omit the action callback altogether. Bound the whole
         // request, including that wait, without extending it on a late success.

@@ -32,6 +32,9 @@ internal class WirelessPeerWatch {
     }
 
     private companion object {
+        // Give full-band and channel-constrained P2P discovery enough time (~62s total)
+        // before tearing down an active Bluetooth SPP session; premature BT disconnects
+        // can leave some head units (e.g. DesaySV) silent until BT is toggled on the car.
         val STEPS = listOf(
             2_000L to Action.ASK_NAME,
             5_000L to Action.ASK_NAME,
