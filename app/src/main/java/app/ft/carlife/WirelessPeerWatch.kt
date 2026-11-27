@@ -36,8 +36,8 @@ internal class WirelessPeerWatch {
             2_000L to Action.ASK_NAME,
             5_000L to Action.ASK_NAME,
             10_000L to Action.REARM_WIFI,
-            10_000L to Action.ASK_NAME,
-            10_000L to Action.RECONNECT_BLUETOOTH
+            15_000L to Action.ASK_NAME,
+            30_000L to Action.RECONNECT_BLUETOOTH
         )
     }
 }

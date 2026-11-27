@@ -1388,15 +1388,32 @@ class CarFinderRecoveryTest {
     }
 
     @Test
-    fun roleExperimentStartsWithOwnerPreferenceAndCanBeDisabledBeforeTheNextRetry() = check { h ->
+    fun groupCreationFailedRestartsImmediatelyWithoutWaitingForJoinTimeout() = check { h ->
+        `when`(h.prefs.carP2pAutoRole).thenReturn(true)
+        h.timeout(60)
+        mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
+            startAvailableRoleJoin(h)
+            assertEquals(0, lastOwnerIntent(h, 1))
+            advanceTimeBy(1_000)
+            runCurrent()
+            h.finder.onGroupCreationFailed(3)
+            runCurrent()
+            assertEquals(1, h.cancels.size)
+            finishRoleCleanup(h)
+            assertEquals(15, lastOwnerIntent(h, 2))
+        }
+    }
+
+    @Test
+    fun roleExperimentStartsWithCarAsOwnerAndCanBeDisabledBeforeTheNextRetry() = check { h ->
         `when`(h.prefs.carP2pAutoRole).thenReturn(true)
         mockConstruction(WifiP2pConfig::class.java) { config, _ -> config.wps = WpsInfo() }.use {
             startAvailableRoleJoin(h)
-            assertEquals(15, lastOwnerIntent(h, 1))
+            assertEquals(0, lastOwnerIntent(h, 1))
             advanceTimeBy(5_000)
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(15, lastOwnerIntent(h, 2))
             `when`(h.prefs.carP2pAutoRole).thenReturn(false)
             advanceTimeBy(5_000)
             runCurrent()
@@ -1426,14 +1443,14 @@ class CarFinderRecoveryTest {
             callback.value.onFailure(WifiP2pManager.BUSY)
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(15, lastOwnerIntent(h, 2))
+            assertEquals(0, lastOwnerIntent(h, 2))
             callback.value.onSuccess()
             callback.value.onFailure(WifiP2pManager.ERROR)
             advanceTimeBy(5_000)
             runCurrent()
             assertEquals(2, h.cancels.size)
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 3))
+            assertEquals(15, lastOwnerIntent(h, 3))
         }
     }
 
@@ -1445,11 +1462,11 @@ class CarFinderRecoveryTest {
             h.finder.retry()
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(15, lastOwnerIntent(h, 2))
             h.finder.retry()
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(15, lastOwnerIntent(h, 3))
+            assertEquals(0, lastOwnerIntent(h, 3))
         }
     }
 
@@ -1461,7 +1478,7 @@ class CarFinderRecoveryTest {
             advanceTimeBy(5_000)
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(15, lastOwnerIntent(h, 2))
             var link: CarFinder.Link? = null
             h.finder.onJoined = { link = it }
             h.finder.checkExisting()
@@ -1483,7 +1500,7 @@ class CarFinderRecoveryTest {
             assertEquals("a live group must not trigger role retries", 1, h.cancels.size)
             h.broadcastConnection(false)
             h.broadcastPeers()
-            assertEquals(15, lastOwnerIntent(h, 3))
+            assertEquals(0, lastOwnerIntent(h, 3))
         }
     }
 
@@ -1501,7 +1518,7 @@ class CarFinderRecoveryTest {
             }
             h.visible = listOf(other)
             finishRoleCleanup(h)
-            assertEquals(15, lastOwnerIntent(h, 2))
+            assertEquals(0, lastOwnerIntent(h, 2))
         }
     }
 
@@ -1514,7 +1531,7 @@ class CarFinderRecoveryTest {
             runCurrent()
             h.finder.retry()
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(15, lastOwnerIntent(h, 2))
             assertEquals(1, h.cancels.size)
         }
     }
@@ -1529,7 +1546,7 @@ class CarFinderRecoveryTest {
             runCurrent()
             h.visible = emptyList()
             finishRoleCleanup(h)
-            assertEquals(15, lastOwnerIntent(h, 1))
+            assertEquals(0, lastOwnerIntent(h, 1))
 
             h.finder.retry()
             runCurrent()
@@ -1537,7 +1554,7 @@ class CarFinderRecoveryTest {
             h.finder.connectByName("CarLife")
             h.visible = listOf(h.car)
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(15, lastOwnerIntent(h, 2))
             assertEquals(2, h.cancels.size)
         }
     }
@@ -1553,7 +1570,7 @@ class CarFinderRecoveryTest {
             advanceTimeBy(5_000)
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(15, lastOwnerIntent(h, 2))
+            assertEquals(0, lastOwnerIntent(h, 2))
         }
     }
 
@@ -1565,7 +1582,7 @@ class CarFinderRecoveryTest {
             advanceTimeBy(5_000)
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(15, lastOwnerIntent(h, 2))
             h.finder.checkExisting()
             h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
             val group = mock(WifiP2pGroup::class.java)
@@ -1579,7 +1596,7 @@ class CarFinderRecoveryTest {
             assertEquals(2, h.cancels.size)
             assertFalse(h.finder.joined)
             finishRoleCleanup(h)
-            assertEquals(15, lastOwnerIntent(h, 3))
+            assertEquals(0, lastOwnerIntent(h, 3))
         }
     }
 
@@ -1593,7 +1610,7 @@ class CarFinderRecoveryTest {
             advanceTimeBy(5_000)
             runCurrent()
             finishRoleCleanup(h)
-            assertEquals(0, lastOwnerIntent(h, 2))
+            assertEquals(15, lastOwnerIntent(h, 2))
             h.finder.checkExisting()
             h.connections.last().onConnectionInfoAvailable(h.connectionInfo(true).apply { isGroupOwner = true })
             val group = mock(WifiP2pGroup::class.java)

@@ -11,14 +11,14 @@ class WirelessPeerWatchTest {
             2_000L to WirelessPeerWatch.Action.ASK_NAME,
             7_000L to WirelessPeerWatch.Action.ASK_NAME,
             17_000L to WirelessPeerWatch.Action.REARM_WIFI,
-            27_000L to WirelessPeerWatch.Action.ASK_NAME
+            32_000L to WirelessPeerWatch.Action.ASK_NAME
         )
         for ((time, action) in requests) {
             assertNull(watch.next(7, "Car", true, time - 1))
             assertEquals(action, watch.next(7, "Car", true, time))
         }
-        assertNull(watch.next(7, "Car", true, 36_999))
-        assertEquals(WirelessPeerWatch.Action.RECONNECT_BLUETOOTH, watch.next(7, "Car", true, 37_000))
+        assertNull(watch.next(7, "Car", true, 61_999))
+        assertEquals(WirelessPeerWatch.Action.RECONNECT_BLUETOOTH, watch.next(7, "Car", true, 62_000))
         assertNull("one disconnect per absent conversation", watch.next(7, "Car", true, 100_000))
     }
 

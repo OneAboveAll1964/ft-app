@@ -10,14 +10,34 @@ import androidx.annotation.RequiresApi
 import app.ft.core.DiagLog
 
 internal object P2pDiagnostics {
-    fun register(context: Context, manager: WifiP2pManager, describe: () -> String): () -> Unit {
+    fun failureReasonName(reason: Int): String = when (reason) {
+        0 -> "cancelled"
+        1 -> "timed out"
+        2 -> "user rejected"
+        3 -> "provision discovery failed"
+        4 -> "group removed"
+        5 -> "invitation failed"
+        else -> "code $reason"
+    }
+
+    fun register(
+        context: Context,
+        manager: WifiP2pManager,
+        describe: () -> String,
+        onGroupCreationFailed: ((Int) -> Unit)? = null
+    ): () -> Unit {
         if (Build.VERSION.SDK_INT < 35) return {}
-        return registerModern(context, manager, describe)
+        return registerModern(context, manager, describe, onGroupCreationFailed)
     }
 
     @RequiresApi(35)
     @SuppressLint("MissingPermission")
-    private fun registerModern(context: Context, manager: WifiP2pManager, describe: () -> String): () -> Unit {
+    private fun registerModern(
+        context: Context,
+        manager: WifiP2pManager,
+        describe: () -> String,
+        onGroupCreationFailed: ((Int) -> Unit)? = null
+    ): () -> Unit {
         var active = true
         fun log(event: String) {
             if (active) DiagLog.i("P2P", "Android P2P event: $event; ${describe()}")
@@ -27,15 +47,10 @@ internal object P2pDiagnostics {
 
             override fun onGroupNegotiationRejectedByUser() = log("group negotiation rejected by user")
 
-            override fun onGroupCreationFailed(reason: Int) = log("group creation failed reason=$reason (${when (reason) {
-                0 -> "cancelled"
-                1 -> "timed out"
-                2 -> "user rejected"
-                3 -> "provision discovery failed"
-                4 -> "group removed"
-                5 -> "invitation failed"
-                else -> "unknown"
-            }})")
+            override fun onGroupCreationFailed(reason: Int) {
+                log("group creation failed reason=$reason (${failureReasonName(reason)})")
+                if (active) onGroupCreationFailed?.invoke(reason)
+            }
 
             override fun onGroupCreated(info: WifiP2pInfo, group: WifiP2pGroup) =
                 log("group created iface=${group.`interface`} frequency=${group.frequency}MHz " +

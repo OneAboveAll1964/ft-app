@@ -99,7 +99,7 @@
     <string name="car_p2p_auto_role">Automatically try another Wi-Fi Direct role (experimental)</string>
     <string name="car_p2p_phone_group">Create a Wi-Fi Direct group on the phone (experimental)</string>
     <string name="car_p2p_phone_group_about">FT creates a temporary group and invites the detected car. If the car does not join, FT falls back to the usual connection method. Applies to the next connection.</string>
-    <string name="car_p2p_auto_role_about">FT prefers the phone as group owner from the first connection attempt. If a connection attempt times out before a group forms, FT cleans it up and alternates the preference. The car and Android determine the actual role. Applies to the next connection attempt; an active connection is kept.</string>
+    <string name="car_p2p_auto_role_about">FT starts with standard group negotiation (preferring the car as group owner). If a connection attempt fails or times out before a group forms, FT cleans it up and alternates the preference. The car and Android determine the actual role. Applies to the next connection attempt; an active connection is kept.</string>
     <string name="car_join_timeout">WiFi Direct connection timeout</string>
     <string name="car_join_timeout_about">How long to wait before retrying an unanswered connection attempt. Increase this if the car takes longer to connect. Applies to the next attempt.</string>
     <string name="car_join_timeout_seconds">%1$d s</string>

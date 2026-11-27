@@ -146,7 +146,7 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private val servicesSeen = HashSet<String>()
     private val peerDetails = HashMap<String, String>()
     private val SERVICES_AFTER_MS = 8_000L
-    private val NARROW_AFTER_MS = 2_000L
+    private val NARROW_AFTER_MS = 12_000L
     private val MAX_RECOVERY_WAIT_MS = 30_000L
     private val NARROW = listOf(5745, 5785, 5765, 5180, 5200, 5220, 5240, 5805, 5825)
     @Volatile private var namedAt = 0L
@@ -193,9 +193,11 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
             addAction(WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION)
         }
         if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(r, f, Context.RECEIVER_EXPORTED) else context.registerReceiver(r, f)
-        stopDiagnostics = P2pDiagnostics.register(context, m) {
+        stopDiagnostics = P2pDiagnostics.register(context, m, {
             "attempt=$attempt peer=${connecting ?: "none"} recovering=${recovery != null}" +
                 if (connecting != null) " elapsed=${android.os.SystemClock.elapsedRealtime() - attemptAt}ms" else ""
+        }) { reason ->
+            if (current(ch, life)) onGroupCreationFailed(reason)
         }
         loop = scope.launch(Dispatchers.Main) {
             var tick = 0
@@ -248,7 +250,18 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
     private fun current(ch: WifiP2pManager.Channel, life: Long) =
         lifecycle == life && receiver != null && channel === ch
 
-    private fun defaultOwnerIntent() = if (prefs.carP2pAutoRole) 15 else 0
+    private fun defaultOwnerIntent() = 0
+
+    internal fun onGroupCreationFailed(reason: Int) {
+        if (reason == 0) return
+        if (receiver == null || channel == null || !enabled || recovery != null || groupProbe != null || _link.value != null) return
+        if (phoneGroup != null) return
+        val name = connecting ?: return
+        val p = theCar(_peers.value) ?: Peer(name, joiningAddress, WifiP2pDevice.FAILED, false)
+        val why = "Wi-Fi Direct group creation failed (${P2pDiagnostics.failureReasonName(reason)})"
+        joiningRoleGeneration?.let { planRoleRetry(joiningAddress, joiningOwnerIntent, it, why) }
+        restart(p, why)
+    }
 
     private fun resetRoleRetry() {
         roleRetryAddress = ""
@@ -342,7 +355,8 @@ class CarFinder(private val context: Context, private val prefs: Prefs, private 
         if (!enabled || recovery != null || groupProbe != null || connecting != null || _link.value != null) return
         if (!narrowNoted) {
             narrowNoted = true
-            DiagLog.i(tag, "WiFi Direct: this phone has not seen the car's group yet, also searching the channels cars use one at a time (${NARROW.joinToString()} MHz)")
+            val label = targetName.trim().ifBlank { "the car" }
+            DiagLog.i(tag, "WiFi Direct: '$label' has not appeared in the current scan yet, also checking common car channels (${NARROW.joinToString()} MHz)")
         }
         runCatching {
             m.discoverPeersOnSpecificFrequency(ch, mhz, object : WifiP2pManager.ActionListener {
